@@ -1,0 +1,63 @@
+services:
+  ocr:
+    container_name: ocr
+    image: ocr:latest
+    environment:
+      - TESSDATA_PREFIX = /app/tessdata
+    ports:
+      - 5003:5003
+    restart: always
+    networks:
+      - network
+  nsfw:
+    container_name: nsfw
+    image: nsfw:latest
+    environment:
+      - USE_ONNX=YES
+    ports:
+      - 5009:5009
+    restart: always
+    networks:
+      - network
+
+  image_tagger:
+    container_name: image_tagger
+    image: image_tagger:latest
+    environment:
+      - USE_ONNX=YES
+    ports:
+      - 5011:5011
+    restart: always
+    networks:
+      - network
+
+  image_captioning:
+    container_name: image_captioning
+    image: image_captioning:latest
+    environment:
+      - USE_ONNX=YES
+    ports:
+      - 5010:5010
+    restart: always
+    networks:
+      - network
+
+
+
+  nginx:
+    container_name: nginx
+    image: nginx:1.25.1
+    volumes:
+      - ../docker/configs/nginx/nginx-local.conf:/etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+    depends_on:
+      - ocr
+      - nsfw
+      - image_tagger
+      - image_captioning
+    networks:
+      - network
+
+networks:
+  network:
