@@ -1,0 +1,7 @@
+test/*
+data/*
+tessdata/*
+!tessdata/eng.traineddata
+images/*
+output/*
+output_text/*

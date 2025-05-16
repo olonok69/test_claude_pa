@@ -1,0 +1,33 @@
+services:
+  ocr_nats:
+    container_name: ocr_nats
+    image: ocr_nats:latest
+    environment:
+      - TESSDATA_PREFIX = /app/tessdata
+      - NAT_URL = nats://nats_server:4222
+      - LOCAL_ENV = 1
+      - DOCS_PATH = /app/docs
+      - IMAGES_PATH=/app/images
+      - IS_DOCKER=1
+    ports:
+      - 5003:5003
+    volumes:
+      - /mnt/d/repos2/nats/docs:/app/docs
+    restart: always
+    networks:
+      - network
+  nats_server:
+    container_name: nats_server
+    image: nats:latest
+    environment:
+      - USE_ONNX=YES
+    command: -js
+    ports:
+      - 4222:4222
+    restart: always
+    networks:
+      - network
+
+
+networks:
+  network:

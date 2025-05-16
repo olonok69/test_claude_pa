@@ -1,0 +1,20 @@
+Pillow>=9.3.0
+wheel
+python-multipart
+numpy>=1.24
+python-dotenv
+requests
+python-magic
+pdf2image==1.17.0
+detectaicore>=0.0.21
+orjson >=3.8.1
+pydantic>=2.0.2
+pydantic-settings>=2.0.1
+pydantic_core>=2.1.2
+python-pptx
+beautifulsoup4 
+lxml
+rapidocr-onnxruntime
+psutil
+nats-py
+fastapi>=0.87.0

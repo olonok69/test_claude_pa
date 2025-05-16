@@ -1,0 +1,4 @@
+test/*
+data/*
+tessdata/*
+!tessdata/eng.traineddata
