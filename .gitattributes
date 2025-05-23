@@ -1,5 +1,0 @@
-# Explicitly declare files should maintain their existing line endings
-* -text
-
-# Or to gradually transition to the standard format:
-# * text=auto

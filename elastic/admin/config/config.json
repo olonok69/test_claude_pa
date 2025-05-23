@@ -1,0 +1,16 @@
+{
+    "MODEL_NAME": "T5-large_Summarization_model",
+    "TOKENIZER": "t5-large",
+    "BFLOAT16": 1,
+    "EMBEDDINGS": "sentence-transformers/gtr-t5-base",
+    "OLLAMA_EMBEDDINGS": "qwen:0.5b-text",
+    "USE_OLLAMA":1,
+    "OLLAMA_TAGS_URL": "http://ollama1:11434/api/tags",
+    "OLLAMA_SHOW_URL" : "http://ollama1:11434/api/show",
+    "OLLAMA_MODELS_URL": "http://ollama1:11434/api/pull",
+    "OLLAMA_DELETE_URL": "http://ollama1:11434/api/delete",
+    "OLLAMA_BASE_URL": "http://ollama1:11434",
+    "CHUNK":4800,
+    "NUM_DOCUMENTS":8,
+    "MIN_NUM_TOKENS":64
+}

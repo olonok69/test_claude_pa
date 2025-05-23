@@ -1,119 +1,94 @@
-# Introduction
+# Introduction 
+In this Repository we have Demos and test we have done different use cases and Technologies
 
-This repository contains Computer Vision Detect-AI components. Initially this repository contained everything, so git contains the history of all commits since May 2023 when we start this app.
-Currently we have the following models hosted here:
+# Folder PII-DICOM
+### DICOM
+DICOM® — Digital Imaging and Communications in Medicine — is the international standard for medical images and related information. It defines the formats for medical images that can be exchanged with the data and quality necessary for clinical use.
 
-- [NSFW (Non-Safe/Suitable for work)](image\nsfw): Model to detect content (Images and Video) not suitable for a working environment (porn, hentai, sexy images and videos).
-- [Image Captioning](image\image_captioning): Model that return a text description of a given Image,
-- [Image Tagger](image\image_tagger): Classification Model that give you from a given Image, the n labels among of the 1000 Classes of ImageNet Dataset.
-- [OCR](image\ocr) Extract text from Images and Images in documents
+DICOM® is implemented in almost every radiology, cardiology imaging, and radiotherapy device (X-ray, CT, MRI, ultrasound, etc.), and increasingly in devices in other medical domains such as ophthalmology and dentistry. With hundreds of thousands of medical imaging devices in use, DICOM® is one of the most widely deployed healthcare messaging Standards in the world. There are literally billions of DICOM® images currently in use for clinical care.
+
+Since its first publication in 1993, DICOM® has revolutionized the practice of radiology, allowing the replacement of X-ray film with a fully digital workflow. Much as the Internet has become the platform for new consumer information applications, DICOM® has enabled advanced medical imaging applications that have “changed the face of clinical medicine”. From the emergency department, to cardiac stress testing, to breast cancer detection, DICOM® is the standard that makes medical imaging work — for doctors and for patients.
+
+DICOM® is recognized by the International Organization for Standardization as the ISO 12052 standard.
+
+https://www.dicomstandard.org/about
 
 
-# Description Models
+###  FHIR
+FHIR (Fast Healthcare Interoperability Resources) Specification, which is a standard for exchanging healthcare information electronically. 
 
-## NSWF Non-Safe/Suitable for work
-This model classify an image versus 5 different classes ("drawings", "hentai", "neutral", "porn", "sexy"). The model it is based in google/vit-base-patch16-224-in21, https://huggingface.co/google/vit-base-patch16-224-in21k as fundational model and it was fine tuned with a specific dataset specialized on this matter. After that, the model has been converted to onnx to be able to run it in a cpu. 
-Fine tuned model is in folder (ai-models / image / nsfw / nsfw_pytorch) of https://datadetect.blob.core.windows.net/ai-models. ONNX version is in (ai-models / image / nsfw / onnx) same folder. Default use is ONNX model
-[in folder](docs\Notebooks\nsfw) we have the relevant Notebooks to do
-- [Fine tuning  model](docs\Notebooks\nsfw\Image_classification_NSWF_full_training.ipynb) (Done in Google Colab and Weight And Biases)
-- [Inference](docs\Notebooks\nsfw\Inference_image_classification_NSWF_full.ipynb)(Done in Google Colab and Weight And Biases)
-- [Log Fine tuned model to MLFLOW](docs\Notebooks\nsfw\FineTuned_Vit_save_to_MLFLOW.ipynb). Experiment */Users/jhuertas@capaxdiscovery.com/nsfw_pytorch* in Databricks
-- [Convert Fine Tune model to ONNX and save MLFLOW](docs\Notebooks\nsfw\FineTuned_Vit_to_ONNX_save_to_MLFLOW.ipynb). Experiment */Users/jhuertas@capaxdiscovery.com/nsfw_onnx* in Databricks. RunID b697725fbb6e407d963a318c159deda5
-- [Dataset Fine Tuning](https://datadetect.blob.core.windows.net/ai-models/datasets/nsfw/) Blob Store Azure dadadetect. RunID 6da60b5150064cc5a9081e9ddd809596
+https://www.hl7.org/fhir/overview.html
 
-## Image Captioning
-This CV model returns you the caption or description of a given Image. There are two models. First for GPU  is a  https://huggingface.co/Salesforce/blip-image-captioning-large and second one is Florence2 base converted to Openvino IR format https://huggingface.co/microsoft/Florence-2-base to run in CPU. Default Model Florence 2.
-Folders
-- BLIP (ai-models / image / image_captioning / blip-image-captioning-large)
-- Florence (ai-models / image / image_captioning / Florence-2-base-ft)
+###  De-identifying sensitive burnt-in text in DICOM images
 
-### Image Tagging
-This CV model provide you a vector of probabilities of a image to belong to the [1000 Classes](image\image_tagger\conf\imagenet_classes.txt) available in ImageNet Dataset https://www.image-net.org/update-mar-11-2021.php
-There is two versions of the model. For GPU, we use a pretrained RestNet18 Network https://pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html, and for CPU we use the same but transformed to ONNX format. Default use is ONNX model.
+1. Redact text Personal Health Information (PHI) present as pixels in DICOM images
+2. Visually compare original DICOM images with their redacted versions
 
-Folders
-- RestNet18  (ai-models / image /  image_tagger / pytorch-vision-300a8a4)
-- Florence (ai-models / image /  image_tagger / onnx)
 
-### OCR
-This model return you the text content in an Image or multiple images in a document. We user Tesseract python Wrapper to do this in combination with multiple libraries which allow us to work with multiple formats.
-Supported formats in [file](image\ocr\app\utils\utils.py)
+### Tools for Health Data Anonymization c#
+https://github.com/microsoft/Tools-for-Health-Data-Anonymization/tree/master
+
+- DICOM intructions [here](PII-DICOM\Tools-for-Health-Data-Anonymization\docs\DICOM-anonymization.md)
+- FHIR Instructions [here](PII-DICOM\Tools-for-Health-Data-Anonymization\docs\FHIR-anonymization.md)
+
+###  Demo
+This Demo has been done in a Debian 9 in WSL2 with python 3.11. Dotnet 8 for the C# tools.
+
+## Prerequisites
+Before getting started, make sure presidio and the latest version of Tesseract OCR are installed. For detailed documentation, see the [installation docs](https://microsoft.github.io/presidio/installation).
+
+
+#### Tesseract
+
 ```
-    if ext in ["jpg", "png", "jpeg", "gif", "bmp"]:
-        utf8_text, document = extract_from_single_image(document, app)
-    elif ext in ["tif", "tiff"]:
-        utf8_text = extract_text_from_tiff(document, app)
-    elif ext == "pdf":
-        utf8_text = extract_text_from_pdf(document, app)
-    elif ext in ["doc", "docx"]:
-        utf8_text = extract_text_from_doc(document, app)
-    elif ext in ["ppt", "pptx"]:
-        utf8_text = extract_text_from_ppt(document, app)
-    elif ext in ["htm", "html"]:
-        utf8_text = extract_text_from_html(document, app)
-    elif ext in ["odt"]:
-        utf8_text = extract_text_from_odt(document, app)
-    elif ext in ["rtf"]:
-        utf8_text = extract_text_from_rtf(document, app)
+sudo apt install tesseract-ocr
+sudo apt install libtesseract-dev
 ```
-OCR Language models are in the folder (ai-models / image /  ocr / tessdata). Here we have all available in tesseract, but default is English
 
+```
+tesseract --version
 
-1. Installation Process
-   Each component has a Dockerfile and a requirements.txt file to create the container.
+OUTPUT
+tesseract 5.3.0
+ leptonica-1.82.0
+  libgif 5.2.1 : libjpeg 6b (libjpeg-turbo 2.1.2) : libpng 1.6.39 : libtiff 4.5.0 : zlib 1.2.13 : libwebp 1.2.4 : libopenjp2 2.5.0
+ Found AVX2
+ Found AVX
+ Found FMA
+ Found SSE4.1
+ Found OpenMP 201511
+ Found libarchive 3.6.2 zlib/1.2.13 liblzma/5.4.1 bz2lib/1.0.8 liblz4/1.9.4 libzstd/1.5.4
+ Found libcurl/7.88.1 OpenSSL/3.0.14 zlib/1.2.13 brotli/1.0.9 zstd/1.5.4 libidn2/2.3.3 libpsl/0.21.2 (+libidn2/2.3.3) libssh2/1.10.0 nghttp2/1.52.0 librtmp/2.3 OpenLDAP/2.5.13
+```
 
-2. Software Dependencies
+```
+!pip install presidio_analyzer presidio_anonymizer presidio_image_redactor -q
+!python -m spacy download en_core_web_lg -q 
+```
 
-   - Python 3.11
-   - Files requirements.txt
+Notebook [Demo](PII-DICOM\example_dicom_image_redactor.ipynb)
 
-3. Latest Releases
-   N/A
+# Folder Tika
 
-4. API References
-   N/A
+Demo of tika OCR, Language Detection and Mime Detection
 
-# Build and Test
+### Apache Tika a content analysis toolkit
 
-In the test folder, we have different unit test cases for each component. Tests are included as part of the CI pipeline, which is configured in the [azure-pipelines.yml](azure-pipelines.yml)
-For tests, we use the unittest and pytest Python libraries.
+The Apache Tika™ toolkit detects and extracts metadata and text from over a thousand different file types (such as PPT, XLS, and PDF). All of these file types can be parsed through a single interface, making Tika useful for search engine indexing, content analysis, translation, and much more. 
 
-# Running Locally with Docker Compose
+### Install
+- https://cwiki.apache.org/confluence/display/TIKA/TikaServer#TikaServer-InstallationofTikaServer
+- https://github.com/apache/tika-docker  (docker pull apache/tika:latest-full)
+- https://pypi.org/project/tika/
+- https://tika.apache.org/1.10/formats.html
+  
+### Documentation 
+https://cwiki.apache.org/confluence/display/tika
 
-in the folder `C:\git\Detect-AI\docker` there are 2 compose files - use the file `docker-compose-local` for local API development.
+[Notebook](tika\tika_test.ipynb)
 
-these images are large so will take a number of minutes.
+# Folder Nats
 
-you can run the models in docker using the compose command
-
-> cls; cd C:\git\Detect-AI\docker; docker-compose -f docker-compose-local.yml up -d
-
-you can test the services using the health check endpoints
-
-classification
-
-> curl --location 'http://localhost:5000/health-check'
-
-
-# PremCloud Development
-
-To contribute to this repository, you need to have experience in Python, serverless applications using FastAPI, and a number of deep learning and machine learning technologies like PyTorch, spaCy, scikit-learn, HuggingFace Transformers, OpenVino Runtime, ONNX Runtime and OpenCV.
-
-# Setup Development Environment
-
-    - Install Visual Studio Code or PyCharm.
-    - Install Anaconda. Example for Windows: Anaconda Installation Guide for Windows.
-    - Clone the repository to your local machine: git clone https://dev.azure.com/sceven/DataDetect/_git/Detect-AI.
-
-    - Create a Conda environment from the environment.yml file (located at the root of our repository):
-      - conda env create --file environment.yml
-      - conda activate detect-ai
-    - Launch Jupyter Notebook with the command: jupyter notebook inside the environment.
-
-    - If you want to use Visual Studio Code, navigate to the root of the repo in a command line window, run conda activate detect-ai, and then code ..
-
-# Endpoints / APIs
-
-We use FastAPI, a web framework for building APIs with Python 3.7+ based on standard Python type hints. Documentation: FastAPI Documentation. https://fastapi.tiangolo.com/
-
-A description of all APIs and endpoints developed in these applications is included in [here](docs/ENDPOINTS.md)
+Test Nats Python client working with Server in docker container
+- [Publisher](Nats\publisher.ipynb)
+- [Consumer](Nats\consumer.ipynb)
