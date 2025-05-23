@@ -1,0 +1,127 @@
+# NLP
+MINIMUN_CHAR_LENGTH = 15
+MINIMUN_WORDS_LENGTH = 4
+filenames_types = ["doc", "docx"]
+
+video_file_names = ["mp4", "mov", "avi", "wmv", "flv", "webm"]
+audio_file_names = ["mp3", "wav", "ogg", "flac"]
+image_file_names = [
+    "jpeg",
+    "jpg",
+    "tiff",
+    "png",
+    "tif",
+    "gif",
+    "pdf",
+    "doc",
+    "docx",
+    "ppt",
+    "pptx",
+    "htm",
+    "html",
+    "bmp",
+    "rtf",
+    "odt",
+]
+lfilenames_types = [
+    "txt",
+    "csv",
+    "json",
+    "xml",
+    "html",
+    "css",
+    "md",
+    "log",
+    "rtf",
+    "sql",
+    "cfg",
+    "ini",
+    "yml",
+    "bat",
+    "sh",
+    "pl",
+    "py",
+    "java",
+    "c",
+    "cpp",
+    "h",
+    "php",
+    "js",
+    "vb",
+    "cs",
+    "rb",
+    "ts",
+    "sql",
+    "scss",
+    "sass",
+    "aspx",
+    "jsp",
+    "asm",
+    "doc",
+    "docx",
+    "dot",
+    "dotx",
+    "xls",
+    "xlsx",
+    "xlsm",
+    "xlsb",
+    "ppt",
+    "pptx",
+    "pptm",
+    "pps",
+    "ppsx",
+    "accdb",
+    "mdb",
+    "pub",
+    "vsd",
+    "mpp",
+    "msg",
+    "eml",
+    "one",
+    "sldx",
+    "odt",
+    "pdf",
+    "ai",
+    "indd",
+    "css",
+    "psd",
+    "prproj",
+    "aep",
+]
+blacklist = [
+    "[document]",
+    "style",
+    "noscript",
+    "header",
+    "html",
+    "meta",
+    "head",
+    "input",
+    "script",
+    "style",
+]
+# score for NER fine tuning
+SCORE_NER = 0.65
+
+# ROT
+FILE_NAME_COL = "file_name"
+FILE_TYPE_COL = "file_type"
+COLS_ROT = [
+    "index",
+    "is_image",
+    "is_business",
+    "days_accesed",
+    "days_modified",
+    "days_created",
+    "seconds_accesed",
+    "seconds_modified",
+    "seconds_created",
+    "outdated_group",
+    "trivial",
+    "obsolete",
+    "redundant",
+    "is_rot",
+]
+
+# Semantic
+MAX_LENGTH_TEXT_EMBEDDING = 1000000
