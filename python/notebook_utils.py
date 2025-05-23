@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
 import os
 import platform
 import sys
@@ -15,12 +9,12 @@ from pathlib import Path
 from typing import List, NamedTuple, Optional, Tuple
 
 import numpy as np
-from openvino.runtime import Core, Type, get_version
+from openvino import Core, Type, get_version
 from IPython.display import HTML, Image, display
 
 import openvino as ov
-from openvino.runtime.passes import Manager, MatcherPass, WrapType, Matcher
-from openvino.runtime import opset10 as ops
+from openvino.passes import Manager, MatcherPass, WrapType, Matcher
+from openvino import opset10 as ops
 
 
 # ## Files
@@ -76,30 +70,36 @@ def pip_install(*args):
     cli_args = []
     for arg in args:
         cli_args.extend(str(arg).split(" "))
-    subprocess.run([sys.executable, "-m", "pip", "install", *cli_args], shell=(platform.system() == "Windows"), check=True)
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", *cli_args],
+        shell=(platform.system() == "Windows"),
+        check=True,
+    )
 
 
-def load_image(path: str) -> np.ndarray:
+def load_image(name: str, url: str = None) -> np.ndarray:
     """
-    Loads an image from `path` and returns it as BGR numpy array. `path`
-    should point to an image file, either a local filename or a url. The image is
-    not stored to the filesystem. Use the `download_file` function to download and
-    store an image.
+    Loads an image by `url` and returns it as BGR numpy array. The image is
+    stored to the filesystem with name `name`. If the image file already exists
+    loads the local image.
 
-    :param path: Local path name or URL to image.
+    :param name: Local path name of the image.
+    :param url: url to the image
     :return: image as BGR numpy array
     """
     import cv2
     import requests
 
-    if path.startswith("http"):
+    if not Path(name).exists():
         # Set User-Agent to Mozilla because some websites block
         # requests with User-Agent Python
-        response = requests.get(path, headers={"User-Agent": "Mozilla/5.0"})
+        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
         array = np.asarray(bytearray(response.content), dtype="uint8")
         image = cv2.imdecode(array, -1)  # Loads the image as BGR
+        cv2.imwrite(name, image)
     else:
-        image = cv2.imread(path)
+        image = cv2.imread(name)
+
     return image
 
 
@@ -108,8 +108,6 @@ def download_file(
     filename: PathLike = None,
     directory: PathLike = None,
     show_progress: bool = True,
-    silent: bool = False,
-    timeout: int = 10,
 ) -> PathLike:
     """
     Download a file from a url and save it to the local filesystem. The file is saved to the
@@ -139,14 +137,18 @@ def download_file(
             "Use the `directory` parameter to specify a target directory for the downloaded file."
         )
 
+    filepath = Path(directory) / filename if directory is not None else filename
+    if filepath.exists():
+        return filepath.resolve()
+
     # create the directory if it does not exist, and add the directory to the filename
     if directory is not None:
-        directory = Path(directory)
-        directory.mkdir(parents=True, exist_ok=True)
-        filename = directory / Path(filename)
+        Path(directory).mkdir(parents=True, exist_ok=True)
 
     try:
-        response = requests.get(url=url, headers={"User-agent": "Mozilla/5.0"}, stream=True)
+        response = requests.get(
+            url=url, headers={"User-agent": "Mozilla/5.0"}, stream=True
+        )
         response.raise_for_status()
     except (
         requests.exceptions.HTTPError
@@ -160,9 +162,9 @@ def download_file(
     except requests.exceptions.RequestException as error:
         raise Exception(f"File downloading failed with error: {error}") from None
 
-    # download the file if it does not exist, or if it exists with an incorrect file size
+    # download the file if it does not exist
     filesize = int(response.headers.get("Content-length", 0))
-    if not filename.exists() or (os.stat(filename).st_size != filesize):
+    if not filepath.exists():
         with tqdm_notebook(
             total=filesize,
             unit="B",
@@ -171,21 +173,22 @@ def download_file(
             desc=str(filename),
             disable=not show_progress,
         ) as progress_bar:
-            with open(filename, "wb") as file_object:
+            with open(filepath, "wb") as file_object:
                 for chunk in response.iter_content(chunk_size):
                     file_object.write(chunk)
                     progress_bar.update(len(chunk))
                     progress_bar.refresh()
     else:
-        if not silent:
-            print(f"'{filename}' already exists.")
+        print(f"'{filepath}' already exists.")
 
     response.close()
 
-    return filename.resolve()
+    return filepath.resolve()
 
 
-def download_ir_model(model_xml_url: str, destination_folder: PathLike = None) -> PathLike:
+def download_ir_model(
+    model_xml_url: str, destination_folder: PathLike = None
+) -> PathLike:
     """
     Download IR model from `model_xml_url`. Downloads model xml and bin file; the weights file is
     assumed to exist at the same location and name as model_xml_url with a ".bin" extension.
@@ -196,7 +199,9 @@ def download_ir_model(model_xml_url: str, destination_folder: PathLike = None) -
     :return: path to downloaded xml model file
     """
     model_bin_url = model_xml_url[:-4] + ".bin"
-    model_xml_path = download_file(model_xml_url, directory=destination_folder, show_progress=False)
+    model_xml_path = download_file(
+        model_xml_url, directory=destination_folder, show_progress=False
+    )
     download_file(model_bin_url, directory=destination_folder)
     return model_xml_path
 
@@ -215,7 +220,10 @@ def normalize_minmax(data):
     Normalizes the values in `data` between 0 and 1
     """
     if data.max() == data.min():
-        raise ValueError("Normalization is not possible because all elements of" f"`data` have the same value: {data.max()}.")
+        raise ValueError(
+            "Normalization is not possible because all elements of"
+            f"`data` have the same value: {data.max()}."
+        )
     return (data - data.min()) / (data.max() - data.min())
 
 
@@ -258,7 +266,16 @@ class VideoPlayer:
     :param skip_first_frames: Skip first N frames.
     """
 
-    def __init__(self, source, size=None, flip=False, fps=None, skip_first_frames=0, width=1280, height=720):
+    def __init__(
+        self,
+        source,
+        size=None,
+        flip=False,
+        fps=None,
+        skip_first_frames=0,
+        width=1280,
+        height=720,
+    ):
         import cv2
 
         self.cv2 = cv2  # This is done to access the package in class methods
@@ -268,7 +285,9 @@ class VideoPlayer:
         self.__cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
         if not self.__cap.isOpened():
-            raise RuntimeError(f"Cannot open {'camera' if isinstance(source, int) else ''} {source}")
+            raise RuntimeError(
+                f"Cannot open {'camera' if isinstance(source, int) else ''} {source}"
+            )
         # skip first N frames
         self.__cap.set(cv2.CAP_PROP_POS_FRAMES, skip_first_frames)
         # fps of input file
@@ -283,7 +302,11 @@ class VideoPlayer:
         if size is not None:
             self.__size = size
             # AREA better for shrinking, LINEAR better for enlarging
-            self.__interpolation = cv2.INTER_AREA if size[0] < self.__cap.get(cv2.CAP_PROP_FRAME_WIDTH) else cv2.INTER_LINEAR
+            self.__interpolation = (
+                cv2.INTER_AREA
+                if size[0] < self.__cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+                else cv2.INTER_LINEAR
+            )
         # first frame
         _, self.__frame = self.__cap.read()
         self.__lock = threading.Lock()
@@ -345,7 +368,9 @@ class VideoPlayer:
             # need to copy frame, because can be cached and reused if fps is low
             frame = self.__frame.copy()
         if self.__size is not None:
-            frame = self.cv2.resize(frame, self.__size, interpolation=self.__interpolation)
+            frame = self.cv2.resize(
+                frame, self.__size, interpolation=self.__interpolation
+            )
         if self.__flip:
             frame = self.cv2.flip(frame, 1)
         return frame
@@ -419,10 +444,9 @@ binary_labels = [
 BinarySegmentation = SegmentationMap(binary_labels)
 
 
-# In[ ]:
-
-
-def segmentation_map_to_image(result: np.ndarray, colormap: np.ndarray, remove_holes: bool = False) -> np.ndarray:
+def segmentation_map_to_image(
+    result: np.ndarray, colormap: np.ndarray, remove_holes: bool = False
+) -> np.ndarray:
     """
     Convert network result of floating point numbers to an RGB image with
     integer values from 0-255 by applying a colormap.
@@ -435,7 +459,9 @@ def segmentation_map_to_image(result: np.ndarray, colormap: np.ndarray, remove_h
     import cv2
 
     if len(result.shape) != 2 and result.shape[0] != 1:
-        raise ValueError(f"Expected result with shape (H,W) or (1,H,W), got result with shape {result.shape}")
+        raise ValueError(
+            f"Expected result with shape (H,W) or (1,H,W), got result with shape {result.shape}"
+        )
 
     if len(np.unique(result)) > colormap.shape[0]:
         raise ValueError(
@@ -453,7 +479,9 @@ def segmentation_map_to_image(result: np.ndarray, colormap: np.ndarray, remove_h
     for label_index, color in enumerate(colormap):
         label_index_map = result == label_index
         label_index_map = label_index_map.astype(np.uint8) * 255
-        contours, hierarchies = cv2.findContours(label_index_map, contour_mode, cv2.CHAIN_APPROX_SIMPLE)
+        contours, hierarchies = cv2.findContours(
+            label_index_map, contour_mode, cv2.CHAIN_APPROX_SIMPLE
+        )
         cv2.drawContours(
             mask,
             contours,
@@ -465,7 +493,9 @@ def segmentation_map_to_image(result: np.ndarray, colormap: np.ndarray, remove_h
     return mask
 
 
-def segmentation_map_to_overlay(image, result, alpha, colormap, remove_holes=False) -> np.ndarray:
+def segmentation_map_to_overlay(
+    image, result, alpha, colormap, remove_holes=False
+) -> np.ndarray:
     """
     Returns a new image where a segmentation mask (created with colormap) is overlayed on
     the source image.
@@ -527,7 +557,9 @@ def viz_result_image(
     if bgr_to_rgb:
         source_image = to_rgb(source_image)
     if resize:
-        result_image = cv2.resize(result_image, (source_image.shape[1], source_image.shape[0]))
+        result_image = cv2.resize(
+            result_image, (source_image.shape[1], source_image.shape[0])
+        )
 
     num_images = 1 if source_image is None else 2
 
@@ -623,12 +655,20 @@ class DeviceNotFoundAlert(NotebookAlert):
         """
         ie = Core()
         supported_devices = ie.available_devices
-        self.message = f"Running this cell requires a {device} device, " "which is not available on this system. "
+        self.message = (
+            f"Running this cell requires a {device} device, "
+            "which is not available on this system. "
+        )
         self.alert_class = "warning"
         if len(supported_devices) == 1:
-            self.message += f"The following device is available: {ie.available_devices[0]}"
+            self.message += (
+                f"The following device is available: {ie.available_devices[0]}"
+            )
         else:
-            self.message += "The following devices are available: " f"{', '.join(ie.available_devices)}"
+            self.message += (
+                "The following devices are available: "
+                f"{', '.join(ie.available_devices)}"
+            )
         super().__init__(self.message, self.alert_class)
 
 
@@ -689,7 +729,9 @@ class ReplaceTensor(MatcherPass):
             for y in packed_layername_tensor_dict_list:
                 root_name = root.get_friendly_name()
                 if root_name.find(y["name"]) != -1:
-                    max_fp16 = np.array([[[[-np.finfo(np.float16).max]]]]).astype(np.float32)
+                    max_fp16 = np.array([[[[-np.finfo(np.float16).max]]]]).astype(
+                        np.float32
+                    )
                     new_tenser = ops.constant(max_fp16, Type.f32, name="Constant_4431")
                     root.set_arguments([root.input_value(0).node, new_tenser])
                     packed_layername_tensor_dict_list.remove(y)
@@ -713,3 +755,29 @@ def optimize_bge_embedding(model_path, output_model_path):
     manager.register_pass(ReplaceTensor(packed_layername_tensor_dict_list))
     manager.run_passes(ov_model)
     ov.save_model(ov_model, output_model_path, compress_to_fp16=False)
+
+
+def collect_telemetry(file: str = ""):
+    """
+    The function only tracks that the notebooks cell was executed and does not include any personally identifiable information (PII).
+    """
+    try:
+        import os
+        import requests
+        import platform
+        from pathlib import Path
+
+        if os.getenv("SCARF_NO_ANALYTICS") == "1" or os.getenv("DO_NOT_TRACK") == "1":
+            return
+        url = "https://openvino.gateway.scarf.sh/telemetry"
+        params = {
+            "notebook_dir": Path(__file__).parent.name,
+            "platform": platform.system(),
+            "arch": platform.machine(),
+            "python_version": platform.python_version(),
+        }
+        if file:
+            params["file"] = file
+        requests.get(url, params=params)
+    except Exception:
+        pass

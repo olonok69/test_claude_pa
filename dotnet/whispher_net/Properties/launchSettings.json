@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "whispher_net": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

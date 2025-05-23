@@ -1,36 +1,20 @@
-# Premcloud Common Packages
-This Repository contains packages with common logic across models
+# Introduction 
+TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
 
 # Getting Started
-Folders inside packages
-
-### Detectaicore
-Contains Data Models and constants for PII Classification Model, Logging and Exception Behaviours class shared by all models
-
-### ov_helpers
-Contains OpenVino classes to convert models to IR OpenVino format and to load and do Inference with OpenVino Runtime. We have conversion scripts for Microsoft Florence 2 AND Microsoft Phi3 Vision Instruct
+TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
+1.	Installation process
+2.	Software dependencies
+3.	Latest releases
+4.	API references
 
 # Build and Test
-- Go to the folder and execute python setup.py sdist bdist_wheel
-- in the same folder run twine upload dist/*
+TODO: Describe and show how to build your code and run the tests. 
 
-```
-PACKAGES
-
-pip install -e . (from detectaicore to install the package locally and be able to edit)
-pip library
-
-
-https://www.freecodecamp.org/news/build-your-first-python-package/
-
-python setup.py sdist bdist_wheel
-twine upload dist/*
-
-pip install -U detectaicore --force
-```
 # Contribute
+TODO: Explain how other users and developers can contribute to make your code better. 
 
-These two python packages are in pypi under my account olonok . To push new releases you need a token , which i will need to provide. Contact me to olonok@gmail.com and agree the process. ALso you can continue with the development and changes in local
-
-![alt text](image.png)
-
+If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
+- [ASP.NET Core](https://github.com/aspnet/Home)
+- [Visual Studio Code](https://github.com/Microsoft/vscode)
+- [Chakra Core](https://github.com/Microsoft/ChakraCore)
