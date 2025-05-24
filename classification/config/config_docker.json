@@ -1,0 +1,6 @@
+{
+    "en": "http://classification-en:5100/process/process_text",
+    "es": "http://classification-es:5101/process/process_text",
+    "it": "http://classification-it:5102/process/process_text",
+    "de": "http://classification-de:5103/process/process_text"
+}
