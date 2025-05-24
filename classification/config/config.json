@@ -1,6 +1,0 @@
-{
-    "en": "http://localhost:5100/process/process_text",
-    "es": "http://localhost:5101/process/process_text",
-    "it": "http://localhost:5102/process/process_text",
-    "de": "http://localhost:5103/process/process_text"
-}
