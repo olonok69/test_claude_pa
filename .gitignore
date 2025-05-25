@@ -1,132 +1,30 @@
-*.env
-#inclusion
-!classification_nats/keys/.env
+_Resources
 
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# Secrets ---------------------
 
-# C extensions
-*.so
+.secrets/*
+*.key
+*key.pem
+.env
+docker/.secrets
 
-# Distribution / packaging
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# Volumes ---------------------
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+db/.docker_volumes/*
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# MLflow ----------------------
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
+mlruns
+outputs
+mlflow/mflow.db
+mlflow/mlruns
+archive
+dataset
+output
+__pycache__
+custom_classifier/output
+custom_classifier/output/dataframe.csv
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
+# LOgs
 *.log
-local_settings.py
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# celery beat schedule file
-celerybeat-schedule
-
-# SageMath parsed files
-*.sage.py
-
-# virtualenv
-.venv
-venv/
-ENV/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-
-logs
-
-output/
-archive/
-examples/
-examples2/
-__pycache__/
-.ipynb_checkpoints/
-output/
-kubernetes/
-3dmodel/MosMedData/
-#model files
-*.pth
-*.h5
-
-output/
-*.jpg
-out/
-archive/
-.vscode/
-lightning_logs/
-/.vs
-tests/keys/
-nlp/app/document_classification/test_examples/
-nlp/app/document_classification/chroma/
-nlp/app/document_classification/models
-tests/archive_tests
-nlp/app/document_summarization/models
-docker/ollama
+logs/

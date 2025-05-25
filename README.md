@@ -1,62 +1,58 @@
-# Introduction
+# DETECT-AI CUSTOM CLASSIFIER
 
-This repository contains the PII/GDPR Detection Model. The objective of this application is identify words or sentences in documents which are protected by privacy laws, classify them per type and score them according to the rules of a privacy Framework like PII or GDPR. One we have the individual entities identified, score the whole document according to a risk model and return these values back to the user to act accordingly.
+# Introduction 
+This repository contains Detect-AI-Custom-Classifier components. The Custom-Classifier it is an application which allow the customer create a classifier using their own data and labels. User have to provide a set of documents organized in folders. Each folder represent a class or label and the folder contains a minumum of 100 documents which represent the class/label. Provide a correct set of documents organized correctly and a minimum size per class/label it is a responsability of the user. With this set of document we will fine tune a LLM on the task classification and if the classifier meet the evaluation criteria, it will be saved on the MLFLOW model repository of that user to later be use for inference. One you have 1 classifier or multiple classifier you can decide to classify a document using the specific set of labels that were use during the fine tuning. The minimum number of classes/labels is two.
 
-# High Level Architecture
+# Components
+![alt text](docs/images/general_arch.png)
 
-![alt text](docs/arch.png)
+All components of this application run in docker containers and have a common compose to build them up.
+Main components of this application:
 
-Currently the Application support 4 Languages English, Spanish, German and Italian. This can be easily extended to any language supported by [Spacy](https://spacy.io/). We have 3 main components:
+- Custom Classifier REST API
+- MLflow Tracking Server / Artifact repository
+- Database (Permanet storage Metadata)
+- Admin Database
+- NGINX
 
-- Language Detection Proxy: Take the Tika Request and detect the language of the content together with some controls like mime detection and length  of the content. 
-- Analysis Engine: Identify the PII/GDPR entities in the text and create an object with the type of entity, its location in the text and a confident score for filtering purposes.
-- Scoring Engine: Score the document according to one of the available Risk Models.
+# Main Workflow application
+![alt text](docs/images/workflow.png)
 
-# Risk Models
-We have defined Entities and scoring mechanism according to US PII and EU GDPR regulations. Additionaly the User can create its custom Model defined with their own requirements
-The Model Schema it is defined in this [file](classification\pii_codex\data\v2\pii_gdpr_mapping.csv)
+ - The user using the UI send a request containing a list of labels a location folder and name for that job
+ - Start an Experiment in MLFLOW and the process create a dataset with the documents in the location and train a LLM. One the process finish the model it is log in MLFLOW. The API return to the UI the information to localize the model(Uri pointing to model in model registry or artifact repository)
+ - The user now can send a request to a model in an specific endpoint / location using the mlflow runID and a text
+ - The endpoint return a class label and a score for that document
 
+# Getting Started
+The AI components are organized into different folders:
 
-# Installation Process
-Each component has a Dockerfile (1 per language supported and 1 for the proxy docker) and a requirements.txt file to create the container.
+      Main Folders
 
-![alt text](docs/Docker.png)
+      mlflow: MLflow tracking Server
+      custom_classifier: classifier REST API.
+      docker: Docker compose and nginx configuration.
+      
+1. Installation Process
+   Mlflow and custom_classifier have a Dockerfile and a requirements.txt file to create the container. All component are include in a Docker-compose file to deploy the components to the prod env
 
-Additionaly we have docker-compose file to deploy dockers to production environments
+2. Software Dependencies
 
-![alt text](docs/docker-compose.png)
+   - Python 3.11.16
+   - Files requirements.txt
 
-# Software Dependencies
+3. Latest Releases
+   N/A
 
-   - Python 3.10.11
-   - Files [requirements.txt](classification\requirements.txt)
-
+4. API References
+   N/A
 
 # Build and Test
 
-In the test folder, we have different unit test cases for each component. Tests are included as part of the CI pipeline, which is configured in the [azure-pipelines.yml](azure-pipelines.yml) file present at the root of our repository
-
-For tests, we use the unittest and pytest Python libraries.
+TODO
 
 # Running Locally with Docker Compose
 
-in the folder `docker` there are 2 compose files - use the file `docker-compose-local` for local API development.
-
-
-
-you can run the models in docker using the compose command
-
-> cls; cd C:\git\Detect-AI\docker; docker-compose -f docker-compose-local.yml up -d
-
-you can test the services using the health check endpoints
-
-classification
-
-> curl --location 'http://localhost:5000/health-check'
-
-ROT
-
-> curl --location 'http://localhost:5007/health-check'
+TODO
 
 # PremCloud Development
 
@@ -66,7 +62,7 @@ To contribute to this repository, you need to have experience in Python, serverl
 
     - Install Visual Studio Code or PyCharm.
     - Install Anaconda. Example for Windows: Anaconda Installation Guide for Windows.
-    - Clone the repository to your local machine: git clone https://sceven@dev.azure.com/sceven/DataDetect/_git/Detect-AI-PII-Classifier.
+    - Clone the repository to your local machine: git clone https://dev.azure.com/sceven/DataDetect/_git/Detect-AI-Custom-Classifier.
 
     - Create a Conda environment from the environment.yml file (located at the root of our repository):
       - conda env create --file environment.yml
@@ -77,6 +73,6 @@ To contribute to this repository, you need to have experience in Python, serverl
 
 # Endpoints / APIs
 
-We use FastAPI, a web framework for building APIs with Python 3.7+ based on standard Python type hints. Documentation: FastAPI Documentation. https://fastapi.tiangolo.com/
+We use FastAPI, a web framework for building APIs with Python 3.9+ based on standard Python type hints. Documentation: FastAPI Documentation. https://fastapi.tiangolo.com/
 
-A description of all APIs and endpoints developed in these applications is included in [here](docs/ENDPOINTS.md)
+
