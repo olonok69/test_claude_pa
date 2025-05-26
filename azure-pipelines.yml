@@ -9,7 +9,6 @@ resources:
   - repo: self
 
 variables:
-
   # agents
   azure_build_Agent: "Azure Pipelines"
   hosted_build_Agent: "Default"
@@ -21,12 +20,16 @@ variables:
   tag: "$(Build.BuildId)"
 
   # docker file paths
-  dockerfilePath_custom_classifier: "$(Build.SourcesDirectory)/custom_classifier/Dockerfile"
-  dockerfilePath_mlflow: "$(Build.SourcesDirectory)/mlflow/Dockerfile"
+
+  dockerfilePath_document_classification: "$(Build.SourcesDirectory)/nlp/app/document_classification/Dockerfile"
+  dockerfilePath_document_summarization: "$(Build.SourcesDirectory)/nlp/app/document_summarization/Dockerfile"
+  dockerfilePath_admin_models: "$(Build.SourcesDirectory)/admin/Dockerfile"
 
   # image Repositories
-  imageRepository_custom_classifier: "$(imageRepository)-custom_classifier"
-  imageRepository_mlflow: "$(imageRepository)-mlflow"
+ 
+  imageRepository_document_classification: "$(imageRepository)-document_classification" 
+  imageRepository_document_summarization: "$(imageRepository)-document_summarization"
+  imageRepository_admin_models: "$(imageRepository)-admin_models"
 
   # Build Variables
   disable_tests: "false" # Set to 'true' to skip the unit tests
@@ -34,10 +37,8 @@ variables:
 
   # Sonar Cloud
   SonarCloud_Organization: "a5g3uqpot1ph"
-  SonarCloud_ProjectName: "Detect-AI-Custom-Classifier"
-  SonarCloud_ProjectKey: "sceven_Detect-AI-Custom-Classifier"
-
-  mlflow_user: "customclassifier"
+  SonarCloud_ProjectName: "Detect-AI"
+  SonarCloud_ProjectKey: "sceven_Detect-AI"
 
 stages:
   - stage: Publish_Docker_Artifacts
@@ -62,13 +63,13 @@ stages:
                 sonar.organization=$(SonarCloud_Organization)
                 
                 # This is the name and version displayed in the SonarCloud UI.
-                #sonar.projectName=Detect-AI-Custom-Classifier
+                #sonar.projectName=Detect-AI
                 #sonar.projectVersion=1.0
-
-
+                
+                
                 # Path is relative to the sonar-project.properties file. Replace "\" by "/" on Windows.
                 #sonar.sources=.
-
+                
                 # Encoding of the source code. Default is default system encoding
                 #sonar.sourceEncoding=UTF-8
               
@@ -81,51 +82,92 @@ stages:
               pollingTimeoutSec: '300'
 
           - task: PublishBuildArtifacts@1
-            displayName: Publish the Artifact Bundle
+            displayName: Publish the bundle
             inputs:
               PathtoPublish: "$(System.DefaultWorkingDirectory)/docker"
               ArtifactName: "docker"
-              publishLocation: "Container"              
+              publishLocation: "Container"
 
-  - stage: Docker_mlflow_tracker
-    displayName: Docker mlflow tracker
+  - stage: Python_Integration_Tests
+    displayName: Test Stage
+    condition: eq(variables['disable_tests'], 'false')
     jobs:
-      - job: Docker_Image_Builds_mlflow_tracker
+      - job: RunUnitTests
+        displayName: Run Python Unit Tests
+        pool: $(azure_build_Agent)
         steps:
-        - script: |
-            docker build \
-              --file $(dockerfilePath_mlflow) \
-              --build-arg mlflow_user=$(mlflow_user) \
-              -t acrdetectaideveastus.azurecr.io/$(imageRepository_mlflow):$(tag) \
-              -t acrdetectaideveastus.azurecr.io/$(imageRepository_mlflow):latest .
-          displayName: 'Build Docker_mlflow_tracker with build args'
+          - checkout: self
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.10.x"
+              addToPath: true
+          - script: |
+              pip install --upgrade pip
+              pip install --no-cache-dir -r $(Build.SourcesDirectory)/tests/requirements.txt 
+              python -m spacy download en_core_web_lg
+              python -m spacy download xx_ent_wiki_sm
+            displayName: Install Dependencies
+          - script: |
+              python -m pytest tests
+            displayName: Run Unit Tests
 
-        - task: Docker@2
-          displayName: Push Docker Mlflow Tracker
-          condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
-          inputs:
-            command: 'push'          
-            repository: $(imageRepository_mlflow)            
-            containerRegistry: $(dockerRegistryServiceConnection)
-            tags: |
-              $(tag)
-              latest    
 
-  - stage: Docker_custom_classifier
-    displayName: Docker Custom Classifier
+  - stage: Docker_Document_classification
+    displayName: Document classification
     jobs:
-      - job: Docker_Image_Builds_Custom_Classifier
-        displayName: Build and Push Docker Custom Classifier
+      - job: Docker_Image_Builds_Document_classification
+        displayName: Build and Push Docker Document classification
         pool: $(azure_build_Agent)
         steps:
           - task: Docker@2
             displayName: Build and Push
             inputs:
               command: buildAndPush
-              repository: $(imageRepository_custom_classifier)
-              dockerfile: $(dockerfilePath_custom_classifier)
+              repository: $(imageRepository_document_classification)
+              dockerfile: $(dockerfilePath_document_classification)
               buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
               containerRegistry: $(dockerRegistryServiceConnection)
               tags: |
                 $(tag)
-                latest            
+                latest
+    dependsOn: Python_Integration_Tests
+
+  - stage: Docker_Document_summarization
+    displayName: Document summarization
+    jobs:
+      - job: Docker_Image_Builds_Document_summarization
+        displayName: Build and Push Docker Document summarization
+        pool: $(azure_build_Agent)
+        steps:
+          - task: Docker@2
+            displayName: Build and Push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository_document_summarization)
+              dockerfile: $(dockerfilePath_document_summarization)
+              buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+    dependsOn: Python_Integration_Tests
+
+  - stage: Docker_admin_models
+    displayName: Admin Models
+    jobs:
+      - job: Docker_Image_Builds_admin_models
+        displayName: Build and Push Docker Admin Models
+        pool: $(azure_build_Agent)
+        steps:
+          - task: Docker@2
+            displayName: Build and Push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository_admin_models)
+              dockerfile: $(dockerfilePath_admin_models)
+              buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+    dependsOn: Python_Integration_Tests

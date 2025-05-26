@@ -1,78 +1,46 @@
-# DETECT-AI CUSTOM CLASSIFIER
+# Introduction
 
-# Introduction 
-This repository contains Detect-AI-Custom-Classifier components. The Custom-Classifier it is an application which allow the customer create a classifier using their own data and labels. User have to provide a set of documents organized in folders. Each folder represent a class or label and the folder contains a minumum of 100 documents which represent the class/label. Provide a correct set of documents organized correctly and a minimum size per class/label it is a responsability of the user. With this set of document we will fine tune a LLM on the task classification and if the classifier meet the evaluation criteria, it will be saved on the MLFLOW model repository of that user to later be use for inference. One you have 1 classifier or multiple classifier you can decide to classify a document using the specific set of labels that were use during the fine tuning. The minimum number of classes/labels is two.
-
-# Components
-![alt text](docs/images/general_arch.png)
-
-All components of this application run in docker containers and have a common compose to build them up.
-Main components of this application:
-
-- Custom Classifier REST API
-- MLflow Tracking Server / Artifact repository
-- Database (Permanet storage Metadata)
-- Admin Database
-- NGINX
-
-# Main Workflow application
-![alt text](docs/images/workflow.png)
-
- - The user using the UI send a request containing a list of labels a location folder and name for that job
- - Start an Experiment in MLFLOW and the process create a dataset with the documents in the location and train a LLM. One the process finish the model it is log in MLFLOW. The API return to the UI the information to localize the model(Uri pointing to model in model registry or artifact repository)
- - The user now can send a request to a model in an specific endpoint / location using the mlflow runID and a text
- - The endpoint return a class label and a score for that document
+This repository contains Detect-AI Purview Classifier components. Detect-AI  Purview Classifier it is an AI component which classifier a document versus the Microsoft Purview classification classes defined in this document [here](nlp\app\document_classification\data\classes.csv). 60 classes with their descriptions.
 
 # Getting Started
-The AI components are organized into different folders:
 
-      Main Folders
+### High Level Architecture
+![alt text](docs/images/hla.png)
+  
+  There is mainly 5 components. The classification component, the summarization Component, the Vector Store , the Inference Server and the Admin API component
+  - The classification Componet and the Vector Store are in the same Docker in the [folder](nlp\app\document_classification) of this repo. This component as well has a Restful API to interact with Detect.
+  - The summarization Component is an independent docker in this [folder](nlp\app\document_summarization). It contais the logic to create an abstractive summary of a text when this is longer than 4500 chars, aprox 900 tokens
+  - The Inference Server, it is an independent docker running Ollama server which allow us create embeddings or summaries of text.
+  - The admin component offers a REstful API to interacts with ollama [here](admin)
+  
+#### Summarization Process
 
-      mlflow: MLflow tracking Server
-      custom_classifier: classifier REST API.
-      docker: Docker compose and nginx configuration.
-      
+![alt text](docs/images/sum.png)
+
+When a document is longer than 1024 tokens, the classification Docker will send the text to the summarization docker to get an abstractive summary. The summarizer will take the document and it will split it in chuncks of 4800 chars with and overlap of 300 chars. Then if the number of chunks is higher than 8, the summarizer using clustering, will group all the chunks in 8 different classes based in similarity. From those eight clusters we choose the closest chunk to the cluster centroid to be representant. After we have the 8 representants, we use langchain and a summarization model to summarize the text to 1 single representative text of the whole initial document and return it to the classification component to finish classification.
+
+# Installation and Setup
+
 1. Installation Process
-   Mlflow and custom_classifier have a Dockerfile and a requirements.txt file to create the container. All component are include in a Docker-compose file to deploy the components to the prod env
+
+   Each component has a Dockerfile and a requirements.txt file to create the container. Additionally in the folder docker you have a [docker compose local](docker\docker-compose-local.yml) and a [docker compose for prod](docker\docker-compose.yml) which prepare the application to be deployed to a VM. The pipeline include create the 3 dockers and the nginx proxy to interacts with Detect.
+
 
 2. Software Dependencies
 
-   - Python 3.11.16
+   - Python 3.11.10
    - Files requirements.txt
+   - detectaicore
 
 3. Latest Releases
    N/A
 
 4. API References
-   N/A
+   [Errors](docs\errors.md)
 
 # Build and Test
-
+### Build
+The [CI pipeline](azure-pipelines.yml) contains the components to build the dockers and push them to Azure Container Registry
+### Test
 TODO
-
-# Running Locally with Docker Compose
-
-TODO
-
-# PremCloud Development
-
-To contribute to this repository, you need to have experience in Python, serverless applications using FastAPI, and a number of deep learning and machine learning technologies like PyTorch, spaCy, scikit-learn, HuggingFace Transformers, and OpenCV.
-
-# Setup Development Environment
-
-    - Install Visual Studio Code or PyCharm.
-    - Install Anaconda. Example for Windows: Anaconda Installation Guide for Windows.
-    - Clone the repository to your local machine: git clone https://dev.azure.com/sceven/DataDetect/_git/Detect-AI-Custom-Classifier.
-
-    - Create a Conda environment from the environment.yml file (located at the root of our repository):
-      - conda env create --file environment.yml
-      - conda activate detect-ai
-    - Launch Jupyter Notebook with the command: jupyter notebook inside the environment.
-
-    - If you want to use Visual Studio Code, navigate to the root of the repo in a command line window, run conda activate detect-ai, and then code ..
-
-# Endpoints / APIs
-
-We use FastAPI, a web framework for building APIs with Python 3.9+ based on standard Python type hints. Documentation: FastAPI Documentation. https://fastapi.tiangolo.com/
-
 

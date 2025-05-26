@@ -1,0 +1,16 @@
+{
+    "MODEL_NAME": "sentence-transformers/gtr-t5-large",
+    "EMBEDDINGS_TYPE": "huggingface",
+    "BFLOAT16": 1,
+    "OLLAMA_EMBEDDINGS": "qwen:0.5b-text",
+    "USE_OLLAMA":1,
+    "OLLAMA_TAGS_URL": "http://ollama:11434/api/tags",
+    "OLLAMA_MODELS_URL": "http://ollama:11434/api/pull",
+    "OLLAMA_BASE_URL": "http://ollama:11434",
+    "SUMMARIZATION_URL": "http://document_summarization:5015/process",
+    "CHUNK":4800,
+    "OVERLAP":300,
+    "NUM_DOCUMENTS":8,
+    "MIN_NUM_TOKENS":64,
+    "USE_SUMMARIZATION":0
+}
