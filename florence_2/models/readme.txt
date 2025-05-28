@@ -1,1 +1,0 @@
-here you can place the 4 onnx components of Florence 2

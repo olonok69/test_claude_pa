@@ -1,0 +1,261 @@
+# Docker
+# Build and push an image to Azure Container Registry
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+  - develop
+
+resources:
+  - repo: self
+
+variables:
+  # agents
+  azure_build_Agent: "Azure Pipelines"
+  hosted_build_Agent: "Default"
+
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: "b55a1ff0-774c-4842-8247-0fd90877ac37"
+  imageRepository: "detectai"
+  containerRegistry: "acrdetectaideveastus.azurecr.io"
+  tag: "$(Build.BuildId)"
+
+  # docker file paths
+
+  dockerfilePath_document_classification: "$(Build.SourcesDirectory)/nlp/app/document_classification/Dockerfile"
+  dockerfilePath_document_summarization: "$(Build.SourcesDirectory)/nlp/app/document_summarization/Dockerfile"
+  dockerfilePath_ocr: "$(Build.SourcesDirectory)/image/ocr/app/Dockerfile"
+  dockerfilePath_nsfw: "$(Build.SourcesDirectory)/image/nsfw/app/Dockerfile"
+  dockerfilePath_image_tagger: "$(Build.SourcesDirectory)/image/image_tagger/Dockerfile"
+  dockerfilePath_image_captioning: "$(Build.SourcesDirectory)/image/image_captioning/Dockerfile"
+  dockerfilePath_admin_models: "$(Build.SourcesDirectory)/admin/Dockerfile"
+
+  # image Repositories
+ 
+  imageRepository_document_classification: "$(imageRepository)-document_classification" 
+  imageRepository_document_summarization: "$(imageRepository)-document_summarization"
+  imageRepository_ocr: "$(imageRepository)-ocr"
+  imageRepository_nsfw: "$(imageRepository)-nsfw"
+  imageRepository_image_tagger: "$(imageRepository)-image_tagger"
+  imageRepository_image_captioning: "$(imageRepository)-image_captioning"
+  imageRepository_admin_models: "$(imageRepository)-admin_models"
+
+  # Build Variables
+  disable_tests: "false" # Set to 'true' to skip the unit tests
+  use_no_cache: "false" # Set to 'true' to enable --no-cache which will build the docker images without cache
+
+  # Sonar Cloud
+  SonarCloud_Organization: "a5g3uqpot1ph"
+  SonarCloud_ProjectName: "Detect-AI"
+  SonarCloud_ProjectKey: "sceven_Detect-AI"
+
+stages:
+  - stage: Publish_Docker_Artifacts
+    displayName: Sonar Analyze + Publish Artifacts
+    jobs:
+      - job: Publish_Docker_Artifacts
+        displayName: Publish Docker Artifacts
+        pool: $(azure_build_Agent)
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: SonarCloudPrepare@1
+            continueOnError: false
+            inputs:
+              SonarCloud: 'SonarCloud'
+              organization: '$(SonarCloud_Organization)'
+              scannerMode: 'CLI'
+              configMode: 'file'
+              extraProperties: |
+                sonar.projectKey=$(SonarCloud_ProjectKey)
+                sonar.organization=$(SonarCloud_Organization)
+                
+                # This is the name and version displayed in the SonarCloud UI.
+                #sonar.projectName=Detect-AI
+                #sonar.projectVersion=1.0
+                
+                
+                # Path is relative to the sonar-project.properties file. Replace "\" by "/" on Windows.
+                #sonar.sources=.
+                
+                # Encoding of the source code. Default is default system encoding
+                #sonar.sourceEncoding=UTF-8
+              
+          - task: SonarCloudAnalyze@1
+            continueOnError: false
+
+          - task: SonarCloudPublish@1
+            continueOnError: false
+            inputs:
+              pollingTimeoutSec: '300'
+
+          - task: PublishBuildArtifacts@1
+            displayName: Publish the bundle
+            inputs:
+              PathtoPublish: "$(System.DefaultWorkingDirectory)/docker"
+              ArtifactName: "docker"
+              publishLocation: "Container"
+
+  - stage: Python_Integration_Tests
+    displayName: Test Stage
+    condition: eq(variables['disable_tests'], 'false')
+    jobs:
+      - job: RunUnitTests
+        displayName: Run Python Unit Tests
+        pool: $(azure_build_Agent)
+        steps:
+          - checkout: self
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.10.x"
+              addToPath: true
+          - script: |
+              pip install --upgrade pip
+              pip install --no-cache-dir -r $(Build.SourcesDirectory)/tests/requirements.txt 
+              python -m spacy download en_core_web_lg
+              python -m spacy download xx_ent_wiki_sm
+            displayName: Install Dependencies
+          - script: |
+              python -m pytest tests
+            displayName: Run Unit Tests
+
+
+  - stage: Docker_nsfw
+    displayName: Docker NSFW
+    jobs:
+      - job: Docker_Image_Builds_NSFW
+        displayName: Build and Push Docker NSFW
+        pool: $(azure_build_Agent)
+        steps:
+          - task: Docker@2
+            displayName: Build and Push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository_nsfw)
+              dockerfile: $(dockerfilePath_nsfw)
+              buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+    dependsOn: Python_Integration_Tests
+
+  - stage: Docker_image_tagger
+    displayName: Docker Image Tagger
+    jobs:
+      - job: Docker_Image_Builds_Image_Tagger
+        displayName: Build and Push Docker Image Tagger
+        pool: $(azure_build_Agent)
+        steps:
+          - task: Docker@2
+            displayName: Build and Push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository_image_tagger)
+              dockerfile: $(dockerfilePath_image_tagger)
+              buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+    dependsOn: Python_Integration_Tests
+
+  - stage: Docker_image_captioning
+    displayName: Docker Image Captioning
+    jobs:
+      - job: Docker_Image_Builds_Image_Captioning
+        displayName: Build and Push Docker Image Captioning
+        pool: $(azure_build_Agent)
+        steps:
+          - task: Docker@2
+            displayName: Build and Push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository_image_captioning)
+              dockerfile: $(dockerfilePath_image_captioning)
+              buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+    dependsOn: Python_Integration_Tests
+
+  - stage: Docker_OCR
+    displayName: Docker OCR
+    jobs:
+      - job: Docker_Image_Builds_OCR
+        displayName: Build and Push Docker OCR
+        pool: $(azure_build_Agent)
+        steps:
+          - task: Docker@2
+            displayName: Build and Push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository_ocr)
+              dockerfile: $(dockerfilePath_ocr)
+              buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+    dependsOn: Python_Integration_Tests
+
+  - stage: Docker_Document_classification
+    displayName: Document classification
+    jobs:
+      - job: Docker_Image_Builds_Document_classification
+        displayName: Build and Push Docker Document classification
+        pool: $(azure_build_Agent)
+        steps:
+          - task: Docker@2
+            displayName: Build and Push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository_document_classification)
+              dockerfile: $(dockerfilePath_document_classification)
+              buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+    dependsOn: Python_Integration_Tests
+
+  - stage: Docker_Document_summarization
+    displayName: Document summarization
+    jobs:
+      - job: Docker_Image_Builds_Document_summarization
+        displayName: Build and Push Docker Document summarization
+        pool: $(azure_build_Agent)
+        steps:
+          - task: Docker@2
+            displayName: Build and Push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository_document_summarization)
+              dockerfile: $(dockerfilePath_document_summarization)
+              buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+    dependsOn: Python_Integration_Tests
+
+  - stage: Docker_admin_models
+    displayName: Admin Models
+    jobs:
+      - job: Docker_Image_Builds_admin_models
+        displayName: Build and Push Docker Admin Models
+        pool: $(azure_build_Agent)
+        steps:
+          - task: Docker@2
+            displayName: Build and Push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository_admin_models)
+              dockerfile: $(dockerfilePath_admin_models)
+              buildArguments: $[format('--no-cache={0}', variables['use_no_cache'])]
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
+                latest
+    dependsOn: Python_Integration_Tests

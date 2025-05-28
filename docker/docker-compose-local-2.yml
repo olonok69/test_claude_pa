@@ -1,0 +1,84 @@
+version: "3.7"
+
+services:
+
+
+
+
+  document_classification:
+    container_name: document_classification
+    image: document_classification:latest
+    ports:
+      - 5014:5014
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    restart: always
+    networks:
+      - network
+
+  document_summarization:
+    container_name: document_summarization
+    image: document_summarization:latest
+    ports:
+      - 5015:5015
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    restart: always
+    networks:
+      - network
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - 11434:11434
+    volumes:
+      - .:/code
+      - ./ollama/ollama:/root/.ollama
+    container_name: ollama
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    restart: always
+    networks:
+      - network
+      
+  admin_models:
+    container_name: admin_models
+    image: admin_models:latest
+    ports:
+      - 5016:5016
+    restart: always
+    networks:
+      - network
+
+  nginx:
+    container_name: nginx
+    image: nginx:1.25.1
+    volumes:
+      - ../docker/configs/nginx/nginx-local.conf:/etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+    depends_on:
+      - ollama
+      - document_classification
+      - document_summarization
+      - admin_models
+    networks:
+      - network
+
+networks:
+  network:

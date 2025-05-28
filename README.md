@@ -1,137 +1,114 @@
-# Introduction 
-Language detectors in DotNet
+# Introduction
 
-# Folder FASSTEXT
+This repository contains Detect-AI components. Essentially, Detect-AI consists of machine and deep learning applications that extract insights from data files in different formats (text, audio, and images). Each component is offered through an endpoint that can be queried via HTTP POST requests. Components use well-known deep learning, machine learning, and Python libraries to solve various use cases, such as:
 
-dotnet add package Panlingo.LanguageIdentification.CLD3 --version 0.0.0.18
+- PII/PHI Detection in Multiple Languages [Moved here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI-PII-Classifier)
+- Multi-Label Tagging for an Arbitrary Number of User-Defined Classes [Folder Semantic](nlp\app\sentiment)
+- Toxicity/Profanity Analysis [Folder profanity](nlp\app\sentiment)
+- Hate/Offensive Speech Analysis [Folder hate](nlp\app\hate)
+- Keyword Detection and Document Summarization [Folder semantic](nlp\app\semantic)
+- Semantic Similarity Search [Folder Similarity](nlp\app\sentiment)
+- Document Similarity (Semantic Similarity / Fuzzy Similarity) [Folder Similarity](nlp\app\sentiment)
+- Text Translation (Chinese to English, English to Chinese, and others) [Folder translate](D:\repos\Detect-AI-nlp\nlp\app\translate)
+- Image Multi-Label Tagging [Moved to here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?path=/image/image_tagger)
+- Image Summarization (Description of Image Content) [Moved to here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?path=/image/image_captioning)
+- OCR (Optical Character Recognition) [Moved to here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?path=/image/ocr)
+- Not Suitable for Work Content Detection (Only for Images) [Moved to here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?path=/image/nsfw)
+- Audio-to-Text Extraction [Folder audio](D:\repos\Detect-AI-nlp\audio)
 
-https://github.com/gluschenko/language-identification/tree/master
+# Getting Started
 
-### Install
-```
-sudo apt -y install protobuf-compiler libprotobuf-dev nuget
- 
-wget https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-sudo dpkg -i packages-microsoft-prod.deb
-rm packages-microsoft-prod.de
-sudo apt-get update &&   sudo apt-get install -y dotnet-sdk-8.0
- ```
-# Models
-```
-curl --location -o /models/fasttext176.bin https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin
-curl --location -o /models/fasttext217.bin https://huggingface.co/facebook/fasttext-language-identification/resolve/main/model.bin?download=true
-``` 
-### build app in LInux
-```
-dotnet new create console -n lang_detector
-dotnet add package Panlingo.LanguageIdentification.FastText
-dotnet add package  Mosaik.Core --version 24.8.51117
-dotnet run
-dotnet lang_detector.dll
-``` 
-### https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes
- 
+The AI components are organized into different folders:
 
-# Folder CLD_3
+      Main Folders
 
-dotnet add package Panlingo.LanguageIdentification.CLD3 --version 0.0.0.18
-https://github.com/gluschenko/language-identification/tree/master
+      nlp: Package that uses Natural Language Processing to extract insights from documents.
+      audio: Package that uses deep learning models and Huggingface Transformers to extract text from audio files.
+      image: Package that uses deep learning models and Huggingface Transformers to extract text and insights from images.
+      nlp: Contains 5 different components (text specialized components) with their related Docker files, divided into two folders:
 
-### Install
-```
-sudo apt -y install protobuf-compiler libprotobuf-dev nuget
- 
-wget https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-sudo dpkg -i packages-microsoft-prod.deb
-rm packages-microsoft-prod.de
-sudo apt-get update &&   sudo apt-get install -y dotnet-sdk-8.0
-```
- 
- ### Build app in LInux
- ```
- dotnet new create console -n lang_detector
- dotnet add package Panlingo.LanguageIdentification.CLD3 --version 0.0.0.18
- dotnet add package  Mosaik.Core --version 24.8.51117
- dotnet run
- dotnet lang_detector.dll
- ```
-### License
-https://creativecommons.org/licenses/by-sa/3.0/
+      Folder App
+      - Dockerfile_classification: PII/PHI analyzer detector Endpoint
+      - Dockerfile_hate: Hate/Offensive Speech analyzer Endpoint
+      - Dockerfile_semantic: Semantic Search Analyzer Endpoint
+      - Dockerfile_sentiment: Multi-Label Tagging, Toxicity analyzer, Keyword Detector Endpoints
+      Folder translate
+      - Dockerfile_translate: Document Translation Endpoint
 
-### Links
-https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes
+      audio: Contains 1 single component (audio specialized component) with its related Dockerfile:
 
-```
-@article{joulin2016bag,
-  title={Bag of Tricks for Efficient Text Classification},
-  author={Joulin, Armand and Grave, Edouard and Bojanowski, Piotr and Mikolov, Tomas},
-  journal={arXiv preprint arXiv:1607.01759},
-  year={2016}
-}
+      Folder speech_to_text
+       - Dockerfile: Speech to text Endpoint
 
-@article{joulin2016fasttext,
-  title={FastText.zip: Compressing text classification models},
-  author={Joulin, Armand and Grave, Edouard and Bojanowski, Piotr and Douze, Matthijs and J{\'e}gou, H{\'e}rve and Mikolov, Tomas},
-  journal={arXiv preprint arXiv:1612.03651},
-  year={2016}
-}
+      image: Contains 2 components (image specialized components) with their related DockerFiles organized in two folders:
 
-```
-# Folder Florence_2
-Contains Dotnet Inference scripts for Florence 2 in format ONNX
+      Folder image_tagger
+      - Dockerfile: Image tagging and Image description/summarization Endpoints
+      Folder ocr
+      - Dockerfile: OCR Endpoint
 
-Download modesl from https://github.com/curiosity-ai/florence2-sharp/tree/main
+1. Installation Process
+   Each component has a Dockerfile and a requirements.txt file to create the container.
 
-# Folder mime
+2. Software Dependencies
 
-Conatains Mimetype detector in dotnet
+   - Python 3.11.10
+   - Files requirements.txt (One per docker/Model)
 
-### Requirements
-- dotnet add package Mime-Detective --version 24.7.1
-- dotnet add package Mime-Detective.Definitions.Exhaustive --version 24.7.1
-- dotnet add package Mime-Detective.Definitions.Condensed --version 24.7.1
+3. Latest Releases
+   N/A
 
+4. API References
+   N/A
 
-# Folder NSFW
+# Build and Test
 
-Contains implementation of NoN Safe for Work Model in DotNet
+In the test folder, we have different unit test cases for each component. Tests are included as part of the CI pipeline, which is configured in the azure-pipelines.yml file present at the root of our repository: -> https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?version=GB4820-Create-Readme-File&path=/azure-pipelines.yml
 
+For tests, we use the unittest and pytest Python libraries.
 
- Run  pretrained  ONNX model using the Onnx Runtime C# API., the same we have in production in Python
+# Running Locally with Docker Compose
 
+in the folder `C:\git\Detect-AI\docker` there are 2 compose files - use the file `docker-compose-local` for local API development.
+you can build the 2 main images (classification & ROT) with the command
 
-### packages 
-#### https://onnxruntime.ai/docs/api/csharp/api/Microsoft.ML.OnnxRuntime.html
-- dotnet add package Microsoft.ML.OnnxRuntime --version 1.16.0
-- dotnet add package Microsoft.ML.OnnxRuntime.Managed --version 1.16.0
-- dotnet add package Microsoft.ML
-#### https://www.nuget.org/packages/SixLabors.ImageSharp
-- dotnet add package SixLabors.ImageSharp --version 3.1.4
+> clear; Cd C:\git\Detect-AI; docker build -f "rot\Dockerfile" -t rot:latest "rot"; Cd C:\git\Detect-AI; docker build --pull --rm -f "nlp\app\classification\Dockerfile" -t classification:latest "nlp\app\classification"
 
+these images are large so will take a number of minutes.
 
-// Model fined tuned Vision Transformer https://huggingface.co/google/vit-base-patch16-224
+you can run the models in docker using the compose command
 
+> cls; cd C:\git\Detect-AI\docker; docker-compose -f docker-compose-local.yml up -d
 
-# Folder OCR
-Contains Implementation in DotNet of Tesseract OCR
+you can test the services using the health check endpoints
 
-Tesseract was originally developed at Hewlett-Packard Laboratories Bristol UK and at Hewlett-Packard Co, Greeley Colorado USA between 1985 and 1994, 
- * with some more changes made in 1996 to port to Windows, and some C++izing in 1998. In 2005 Tesseract was open sourced by HP. From 2006 until November 2018 
- * it was developed by Google.
- https://github.com/tesseract-ocr/tesseract
- 
+classification
 
-### Packages 
-- dotnet add package TesseractOCR --version 5.3.5
-- dotnet add package Spectre.Console --version 0.49.1
+> curl --location 'http://localhost:5000/health-check'
 
-The DLL's Tesseract53.dll (and exe) and leptonica-1.83.0.dll are compiled with Visual Studio 2022 you need these C++ runtimes for it on your computer
+ROT
 
-- X86: https://aka.ms/vs/17/release/vc_redist.x86.exe
-- X64: https://aka.ms/vs/17/release/vc_redist.x64.exe
+> curl --location 'http://localhost:5007/health-check'
 
+# PremCloud Development
 
-MODELS https://github.com/tesseract-ocr/tessdata to folder tessdata
+To contribute to this repository, you need to have experience in Python, serverless applications using FastAPI, and a number of deep learning and machine learning technologies like PyTorch, spaCy, scikit-learn, HuggingFace Transformers, and OpenCV.
 
+# Setup Development Environment
 
-DOC https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html
+    - Install Visual Studio Code or PyCharm.
+    - Install Anaconda. Example for Windows: Anaconda Installation Guide for Windows.
+    - Clone the repository to your local machine: git clone https://dev.azure.com/sceven/DataDetect/_git/Detect-AI.
+
+    - Create a Conda environment from the environment.yml file (located at the root of our repository):
+      - conda env create --file environment.yml
+      - conda activate detect-ai
+    - Launch Jupyter Notebook with the command: jupyter notebook inside the environment.
+
+    - If you want to use Visual Studio Code, navigate to the root of the repo in a command line window, run conda activate detect-ai, and then code ..
+
+# Endpoints / APIs
+
+We use FastAPI, a web framework for building APIs with Python 3.7+ based on standard Python type hints. Documentation: FastAPI Documentation. https://fastapi.tiangolo.com/
+
+A description of all APIs and endpoints developed in these applications is included in [here](docs/ENDPOINTS.md)
