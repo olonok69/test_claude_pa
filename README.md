@@ -1,6 +1,68 @@
 # Introduction 
 In this Repository we have Demos and test we have done different use cases and Technologies
 
+
+# Folder Databricks-mlflow
+## Databricks MLflow Demos
+
+### Fine-Tuning Llama 3.2 with QLoRA
+**Notebook**: `Datablricks-mlflow/Llama3.2-qlora/LLama3_2_3B_fine_tuning_QLORA_DORA_customer_service.ipynb`
+
+This notebook demonstrates fine-tuning Meta's Llama 3.2 (3B parameters) model for customer service applications using advanced optimization techniques:
+
+**Key Features:**
+- **Model**: meta-llama/Llama-3.2-3B-Instruct - A multilingual LLM optimized for dialogue, retrieval, and summarization tasks
+- **Dataset**: Bitext Customer Service Training Dataset with 27 intents across 10 categories (26,872 Q&A pairs)
+- **Optimization Techniques**:
+  - QLoRA (Quantized Low-Rank Adaptation) for 4-bit quantization
+  - DoRA (Weight-Decomposed Low-Rank Adaptation) for improved performance
+  - PEFT (Parameter-Efficient Fine-Tuning) integration
+- **MLflow Integration**: Full experiment tracking, model versioning, and deployment
+
+**How to Use:**
+1. Set up Databricks credentials in environment variables
+2. Configure MLflow tracking URI and experiment path
+3. Run cells sequentially to:
+   - Load and prepare the customer service dataset
+   - Initialize the model with 4-bit quantization
+   - Configure LoRA/DoRA parameters
+   - Train the model with MLflow tracking
+   - Log the fine-tuned model to MLflow Model Registry
+   - Test inference with custom prompts
+
+### Phi-3 Vision with OpenVINO Optimization
+**Notebook**: `Datablricks-mlflow/openvino-Phi3/MLFLOW_OpenVino_Phi3_Vision.ipynb`
+
+This notebook showcases deploying Microsoft's Phi-3 Vision multimodal model with OpenVINO optimization for efficient inference:
+
+**Key Features:**
+- **Model**: Phi-3-Vision/Phi-3.5-Vision - State-of-the-art multimodal model for image understanding
+- **OpenVINO Integration**: 
+  - Model conversion to OpenVINO IR format
+  - INT4 weight compression using NNCF
+  - Optimized inference on CPU/GPU
+- **MLflow Deployment**: Custom PythonModel wrapper for serving
+- **Capabilities**: Image captioning, visual Q&A, scene understanding
+
+**How to Use:**
+1. Install required dependencies (OpenVINO, NNCF, transformers)
+2. Select model variant (Phi-3-vision or Phi-3.5-vision)
+3. Run conversion pipeline to:
+   - Convert PyTorch model to OpenVINO format
+   - Apply INT4 quantization for memory efficiency
+   - Save optimized model components
+4. Deploy with MLflow:
+   - Create custom inference wrapper
+   - Log model with artifacts and dependencies
+   - Test with image inputs
+5. Load from Model Registry for production use
+
+**Performance Benefits:**
+- Reduced model size (up to 75% compression)
+- Faster inference on edge devices
+- Lower memory footprint while maintaining accuracy
+
+
 # Folder PII-DICOM
 ## Detailed readme
 Detailed readme [here](PII-DICOM/readme.md)
