@@ -62,6 +62,122 @@ This notebook showcases deploying Microsoft's Phi-3 Vision multimodal model with
 - Faster inference on edge devices
 - Lower memory footprint while maintaining accuracy
 
+### BLIP Image Captioning
+**Notebook**: `Datablricks-mlflow/custom/BLIP_Image_Captioning_save_to_MLFLOW.ipynb`
+
+This notebook demonstrates deploying Salesforce's BLIP (Bootstrapping Language-Image Pre-training) model for image captioning with MLflow integration:
+
+**Key Features:**
+- **Model**: Salesforce/blip-image-captioning-large - A vision-language model for unified understanding and generation
+- **Capabilities**: 
+  - Conditional image captioning (with text prompts)
+  - Unconditional image captioning
+  - Flexible caption generation with configurable parameters
+- **MLflow Integration**: Custom PythonModel wrapper for deployment and versioning
+- **Dataset**: Pre-trained on 14M images with synthetic caption bootstrapping
+
+**How to Use:**
+1. Mount Google Drive and set up environment variables
+2. Configure Databricks MLflow tracking
+3. Load BLIP model and processor
+4. Run inference pipeline:
+   - Process images with conditional/unconditional prompts
+   - Configure generation parameters (max_length, num_beams, temperature)
+   - Save model to PyTorch format
+5. Deploy with MLflow:
+   - Create custom inference wrapper
+   - Log model with signature and input examples
+   - Register model in MLflow Model Registry
+6. Test loaded model from registry
+
+### Fine-Tuned ViT for NSFW Classification
+**Notebook**: `Datablricks-mlflow/custom/FineTuned_Vit_save_to_MLFLOW.ipynb`
+
+This notebook showcases deploying a fine-tuned Vision Transformer (ViT) model for NSFW content classification with MLflow:
+
+**Key Features:**
+- **Model**: Fine-tuned ViT (Vision Transformer) on NSFW classification task
+- **Architecture**: google/vit-base-patch16-224-in21k base model
+- **Classification Categories**: 5 classes - drawings, hentai, neutral, porn, sexy
+- **MLflow Deployment**: Custom wrapper for model serving and versioning
+- **Input**: 224x224 RGB images
+
+**How to Use:**
+1. Set up environment and Databricks credentials
+2. Load fine-tuned ViT model from saved checkpoint
+3. Initialize image processor for 224x224 input
+4. Create inference pipeline:
+   - Image preprocessing and normalization
+   - Multi-class classification with confidence scores
+   - Pipeline configuration for batch processing
+5. Deploy with MLflow:
+   - Custom NSFW_Classifier wrapper class
+   - Log model with input/output signatures
+   - Register in MLflow Model Registry
+6. Test inference with sample images
+
+### ViT to ONNX Conversion for CPU Inference
+**Notebook**: `Datablricks-mlflow/custom/FineTuned_Vit_to_ONNX_save_to_MLFLOW.ipynb`
+
+This notebook demonstrates converting the fine-tuned ViT NSFW classifier to ONNX format for optimized CPU inference:
+
+**Key Features:**
+- **ONNX Conversion**: PyTorch to ONNX format conversion for cross-platform deployment
+- **CPU Optimization**: Optimized for CPU-only inference without GPU dependencies
+- **Model**: Same fine-tuned ViT NSFW classifier as above
+- **Performance**: Faster inference on CPU with ONNX Runtime
+- **MLflow Integration**: Deploy ONNX model with custom inference wrapper
+
+**How to Use:**
+1. Load the fine-tuned PyTorch model
+2. Export to ONNX format:
+   - Configure dynamic axes for batch size flexibility
+   - Set opset version and optimization flags
+   - Export with proper input/output names
+3. Test ONNX inference:
+   - Initialize ONNX Runtime session
+   - Preprocess images and run inference
+   - Post-process outputs to class probabilities
+4. Deploy with MLflow:
+   - Custom NSFW_Classifier_ONNX wrapper
+   - Log ONNX model artifact
+   - Register for production use
+5. Compare performance vs PyTorch version
+
+### Florence-2 Vision Model with OpenVINO
+**Notebook**: `Datablricks-mlflow/custom/Florence2_to_OpenVino.ipynb`
+
+This notebook demonstrates deploying Microsoft's Florence-2 vision-language foundation model with OpenVINO optimization:
+
+**Key Features:**
+- **Model**: Microsoft/Florence-2-large - Unified prompt-based vision-language model
+- **OpenVINO Optimization**: 
+  - Model conversion to OpenVINO IR format
+  - Optimized for Intel hardware acceleration
+  - Support for multiple devices (CPU, GPU, NPU)
+- **Capabilities**: 
+  - Image captioning (simple, detailed, more detailed)
+  - Object detection with bounding boxes
+  - Dense region captioning
+  - OCR and region proposals
+- **Dataset**: Trained on FLD-5B (126M images, 500M+ annotations)
+
+**How to Use:**
+1. Install OpenVINO toolkit and dependencies
+2. Download and convert Florence-2 model:
+   - Select model variant (base/large)
+   - Convert to OpenVINO format
+   - Select target device
+3. Test various vision tasks:
+   - Configure task prompts (`<CAPTION>`, `<OD>`, etc.)
+   - Process images with different tasks
+   - Visualize results (bounding boxes, captions)
+4. Deploy with MLflow:
+   - Custom Florence2_Captioner wrapper
+   - Parameterized inference (task, max_tokens, num_beams)
+   - Log with comprehensive task documentation
+5. Load from registry and test multiple tasks
+
 
 # Folder PII-DICOM
 ## Detailed readme
