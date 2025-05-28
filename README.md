@@ -1,114 +1,289 @@
-# Introduction
+# Personal AGENDAS
 
-This repository contains Detect-AI components. Essentially, Detect-AI consists of machine and deep learning applications that extract insights from data files in different formats (text, audio, and images). Each component is offered through an endpoint that can be queried via HTTP POST requests. Components use well-known deep learning, machine learning, and Python libraries to solve various use cases, such as:
+A comprehensive data processing and analytics pipeline for veterinary conference data, designed to process registration, attendance, and session information to generate personalized recommendations and insights.
 
-- PII/PHI Detection in Multiple Languages [Moved here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI-PII-Classifier)
-- Multi-Label Tagging for an Arbitrary Number of User-Defined Classes [Folder Semantic](nlp\app\sentiment)
-- Toxicity/Profanity Analysis [Folder profanity](nlp\app\sentiment)
-- Hate/Offensive Speech Analysis [Folder hate](nlp\app\hate)
-- Keyword Detection and Document Summarization [Folder semantic](nlp\app\semantic)
-- Semantic Similarity Search [Folder Similarity](nlp\app\sentiment)
-- Document Similarity (Semantic Similarity / Fuzzy Similarity) [Folder Similarity](nlp\app\sentiment)
-- Text Translation (Chinese to English, English to Chinese, and others) [Folder translate](D:\repos\Detect-AI-nlp\nlp\app\translate)
-- Image Multi-Label Tagging [Moved to here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?path=/image/image_tagger)
-- Image Summarization (Description of Image Content) [Moved to here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?path=/image/image_captioning)
-- OCR (Optical Character Recognition) [Moved to here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?path=/image/ocr)
-- Not Suitable for Work Content Detection (Only for Images) [Moved to here](https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?path=/image/nsfw)
-- Audio-to-Text Extraction [Folder audio](D:\repos\Detect-AI-nlp\audio)
+## Overview
 
-# Getting Started
+This application processes data from veterinary conferences (BVA - British Veterinary Association and LVA - London Vet Show) to:
+- Track visitor registration and demographics
+- Analyze session attendance patterns
+- Generate personalized session recommendations
+- Create knowledge graphs in Neo4j for advanced analytics
+- Provide insights into visitor behavior and preferences
 
-The AI components are organized into different folders:
+## Features
 
-      Main Folders
+### Data Processing
+- **Registration Processing**: Handles visitor registration data, identifies returning visitors, and processes demographic information
+- **Scan Processing**: Processes session attendance scan data and matches it with visitor profiles
+- **Session Processing**: Manages session information, extracts stream categories, and generates AI-powered stream descriptions
 
-      nlp: Package that uses Natural Language Processing to extract insights from documents.
-      audio: Package that uses deep learning models and Huggingface Transformers to extract text from audio files.
-      image: Package that uses deep learning models and Huggingface Transformers to extract text and insights from images.
-      nlp: Contains 5 different components (text specialized components) with their related Docker files, divided into two folders:
+### Neo4j Integration
+- **Graph Database**: Creates a comprehensive knowledge graph with visitors, sessions, and streams
+- **Relationship Mapping**: Establishes connections based on:
+  - Job roles to relevant streams
+  - Practice specializations to appropriate content
+  - Historical attendance patterns
+  - Visitor similarity metrics
 
-      Folder App
-      - Dockerfile_classification: PII/PHI analyzer detector Endpoint
-      - Dockerfile_hate: Hate/Offensive Speech analyzer Endpoint
-      - Dockerfile_semantic: Semantic Search Analyzer Endpoint
-      - Dockerfile_sentiment: Multi-Label Tagging, Toxicity analyzer, Keyword Detector Endpoints
-      Folder translate
-      - Dockerfile_translate: Document Translation Endpoint
+### AI-Powered Features
+- **Stream Descriptions**: Uses LLMs to generate descriptive summaries of session categories
+- **Session Embeddings**: Creates semantic embeddings for content-based recommendations
+- **Smart Recommendations**: Generates personalized session recommendations using:
+  - Historical attendance data
+  - Visitor similarity analysis
+  - Business rules filtering
+  - Optional LLM-based filtering
 
-      audio: Contains 1 single component (audio specialized component) with its related Dockerfile:
+## Architecture
 
-      Folder speech_to_text
-       - Dockerfile: Speech to text Endpoint
+```
+PA/app/
+├── main.py                              # Main orchestrator
+├── pipeline.py                          # Pipeline coordinator
+├── registration_processor.py            # Registration data processing
+├── scan_processor.py                    # Scan data processing
+├── session_processor.py                 # Session data processing
+├── neo4j_visitor_processor.py          # Neo4j visitor node creation
+├── neo4j_session_processor.py          # Neo4j session node creation
+├── neo4j_job_stream_processor.py       # Job role to stream relationships
+├── neo4j_specialization_stream_processor.py  # Specialization relationships
+├── neo4j_visitor_relationship_processor.py   # Visitor relationships
+├── session_embedding_processor.py       # Session embedding generation
+├── session_recommendation_processor.py  # Recommendation engine
+├── utils/                              # Utility modules
+│   ├── config_utils.py                 # Configuration management
+│   ├── data_utils.py                   # Data manipulation utilities
+│   ├── logging_utils.py                # Logging configuration
+│   ├── neo4j_utils.py                  # Neo4j connection utilities
+│   └── summary_utils.py                # Summary statistics generation
+└── config/
+    └── config.yaml                     # Main configuration file
+```
 
-      image: Contains 2 components (image specialized components) with their related DockerFiles organized in two folders:
+## Prerequisites
 
-      Folder image_tagger
-      - Dockerfile: Image tagging and Image description/summarization Endpoints
-      Folder ocr
-      - Dockerfile: OCR Endpoint
+- Python 3.8+
+- Neo4j Database (4.4+)
+- OpenAI API or Azure OpenAI credentials (for AI features)
 
-1. Installation Process
-   Each component has a Dockerfile and a requirements.txt file to create the container.
+## Installation
 
-2. Software Dependencies
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd PA/app
+```
 
-   - Python 3.11.10
-   - Files requirements.txt (One per docker/Model)
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-3. Latest Releases
-   N/A
+3. Set up environment variables:
+Create a `.env` file in the `keys/` directory with:
+```env
+# Neo4j credentials
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your-password
 
-4. API References
-   N/A
+# OpenAI or Azure OpenAI credentials
+OPENAI_API_KEY=your-api-key
+# OR for Azure:
+AZURE_API_KEY=your-azure-key
+AZURE_ENDPOINT=your-azure-endpoint
+AZURE_DEPLOYMENT=your-deployment-name
+AZURE_API_VERSION=2024-02-15-preview
+```
 
-# Build and Test
+4. Configure the application:
+Edit `config/config.yaml` to set your data paths and processing options.
 
-In the test folder, we have different unit test cases for each component. Tests are included as part of the CI pipeline, which is configured in the azure-pipelines.yml file present at the root of our repository: -> https://dev.azure.com/sceven/DataDetect/_git/Detect-AI?version=GB4820-Create-Readme-File&path=/azure-pipelines.yml
+## Usage
 
-For tests, we use the unittest and pytest Python libraries.
+### Full Pipeline Execution
+Run the complete data processing pipeline:
+```bash
+python main.py
+```
 
-# Running Locally with Docker Compose
+### Selective Processing
+Run specific steps only:
+```bash
+# Run only registration and scan processing (steps 1 and 2)
+python main.py --only-steps 1,2
 
-in the folder `C:\git\Detect-AI\docker` there are 2 compose files - use the file `docker-compose-local` for local API development.
-you can build the 2 main images (classification & ROT) with the command
+# Skip Neo4j upload
+python main.py --skip-neo4j
 
-> clear; Cd C:\git\Detect-AI; docker build -f "rot\Dockerfile" -t rot:latest "rot"; Cd C:\git\Detect-AI; docker build --pull --rm -f "nlp\app\classification\Dockerfile" -t classification:latest "nlp\app\classification"
+# Recreate all Neo4j nodes (even if they exist)
+python main.py --recreate-all
+```
 
-these images are large so will take a number of minutes.
+### Standalone Processors
+Run individual components:
+```bash
+# Generate session embeddings only
+python run_embedding.py
 
-you can run the models in docker using the compose command
+# Generate recommendations only
+python run_recommendations.py --min-score 0.3 --max-recommendations 10
+```
 
-> cls; cd C:\git\Detect-AI\docker; docker-compose -f docker-compose-local.yml up -d
+## Data Flow
 
-you can test the services using the health check endpoints
+1. **Registration Processing**
+   - Loads registration JSON files
+   - Identifies returning visitors
+   - Processes demographic data
+   - Exports cleaned CSV files
 
-classification
+2. **Scan Processing**
+   - Loads session attendance scan data
+   - Matches scans with visitor profiles
+   - Enriches with demographic information
 
-> curl --location 'http://localhost:5000/health-check'
+3. **Session Processing**
+   - Processes session information
+   - Extracts and categorizes streams
+   - Generates AI descriptions for streams
 
-ROT
+4. **Neo4j Upload**
+   - Creates visitor nodes (current and past years)
+   - Creates session nodes with embeddings
+   - Establishes relationships based on:
+     - Job roles
+     - Practice specializations
+     - Historical attendance
 
-> curl --location 'http://localhost:5007/health-check'
+5. **Recommendation Generation**
+   - Analyzes visitor profiles
+   - Finds similar visitors
+   - Generates personalized recommendations
+   - Applies business rules filtering
 
-# PremCloud Development
+## Configuration
 
-To contribute to this repository, you need to have experience in Python, serverless applications using FastAPI, and a number of deep learning and machine learning technologies like PyTorch, spaCy, scikit-learn, HuggingFace Transformers, and OpenCV.
+The `config/config.yaml` file controls all aspects of the pipeline:
 
-# Setup Development Environment
+```yaml
+# Input file paths
+input_files:
+  bva_registration: "path/to/bva_registration.json"
+  lvs_registration: "path/to/lvs_registration.json"
+  # ... more input files
 
-    - Install Visual Studio Code or PyCharm.
-    - Install Anaconda. Example for Windows: Anaconda Installation Guide for Windows.
-    - Clone the repository to your local machine: git clone https://dev.azure.com/sceven/DataDetect/_git/Detect-AI.
+# Output directory
+output_dir: "data/output"
 
-    - Create a Conda environment from the environment.yml file (located at the root of our repository):
-      - conda env create --file environment.yml
-      - conda activate detect-ai
-    - Launch Jupyter Notebook with the command: jupyter notebook inside the environment.
+# Pipeline control
+pipeline_steps:
+  registration_processing: true
+  scan_processing: true
+  session_processing: true
+  neo4j_visitor_processing: true
+  # ... more steps
 
-    - If you want to use Visual Studio Code, navigate to the root of the repo in a command line window, run conda activate detect-ai, and then code ..
+# Neo4j configuration
+neo4j:
+  uri: "bolt://localhost:7687"
+  username: "neo4j"
+  password: "password"
 
-# Endpoints / APIs
+# Recommendation settings
+recommendation:
+  min_similarity_score: 0.3
+  max_recommendations: 10
+  use_langchain: false
+```
 
-We use FastAPI, a web framework for building APIs with Python 3.7+ based on standard Python type hints. Documentation: FastAPI Documentation. https://fastapi.tiangolo.com/
+## Output Files
 
-A description of all APIs and endpoints developed in these applications is included in [here](docs/ENDPOINTS.md)
+The pipeline generates various output files:
+
+### CSV Files
+- `Registration_data_bva_25_only_valid.csv` - Current year registrations
+- `df_reg_demo_this.csv` - Current year with demographics
+- `session_this_filtered_valid_cols.csv` - Processed sessions
+
+### JSON Files
+- `streams.json` - Stream categories with AI descriptions
+- `specializations.json` - Practice specializations
+- `visitor_recommendations_[timestamp].json` - Recommendations
+
+### Logs
+- `logs/data_processing.log` - Main processing log
+- `logs/processing_summary.json` - Summary statistics
+
+## Neo4j Schema
+
+### Node Types
+- **Visitor_this_year**: Current year visitors
+- **Visitor_last_year_bva/lva**: Past year visitors
+- **Sessions_this_year**: Current year sessions
+- **Sessions_past_year**: Past year sessions
+- **Stream**: Session categories
+
+### Relationships
+- **HAS_STREAM**: Session → Stream
+- **job_to_stream**: Visitor → Stream (based on job role)
+- **specialization_to_stream**: Visitor → Stream (based on practice)
+- **Same_Visitor**: Links same visitor across years
+- **attended_session**: Past visitor → Past session
+
+## Business Rules
+
+The recommendation engine applies configurable business rules:
+
+1. **Practice Type Rules**:
+   - Equine/Mixed practices: Excludes small animal, feline, exotics
+   - Small Animal practices: Excludes equine, farm, large animal
+
+2. **Job Role Rules**:
+   - Vets: Cannot attend nursing-specific sessions
+   - Nurses: Limited to nursing, wellbeing, welfare streams
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Neo4j Connection Failed**
+   - Ensure Neo4j is running
+   - Check credentials in `.env` file
+   - Verify URI format (bolt://host:port)
+
+2. **Missing Data Files**
+   - Verify all input paths in config.yaml
+   - Ensure JSON files are properly formatted
+
+3. **Memory Issues**
+   - Process data in batches using `--only-steps`
+   - Increase Python heap size if needed
+
+4. **API Rate Limits**
+   - Enable stream description caching in config
+   - Use `use_cached_descriptions: true`
+
+## Development
+
+### Adding New Processors
+1. Create a new processor class inheriting from base patterns
+2. Add to `pipeline.py`
+3. Update configuration schema
+4. Add command-line options in `main.py`
+
+### Extending Neo4j Schema
+1. Update node/relationship definitions in processor
+2. Add constraints in `neo4j_schema.py`
+3. Update documentation
+
+
+
+## Support
+
+For issues and questions:
+- Check logs in `logs/` directory
+- Review configuration in `config/config.yaml`
+- Ensure all dependencies are installed
+- Verify Neo4j is accessible
