@@ -1,289 +1,106 @@
-# Personal AGENDAS
+# Introduction 
+In this Repository we have Demos and test we have done different use cases and Technologies
 
-A comprehensive data processing and analytics pipeline for veterinary conference data, designed to process registration, attendance, and session information to generate personalized recommendations and insights.
+# Folder PII-DICOM
+## Detailed readme
+Detailed readme [here](PII-DICOM/readme.md)
+### DICOM
+DICOM® — Digital Imaging and Communications in Medicine — is the international standard for medical images and related information. It defines the formats for medical images that can be exchanged with the data and quality necessary for clinical use.
 
-## Overview
+DICOM® is implemented in almost every radiology, cardiology imaging, and radiotherapy device (X-ray, CT, MRI, ultrasound, etc.), and increasingly in devices in other medical domains such as ophthalmology and dentistry. With hundreds of thousands of medical imaging devices in use, DICOM® is one of the most widely deployed healthcare messaging Standards in the world. There are literally billions of DICOM® images currently in use for clinical care.
 
-This application processes data from veterinary conferences (BVA - British Veterinary Association and LVA - London Vet Show) to:
-- Track visitor registration and demographics
-- Analyze session attendance patterns
-- Generate personalized session recommendations
-- Create knowledge graphs in Neo4j for advanced analytics
-- Provide insights into visitor behavior and preferences
+Since its first publication in 1993, DICOM® has revolutionized the practice of radiology, allowing the replacement of X-ray film with a fully digital workflow. Much as the Internet has become the platform for new consumer information applications, DICOM® has enabled advanced medical imaging applications that have “changed the face of clinical medicine”. From the emergency department, to cardiac stress testing, to breast cancer detection, DICOM® is the standard that makes medical imaging work — for doctors and for patients.
 
-## Features
+DICOM® is recognized by the International Organization for Standardization as the ISO 12052 standard.
 
-### Data Processing
-- **Registration Processing**: Handles visitor registration data, identifies returning visitors, and processes demographic information
-- **Scan Processing**: Processes session attendance scan data and matches it with visitor profiles
-- **Session Processing**: Manages session information, extracts stream categories, and generates AI-powered stream descriptions
+https://www.dicomstandard.org/about
 
-### Neo4j Integration
-- **Graph Database**: Creates a comprehensive knowledge graph with visitors, sessions, and streams
-- **Relationship Mapping**: Establishes connections based on:
-  - Job roles to relevant streams
-  - Practice specializations to appropriate content
-  - Historical attendance patterns
-  - Visitor similarity metrics
 
-### AI-Powered Features
-- **Stream Descriptions**: Uses LLMs to generate descriptive summaries of session categories
-- **Session Embeddings**: Creates semantic embeddings for content-based recommendations
-- **Smart Recommendations**: Generates personalized session recommendations using:
-  - Historical attendance data
-  - Visitor similarity analysis
-  - Business rules filtering
-  - Optional LLM-based filtering
+###  FHIR
+FHIR (Fast Healthcare Interoperability Resources) Specification, which is a standard for exchanging healthcare information electronically. 
 
-## Architecture
+https://www.hl7.org/fhir/overview.html
 
-```
-PA/app/
-├── main.py                              # Main orchestrator
-├── pipeline.py                          # Pipeline coordinator
-├── registration_processor.py            # Registration data processing
-├── scan_processor.py                    # Scan data processing
-├── session_processor.py                 # Session data processing
-├── neo4j_visitor_processor.py          # Neo4j visitor node creation
-├── neo4j_session_processor.py          # Neo4j session node creation
-├── neo4j_job_stream_processor.py       # Job role to stream relationships
-├── neo4j_specialization_stream_processor.py  # Specialization relationships
-├── neo4j_visitor_relationship_processor.py   # Visitor relationships
-├── session_embedding_processor.py       # Session embedding generation
-├── session_recommendation_processor.py  # Recommendation engine
-├── utils/                              # Utility modules
-│   ├── config_utils.py                 # Configuration management
-│   ├── data_utils.py                   # Data manipulation utilities
-│   ├── logging_utils.py                # Logging configuration
-│   ├── neo4j_utils.py                  # Neo4j connection utilities
-│   └── summary_utils.py                # Summary statistics generation
-└── config/
-    └── config.yaml                     # Main configuration file
-```
+###  De-identifying sensitive burnt-in text in DICOM images
+
+1. Redact text Personal Health Information (PHI) present as pixels in DICOM images
+2. Visually compare original DICOM images with their redacted versions
+
+
+### Tools for Health Data Anonymization c#
+https://github.com/microsoft/Tools-for-Health-Data-Anonymization/tree/master
+
+- DICOM intructions [here](PII-DICOM\Tools-for-Health-Data-Anonymization\docs\DICOM-anonymization.md)
+- FHIR Instructions [here](PII-DICOM\Tools-for-Health-Data-Anonymization\docs\FHIR-anonymization.md)
+
+###  Demo
+This Demo has been done in a Debian 9 in WSL2 with python 3.11. Dotnet 8 for the C# tools.
 
 ## Prerequisites
+Before getting started, make sure presidio and the latest version of Tesseract OCR are installed. For detailed documentation, see the [installation docs](https://microsoft.github.io/presidio/installation).
 
-- Python 3.8+
-- Neo4j Database (4.4+)
-- OpenAI API or Azure OpenAI credentials (for AI features)
 
-## Installation
+#### Tesseract
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd PA/app
+```
+sudo apt install tesseract-ocr
+sudo apt install libtesseract-dev
 ```
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
+```
+tesseract --version
+
+OUTPUT
+tesseract 5.3.0
+ leptonica-1.82.0
+  libgif 5.2.1 : libjpeg 6b (libjpeg-turbo 2.1.2) : libpng 1.6.39 : libtiff 4.5.0 : zlib 1.2.13 : libwebp 1.2.4 : libopenjp2 2.5.0
+ Found AVX2
+ Found AVX
+ Found FMA
+ Found SSE4.1
+ Found OpenMP 201511
+ Found libarchive 3.6.2 zlib/1.2.13 liblzma/5.4.1 bz2lib/1.0.8 liblz4/1.9.4 libzstd/1.5.4
+ Found libcurl/7.88.1 OpenSSL/3.0.14 zlib/1.2.13 brotli/1.0.9 zstd/1.5.4 libidn2/2.3.3 libpsl/0.21.2 (+libidn2/2.3.3) libssh2/1.10.0 nghttp2/1.52.0 librtmp/2.3 OpenLDAP/2.5.13
 ```
 
-3. Set up environment variables:
-Create a `.env` file in the `keys/` directory with:
-```env
-# Neo4j credentials
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your-password
-
-# OpenAI or Azure OpenAI credentials
-OPENAI_API_KEY=your-api-key
-# OR for Azure:
-AZURE_API_KEY=your-azure-key
-AZURE_ENDPOINT=your-azure-endpoint
-AZURE_DEPLOYMENT=your-deployment-name
-AZURE_API_VERSION=2024-02-15-preview
+```
+!pip install presidio_analyzer presidio_anonymizer presidio_image_redactor -q
+!python -m spacy download en_core_web_lg -q 
 ```
 
-4. Configure the application:
-Edit `config/config.yaml` to set your data paths and processing options.
+Notebook [Demo](PII-DICOM\example_dicom_image_redactor.ipynb)
 
-## Usage
-
-### Full Pipeline Execution
-Run the complete data processing pipeline:
-```bash
-python main.py
-```
-
-### Selective Processing
-Run specific steps only:
-```bash
-# Run only registration and scan processing (steps 1 and 2)
-python main.py --only-steps 1,2
-
-# Skip Neo4j upload
-python main.py --skip-neo4j
-
-# Recreate all Neo4j nodes (even if they exist)
-python main.py --recreate-all
-```
-
-### Standalone Processors
-Run individual components:
-```bash
-# Generate session embeddings only
-python run_embedding.py
-
-# Generate recommendations only
-python run_recommendations.py --min-score 0.3 --max-recommendations 10
-```
-
-## Data Flow
-
-1. **Registration Processing**
-   - Loads registration JSON files
-   - Identifies returning visitors
-   - Processes demographic data
-   - Exports cleaned CSV files
-
-2. **Scan Processing**
-   - Loads session attendance scan data
-   - Matches scans with visitor profiles
-   - Enriches with demographic information
-
-3. **Session Processing**
-   - Processes session information
-   - Extracts and categorizes streams
-   - Generates AI descriptions for streams
-
-4. **Neo4j Upload**
-   - Creates visitor nodes (current and past years)
-   - Creates session nodes with embeddings
-   - Establishes relationships based on:
-     - Job roles
-     - Practice specializations
-     - Historical attendance
-
-5. **Recommendation Generation**
-   - Analyzes visitor profiles
-   - Finds similar visitors
-   - Generates personalized recommendations
-   - Applies business rules filtering
-
-## Configuration
-
-The `config/config.yaml` file controls all aspects of the pipeline:
-
-```yaml
-# Input file paths
-input_files:
-  bva_registration: "path/to/bva_registration.json"
-  lvs_registration: "path/to/lvs_registration.json"
-  # ... more input files
-
-# Output directory
-output_dir: "data/output"
-
-# Pipeline control
-pipeline_steps:
-  registration_processing: true
-  scan_processing: true
-  session_processing: true
-  neo4j_visitor_processing: true
-  # ... more steps
-
-# Neo4j configuration
-neo4j:
-  uri: "bolt://localhost:7687"
-  username: "neo4j"
-  password: "password"
-
-# Recommendation settings
-recommendation:
-  min_similarity_score: 0.3
-  max_recommendations: 10
-  use_langchain: false
-```
-
-## Output Files
-
-The pipeline generates various output files:
-
-### CSV Files
-- `Registration_data_bva_25_only_valid.csv` - Current year registrations
-- `df_reg_demo_this.csv` - Current year with demographics
-- `session_this_filtered_valid_cols.csv` - Processed sessions
-
-### JSON Files
-- `streams.json` - Stream categories with AI descriptions
-- `specializations.json` - Practice specializations
-- `visitor_recommendations_[timestamp].json` - Recommendations
-
-### Logs
-- `logs/data_processing.log` - Main processing log
-- `logs/processing_summary.json` - Summary statistics
-
-## Neo4j Schema
-
-### Node Types
-- **Visitor_this_year**: Current year visitors
-- **Visitor_last_year_bva/lva**: Past year visitors
-- **Sessions_this_year**: Current year sessions
-- **Sessions_past_year**: Past year sessions
-- **Stream**: Session categories
-
-### Relationships
-- **HAS_STREAM**: Session → Stream
-- **job_to_stream**: Visitor → Stream (based on job role)
-- **specialization_to_stream**: Visitor → Stream (based on practice)
-- **Same_Visitor**: Links same visitor across years
-- **attended_session**: Past visitor → Past session
-
-## Business Rules
-
-The recommendation engine applies configurable business rules:
-
-1. **Practice Type Rules**:
-   - Equine/Mixed practices: Excludes small animal, feline, exotics
-   - Small Animal practices: Excludes equine, farm, large animal
-
-2. **Job Role Rules**:
-   - Vets: Cannot attend nursing-specific sessions
-   - Nurses: Limited to nursing, wellbeing, welfare streams
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Neo4j Connection Failed**
-   - Ensure Neo4j is running
-   - Check credentials in `.env` file
-   - Verify URI format (bolt://host:port)
-
-2. **Missing Data Files**
-   - Verify all input paths in config.yaml
-   - Ensure JSON files are properly formatted
-
-3. **Memory Issues**
-   - Process data in batches using `--only-steps`
-   - Increase Python heap size if needed
-
-4. **API Rate Limits**
-   - Enable stream description caching in config
-   - Use `use_cached_descriptions: true`
-
-## Development
-
-### Adding New Processors
-1. Create a new processor class inheriting from base patterns
-2. Add to `pipeline.py`
-3. Update configuration schema
-4. Add command-line options in `main.py`
-
-### Extending Neo4j Schema
-1. Update node/relationship definitions in processor
-2. Add constraints in `neo4j_schema.py`
-3. Update documentation
+# Folder Tika
+## Detailed readme
+Detailed readme [here](tika/readme.md)
 
 
+Demo of tika OCR, Language Detection and Mime Detection
 
-## Support
+### Apache Tika a content analysis toolkit
 
-For issues and questions:
-- Check logs in `logs/` directory
-- Review configuration in `config/config.yaml`
-- Ensure all dependencies are installed
-- Verify Neo4j is accessible
+The Apache Tika™ toolkit detects and extracts metadata and text from over a thousand different file types (such as PPT, XLS, and PDF). All of these file types can be parsed through a single interface, making Tika useful for search engine indexing, content analysis, translation, and much more. 
+
+### Install
+- https://cwiki.apache.org/confluence/display/TIKA/TikaServer#TikaServer-InstallationofTikaServer
+- https://github.com/apache/tika-docker  (docker pull apache/tika:latest-full)
+- https://pypi.org/project/tika/
+- https://tika.apache.org/1.10/formats.html
+  
+### Documentation 
+https://cwiki.apache.org/confluence/display/tika
+
+[Notebook](tika\tika_test.ipynb)
+
+# Folder Nats
+## Detailed readme
+Detailed readme [here](Nats/readme.md)
+
+Test Nats Python client working with Server in docker container
+- [Publisher](Nats\publisher.ipynb)
+- [Consumer](Nats\consumer.ipynb)
+
+
+# Folder Elastic
+## Detailed readme
+Detailed readme [here](elastic/readme.md)
