@@ -1,17 +1,15 @@
-elastic/data
-elastic/docs
-elastic/keys
-elastic/logs
-*.pyc
-
-# Byte-compiled / optimized / DLL files
+# Python-generated files
 __pycache__/
-*.py[cod]
-*$py.class
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
 
-# C extensions
-*.so
-__pycache__/
-.ipynb_checkpoints/
-
-elastic/docker/ollama
+# Virtual environments
+.venv
+keys/.env
+keys/complete-tube-421007-9a7c35cd44e2.json
+keys/complete-tube-421007-208a4862c992.json
+keys/complete-tube-421007-9a7c35cd44e2.json
+keys/config.yaml
