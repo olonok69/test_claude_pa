@@ -1,0 +1,1 @@
+Here I have the .env file and the Service Principal account in json format
