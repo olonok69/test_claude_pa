@@ -70,6 +70,27 @@ config = {
             "show_df_13",
         ],
     },
+    "14": {
+        "config_14_del": [
+            "salir_14",
+            "init_run_14",
+            "visitor_selector_14",
+            "recommendation_service_14",
+            "visitor_list_14",
+            "last_recommendation_result_14",
+            "last_processing_time_14",
+            "selected_visitor_14",
+            "recommendations_generated_14",
+        ],
+        "config_14": [
+            "recommendation_service_14",
+            "visitor_list_14",
+            "last_recommendation_result_14",
+            "last_processing_time_14",
+            "selected_visitor_14",
+            "recommendations_generated_14",
+        ],
+    },
 }
 
 
