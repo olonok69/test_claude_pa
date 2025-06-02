@@ -1,0 +1,76 @@
+steps:
+  - name: "Llama3.1:11B"
+    active: true
+    parameters:
+      root_dir: "null"
+      config: "null"
+      num_samples: 100000000
+      create_files: "no"
+      model: "llama3.1:latest"
+      temperature: 0.5
+      top_p: 0.9
+      top_k: 30
+      repetition_penalty: 1.1
+      do_sample: true
+      num_ctx: 16184
+      format: "json"
+      base_url: ["http://localhost:11434"]
+      include_examples: true
+      timestamp_str: "2022-02-22T12:00:00"
+  
+  - name: "Gpt4o-Mini"
+    active: true
+    parameters:
+      root_dir: "null"
+      config: "null"
+      num_samples: 100000000
+      create_files: "no"
+      model: "gpt-4o-mini"
+      temperature: 0.5
+      top_p: 0.9
+      top_k: 30
+      repetition_penalty: 1.1
+      do_sample: true
+      num_ctx: 16184
+      format: "json"
+      include_examples: true
+      timestamp_str: "2022-02-22T12:00:00"
+      max_chunk_size: 190
+
+  - name: "o3-mini"
+    active: true
+    parameters:
+      root_dir: "null"
+      config: "null"
+      num_samples: 100000000
+      create_files: "no"
+      model: "o3-mini"
+      temperature: 0.5
+      top_p: 0.9
+      top_k: 30
+      repetition_penalty: 1.1
+      do_sample: true
+      num_ctx: 16184
+      format: "json"
+      include_examples: true
+      timestamp_str: "2022-02-22T12:00:00"
+      max_chunk_size: 190
+      
+  - name: "Gpt4o-Mini-batch"
+    active: true
+    parameters:
+      root_dir: "null"
+      config: "null"
+      num_samples: 100000000
+      create_files: "no"
+      model: "gpt-4o-mini-2"
+      temperature: 0.5
+      top_p: 0.9
+      top_k: 30
+      repetition_penalty: 1.1
+      do_sample: true
+      num_ctx: 16184
+      format: "json"
+      include_examples: true
+      timestamp_str: "2022-02-22T12:00:00"
+      max_chunk_size: 190

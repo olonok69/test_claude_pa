@@ -1,8 +1,0 @@
-- Recomend if buy or sell same stock based in Calculations of the Bollinger Bands and Fibonacci Retracement Strategy score. data period = 1 year ,   window = 20  for Bollinger Bands and use last 4 days to calculate the scores
-
-
-
-- Recomend if buy or sell TSLA based in Calculations of the Bollinger Z-score  within a 20-day period
-
-- Recomend if buy or sell tesla based in Calculations of the Macd donchian combined score. Use a data period  6 months,  a window = 20 days to create the donchian chanel and for macd use fast period 12 days, slow period 26 days and signal period 9 days
-

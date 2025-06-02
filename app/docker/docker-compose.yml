@@ -1,0 +1,61 @@
+services:
+
+  ollama1:
+    image: ollama/ollama:latest
+    ports:
+      - 11434:11434
+    volumes:
+      - .:/code
+      - ./ollama/ollamaa:/root/.ollama
+    container_name: ollama1
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    restart: always
+    networks:
+    - ollama
+
+  ollama2:
+    image: ollama/ollama:latest
+    ports:
+      - 11435:11434
+    volumes:
+      - .:/code
+      - ./ollama/ollamab:/root/.ollama
+    container_name: ollama2
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    restart: always
+    networks:
+    - ollama
+# nginx:
+# container_name: nginx
+# image: nginx:1.25.1
+# volumes:
+# - ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf
+# - ./configs/nginx/certs:/etc/nginx/certs
+# ports:
+# - "8080:80"
+# - "80:80"
+# - "443:443"
+
+# depends_on:
+# - ollama1
+# - ollama2
+# restart: always
+# networks:
+# - ollama
+
+networks:
+  ollama:
