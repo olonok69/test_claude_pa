@@ -1,0 +1,135 @@
+
+# Donchian Channels
+They are primarily an indicator of price ranges or channels
+Although not strictly a volatility indicator, they can indirectly reflect market volatility
+The width of the channel (distance between upper and lower bands) indicates recent volatility
+When the channel widens, it indicates higher volatility
+When it narrows, it indicates lower volatility
+
+Donchian channels are a technical indicator consisting of three lines:
+
+Upper Band: Represents the highest price during a specific period
+Middle Band: Is the average between the upper and lower bands
+Lower Band: Represents the lowest price during a specific period
+
+How They Work
+Donchian channels create a "channel" or range within which the price moves. These channels automatically adapt by expanding or 
+contracting according to market volatility.
+
+Buy and Sell Signals
+In the chart, you can see green triangles (buy signals) and red triangles (sell signals):
+Buy signals (Buy Signal - green triangles):
+
+They are generated when the price breaks above the upper band
+They indicate a possible bullish trend
+In the chart, they are shown with green triangles pointing upward
+
+Sell signals (Sell Signal - red triangles):
+
+They are generated when the price falls below the lower band
+They indicate a possible bearish trend
+In the chart, they are shown with red triangles pointing downward
+
+Trading Strategy:
+
+Buy when the price breaks the upper band (green triangle)
+Sell when the price breaks the lower band (red triangle)
+Use the middle band as a reference for trends and as a possible support/resistance level
+
+This system is particularly useful in markets that show defined ranges or clear trends. 
+The chart also incorporates MACD for additional confirmation, showing the MACD line, signal line, and MACD histogram at the bottom.
+
+# What is MACD?
+MACD (Moving Average Convergence Divergence):
+
+It is a momentum indicator
+It measures the speed and direction of price movement
+It helps identify when price momentum is changing
+It focuses on the strength and direction of a trend
+
+MACD (Moving Average Convergence Divergence) is a popular technical indicator that shows the relationship between two 
+exponential moving averages (EMA) of an asset's price.
+In the chart, you can observe:
+
+MACD Line (blue): It is the difference between the fast EMA (usually 12 periods) and the slow EMA (usually 26 periods)
+Signal Line (red): It is an EMA of the MACD line (usually 9 periods)
+MACD Histogram: Shows the difference between the MACD line and the signal line (green and red bars)
+
+How It Works
+MACD works by measuring the momentum and direction of an asset:
+
+When the MACD line crosses above the signal line, it indicates bullish momentum
+When it crosses below, it indicates bearish momentum
+The histogram shows the strength of momentum (larger bars = stronger momentum)
+
+Buy and Sell Signals with MACD
+
+Buy signals:
+
+Bullish crossover: When the MACD line (blue) crosses above the signal line (red)
+Bullish divergence: When the price makes lower lows, but the MACD makes higher lows
+Zero line crossover: When the MACD line crosses above the zero line
+
+Sell signals:
+
+Bearish crossover: When the MACD line (blue) crosses below the signal line (red)
+Bearish divergence: When the price makes higher highs, but the MACD makes lower highs
+Zero line crossover: When the MACD line crosses below the zero line
+
+In the chart shown, several crossovers can be observed between May 2024 and March 2025:
+
+Green histograms indicate when the MACD line is above the signal line (bullish signal)
+Red histograms indicate when the MACD line is below the signal line (bearish signal)
+The strongest bullish momentum is observed in February-March 2025, coinciding with a large increase in volume
+
+This indicator is particularly useful when combined with volume analysis (shown at the bottom of the chart), as signals are more reliable when backed by a significant increase in trading volume.
+
+# Combined Strategy Explanation
+
+I'll explain this combined MACD and Donchian channels strategy shown in the chart:
+
+## Combined Scoring System
+
+This strategy uses a sophisticated approach that assigns numerical scores (-100 to +100) to MACD and Donchian indicators, a
+nd then combines them to generate more robust trading signals.
+
+### MACD Score (-100 to +100)
+Combines three components:
+- **Position of MACD line vs signal line (40%)**: Positive when MACD is above the signal line (bullish)
+- **Position of MACD line vs zero (30%)**: Positive when MACD is above zero (strong bullish trend)
+- **Histogram momentum (30%)**: Measures the rate of change of the histogram
+
+### Donchian Score (-100 to +100)
+Combines three aspects:
+- **Price position within the channel (50%)**: +50 at upper band, 0 at middle band, -50 at lower band
+- **Channel direction (30%)**: Positive when the channel is moving upward
+- **Channel width trend (20%)**: Positive when the channel is widening (increasing volatility)
+
+### Combined Score
+It's the simple average of the MACD and Donchian scores, giving equal weight to momentum (MACD) and price range (Donchian).
+
+## Trading Signals in the Chart
+
+In the chart, you can see four panels:
+1. **Top panel**: TLSA price with Donchian channels
+2. **Second panel**: MACD indicator with histogram
+3. **Third panel**: Indicator scores (MACD, Donchian, and Combined)
+4. **Bottom panel**: Visualization of trading signals with color-coded bars
+
+### Interpretation of Key Moments:
+- **February-March 2025**: Notice how MACD and Donchian scores rose above +50, generating a "Strong Buy Signal" (dark green bars). This coincided with a strong bullish movement in price.
+- **April 2025**: Scores begin to fall and generate sell signals (red bars).
+- **July-August 2024**: You can see a period of moderate buy signals, followed by a neutral phase.
+
+### Benefits of This System:
+1. **Simplifies** complex patterns by converting them to intuitive numerical values
+2. **Normalizes** all indicators on the same scale
+3. **Combines** different indicators into a single actionable signal
+4. **Visualizes** indicator strength and transitions between states
+
+### Practical Use:
+- **Enter long positions**: When the combined score crosses above +50
+- **Enter short positions**: When the combined score crosses below -50
+- **Close positions**: When the combined score crosses zero in the opposite direction
+
+This system is especially powerful because it combines a momentum indicator (MACD) with a price channel indicator (Donchian), offering a more complete view of the market.
