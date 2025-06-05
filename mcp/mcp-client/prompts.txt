@@ -1,0 +1,27 @@
+
+# MCP Google Search
+uv run client.py "D:\repos\mcp-google-search\build\index.js"
+  
+can you search libaries about quantum ML QML in python and create a document in markdown format of what you found containing the url a summary of the content , finalize with a summary of your findings
+can you give more details about https://www.bluequbit.io/quantum-machine-learning-tools
+ 
+# MCP  Word-MCP-Server
+
+uv run client.py "D:\repos\Office-Word-MCP-Server\word_document_server\main.py"
+ 
+Create a document with what you can tell me about quantum ML . Do an Introduction , then go deep in the main topics to know and create a table with references finally the name of the document is QML.docx and 
+convert it to pdf and save it to disk
+
+# MCP Finance recomendations python
+
+uv run client.py "D:\repos\mcp-client\server\main.py"
+
+- Recomend if buy or sell same stock based in Calculations of the Bollinger Bands and Fibonacci Retracement Strategy score. data period = 1 year ,   window = 20  for Bollinger Bands and use last 4 days to calculate the scores
+
+- Recomend if buy or sell TSLA based in Calculations of the Bollinger Z-score  within a 20-day period
+
+- Recomend if buy or sell tesla based in Calculations of the Macd donchian combined score. Use a data period  6 months,  a window = 20 days to create the donchian chanel and 
+for macd use fast period 12 days, slow period 26 days and signal period 9 days
+
+- now considering the last 3 conclusions you provided using the last 3 scoring systems you use can you compile a markdown document with them, create a table with outputs and 
+made a final recomendation based on the 3 strategies/indicators you have use?
