@@ -18,6 +18,7 @@ Una colección integral de proyectos de IA/ML que muestra implementaciones de va
 | **Base de Datos Grafos** | Sistema RAG Neo4j | Interfaz de lenguaje natural para bases de datos grafos Neo4j | [📖 Español](RAG/speak%20with%20your%20Graph%20Database/Readme_es.md) |
 | **Integración MCP** | Servidores MCP | Servidores del Protocolo de Contexto de Modelo para integración Claude AI | [📖 Español](mcp/mcp_server/readme_es.md) |
 | **Desarrollo MCP** | Cliente/Servidor Python MCP | Servidor de análisis financiero Python MCP con transporte SSE | [📖 Español](mcp/python_client_server/README_es.md) |
+| **Cliente MCP** | Cliente MCP Multi-Lenguaje | Cliente MCP integral con herramientas de análisis financiero y soporte multi-servidor | [📖 Español](mcp/mcp-client/Readme_es.md) |
 
 ## 🌟 Descripción General del Repositorio
 
@@ -47,6 +48,7 @@ Este repositorio representa una exploración integral de las tecnologías modern
 ### 🔌 Protocolo de Contexto de Modelo (MCP)
 - **Ecosistema de Servidores MCP**: Implementación completa del estándar MCP de Anthropic, demostrando el "USB-C para integraciones de IA" con múltiples configuraciones de servidor.
 - **Framework Python MCP**: Servidor avanzado de análisis financiero con transporte Server-Sent Events, mostrando integración de herramientas IA en tiempo real.
+- **Cliente MCP Multi-Lenguaje**: Implementación integral de cliente que conecta Claude AI con herramientas externas, con capacidades especializadas de análisis financiero a través de servidores Python y Node.js.
 
 ## 🛠️ Stack Tecnológico
 
@@ -84,21 +86,25 @@ Este repositorio representa una exploración integral de las tecnologías modern
 - **Retrieval-Augmented Generation (RAG)**: Múltiples implementaciones mostrando diferentes enfoques para combinar recuperación con generación
 - **IA Multi-Modal**: Integración de capacidades de procesamiento de texto, imagen y video
 - **Sistemas Basados en Agentes**: Agentes inteligentes que pueden descubrir y usar herramientas dinámicamente
+- **Protocolo de Contexto de Modelo**: Integración estandarizada IA-herramientas a través de múltiples lenguajes y plataformas
 
 ### 📊 Análisis Financiero Sofisticado
 - **Estrategias Multi-Indicador**: Estrategias de trading complejas combinando 3-4 indicadores técnicos
 - **Sistemas de Puntuación**: Puntuación estandarizada (-100 a +100) para interpretación consistente de señales
 - **Procesamiento en Tiempo Real**: Integración de datos de mercado en vivo con análisis inteligente
+- **Integración Cross-Platform**: Herramientas financieras accesibles vía múltiples mecanismos de transporte
 
 ### 🏗️ Arquitectura Lista para Producción
 - **Diseño de Microservicios**: Sistemas distribuidos con clara separación de responsabilidades
 - **Mejores Prácticas de Seguridad**: Autenticación, autorización y protección de datos apropiadas
 - **Infraestructura Escalable**: Diseños nativos de la nube con soporte de containerización
+- **Soporte Multi-Transporte**: Mecanismos de transporte STDIO, SSE y HTTP para despliegue flexible
 
 ### 🔧 Experiencia del Desarrollador
 - **Documentación Integral**: READMEs detallados con instrucciones de configuración y ejemplos
 - **Notebooks Interactivos**: Notebooks Jupyter para aprendizaje y experimentación
 - **Seguridad de Tipos**: Type hints de Python y validación de esquemas en todo el código
+- **Descubrimiento de Herramientas**: Descubrimiento automático y orquestación de capacidades disponibles
 
 ## 🎯 Casos de Uso y Aplicaciones
 
@@ -110,11 +116,13 @@ Este repositorio representa una exploración integral de las tecnologías modern
 - **Trading Algorítmico**: Generación y análisis automatizado de señales de trading
 - **Evaluación de Riesgo**: Métricas avanzadas de riesgo y análisis de portfolios
 - **Investigación de Mercado**: Análisis inteligente de tendencias y patrones financieros
+- **Acceso Multi-Plataforma**: Análisis financiero accesible a través de interfaces web, escritorio y API
 
 ### IA Empresarial
 - **Procesamiento de Documentos**: Extracción y análisis automatizado de documentos empresariales
 - **Gestión del Conocimiento**: Sistemas de conocimiento basados en grafos para relaciones de datos complejas
 - **Análisis Potenciado por IA**: Integración de capacidades de IA en flujos de trabajo empresariales existentes
+- **Orquestación de Herramientas**: Descubrimiento inteligente y coordinación de servicios externos
 
 ### Medios y Contenido
 - **Análisis de Video**: Transcripción automatizada, resumen y análisis de contenido
@@ -132,9 +140,14 @@ Este repositorio representa una exploración integral de las tecnologías modern
 1. **Comienza con Sistemas RAG**: Inicia con el RAG de Análisis Financiero para conceptos fundamentales
 2. **Explora Estrategias de Trading**: Progresa a través de las diferentes implementaciones de algoritmos de trading
 3. **Integración Avanzada**: Avanza a servidores MCP para entender patrones modernos de integración de IA
-4. **Aplicaciones Especializadas**: Profundiza en aplicaciones específicas del dominio como IA médica u OCR distribuido
+4. **Desarrollo Multi-Plataforma**: Explora el cliente MCP para orquestación de herramientas cross-language
+5. **Aplicaciones Especializadas**: Profundiza en aplicaciones específicas del dominio como IA médica u OCR distribuido
 
-
+### Áreas de Investigación
+- **IA Multimodal**: Integración avanzada de diferentes modalidades de IA
+- **Aprendizaje Federado**: Implementaciones de machine learning distribuido
+- **Edge Computing**: Capacidades de procesamiento de IA desplegadas en el edge
+- **Computación Cuántica**: Algoritmos mejorados con quantum para optimización
 
 ## ⚖️ Licencia y Descargo de Responsabilidad
 

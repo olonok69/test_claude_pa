@@ -18,6 +18,7 @@ A comprehensive collection of AI/ML projects showcasing cutting-edge implementat
 | **Graph Database** | Neo4j RAG System | Natural language interface for Neo4j graph databases | [📖 English](RAG/speak%20with%20your%20Graph%20Database/Readme.md) |
 | **MCP Integration** | MCP Servers | Model Context Protocol servers for Claude AI integration | [📖 English](mcp/mcp_server/readme_en.md) |
 | **MCP Development** | Python MCP Client/Server | Python-based MCP financial analysis server with SSE transport | [📖 English](mcp/python_client_server/README.md) |
+| **MCP Client** | Multi-Language MCP Client | Comprehensive MCP client with financial analysis tools and multi-server support | [📖 English](mcp/mcp-client/README.md) |
 
 ## 🌟 Repository Overview
 
@@ -47,6 +48,7 @@ This repository represents a comprehensive exploration of modern AI/ML technolog
 ### 🔌 Model Context Protocol (MCP)
 - **MCP Server Ecosystem**: Complete implementation of Anthropic's MCP standard, demonstrating the "USB-C for AI integrations" with multiple server configurations.
 - **Python MCP Framework**: Advanced financial analysis server with Server-Sent Events transport, showcasing real-time AI-tool integration.
+- **Multi-Language MCP Client**: Comprehensive client implementation bridging Claude AI with external tools, featuring specialized financial analysis capabilities across Python and Node.js servers.
 
 ## 🛠️ Technology Stack
 
@@ -84,21 +86,25 @@ This repository represents a comprehensive exploration of modern AI/ML technolog
 - **Retrieval-Augmented Generation (RAG)**: Multiple implementations showing different approaches to combining retrieval with generation
 - **Multi-Modal AI**: Integration of text, image, and video processing capabilities
 - **Agent-Based Systems**: Intelligent agents that can discover and use tools dynamically
+- **Model Context Protocol**: Standardized AI-tool integration across multiple languages and platforms
 
 ### 📊 Sophisticated Financial Analysis
 - **Multi-Indicator Strategies**: Complex trading strategies combining 3-4 technical indicators
 - **Scoring Systems**: Standardized (-100 to +100) scoring for consistent signal interpretation
 - **Real-Time Processing**: Live market data integration with intelligent analysis
+- **Cross-Platform Integration**: Financial tools accessible via multiple transport mechanisms
 
 ### 🏗️ Production-Ready Architecture
 - **Microservice Design**: Distributed systems with clear separation of concerns
 - **Security Best Practices**: Proper authentication, authorization, and data protection
 - **Scalable Infrastructure**: Cloud-native designs with containerization support
+- **Multi-Transport Support**: STDIO, SSE, and HTTP transport mechanisms for flexible deployment
 
 ### 🔧 Developer Experience
 - **Comprehensive Documentation**: Detailed READMEs with setup instructions and examples
 - **Interactive Notebooks**: Jupyter notebooks for learning and experimentation
 - **Type Safety**: Python type hints and schema validation throughout
+- **Tool Discovery**: Automatic discovery and orchestration of available capabilities
 
 ## 🎯 Use Cases & Applications
 
@@ -110,11 +116,13 @@ This repository represents a comprehensive exploration of modern AI/ML technolog
 - **Algorithmic Trading**: Automated trading signal generation and analysis
 - **Risk Assessment**: Advanced risk metrics and portfolio analysis
 - **Market Research**: Intelligent analysis of financial trends and patterns
+- **Multi-Platform Access**: Financial analysis accessible through web, desktop, and API interfaces
 
 ### Enterprise AI
 - **Document Processing**: Automated extraction and analysis of business documents
 - **Knowledge Management**: Graph-based knowledge systems for complex data relationships
 - **AI-Powered Analytics**: Integration of AI capabilities into existing business workflows
+- **Tool Orchestration**: Intelligent discovery and coordination of external services
 
 ### Media & Content
 - **Video Analysis**: Automated transcription, summarization, and content analysis
@@ -132,9 +140,8 @@ This repository represents a comprehensive exploration of modern AI/ML technolog
 1. **Start with RAG Systems**: Begin with the Financial Analysis RAG for foundational concepts
 2. **Explore Trading Strategies**: Progress through the different trading algorithm implementations
 3. **Advanced Integration**: Move to MCP servers for understanding modern AI integration patterns
-4. **Specialized Applications**: Dive into domain-specific applications like medical AI or distributed OCR
-
-
+4. **Multi-Platform Development**: Explore the MCP client for cross-language tool orchestration
+5. **Specialized Applications**: Dive into domain-specific applications like medical AI or distributed OCR
 
 ### Research Areas
 - **Multimodal AI**: Advanced integration of different AI modalities
