@@ -5,7 +5,7 @@ import nest_asyncio
 import atexit
 from services.chat_service import init_session
 from utils.async_helpers import on_shutdown
-from client.apps import mcp_app
+from apps import mcp_app  # Fixed import - removed 'client.' prefix
 
 # Apply nest_asyncio to allow nested asyncio event loops (needed for Streamlit's execution model)
 nest_asyncio.apply()

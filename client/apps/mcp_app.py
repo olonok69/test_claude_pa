@@ -1,10 +1,10 @@
 import os
 import datetime
 import streamlit as st
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
 from services.ai_service import get_response_stream
 from services.mcp_service import run_agent
-from services.chat_service import get_current_chat, _append_message_to_session
+from services.chat_service import get_current_chat, _append_message_to_session, get_clean_conversation_memory
 from utils.async_helpers import run_async
 from utils.ai_prompts import make_system_prompt, make_main_prompt
 import ui_components.sidebar_components as sd_compents
@@ -22,6 +22,7 @@ def main():
     # Main chat interface
     st.header("Chat with Agent")
     messages_container = st.container(border=True, height=600)
+    
 # ------------------------------------------------------------------ Chat history
      # Re-render previous messages
     if st.session_state.get('current_chat_id'):
@@ -76,7 +77,15 @@ def main():
             try:
                 # If agent is available, use it
                 if st.session_state.agent:
-                    response = run_async(run_agent(st.session_state.agent, user_text))
+                    # Create conversation memory for the agent (clean version without tool messages)
+                    conversation_memory = get_clean_conversation_memory()
+                    
+                    # Add the current user message to the conversation
+                    conversation_memory.append(HumanMessage(content=user_text))
+                    
+                    # Run the agent with full conversation context
+                    response = run_async(run_agent(st.session_state.agent, conversation_memory))
+                    
                     tool_output = None
                     # Extract tool executions if available
                     if "messages" in response:
@@ -88,6 +97,7 @@ def main():
                                     tool_output = next(
                                         (m.content for m in response["messages"] 
                                             if isinstance(m, ToolMessage) and 
+                                            hasattr(m, 'tool_call_id') and
                                             m.tool_call_id == tool_call['id']),
                                         None
                                     )
@@ -98,28 +108,41 @@ def main():
                                             "output": tool_output,
                                             "timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                         })
+                    
                     # Extract and display the response
                     output = ""
                     tool_count = 0
+                    assistant_response = None
+                    
                     if "messages" in response:
-                        for msg in response["messages"]:
+                        # Skip messages that were part of the input conversation
+                        new_messages = response["messages"][len(conversation_memory):]
+                        
+                        for msg in new_messages:
                             if isinstance(msg, HumanMessage):
                                 continue  # Skip human messages
-                            elif hasattr(msg, 'name') and msg.name:  # ToolMessage
+                            elif isinstance(msg, ToolMessage):
                                 tool_count += 1
                                 with messages_container.chat_message("assistant"):
-                                    tool_message = f"**ToolMessage - {tool_count} ({msg.name}):** \n" + msg.content
+                                    tool_message = f"**ToolMessage - {tool_count} ({getattr(msg, 'name', 'Unknown')}):** \n" + str(msg.content)
                                     st.code(tool_message, language='yaml')
-                                    _append_message_to_session({'role': 'assistant', 'tool': tool_message, })
-                            else:  # AIMessage
+                                    # Store tool message separately - don't include in main conversation flow
+                                    _append_message_to_session({'role': 'assistant', 'tool': tool_message})
+                            elif isinstance(msg, AIMessage):
                                 if hasattr(msg, "content") and msg.content:
+                                    assistant_response = str(msg.content)
+                                    output = assistant_response
                                     with messages_container.chat_message("assistant"):
-                                        output = str(msg.content)
                                         st.markdown(output)
-                    response_dct = {"role": "assistant", "content": output}
+                    
+                    # Only add the final AI response to conversation memory
+                    if assistant_response:
+                        response_dct = {"role": "assistant", "content": assistant_response}
+                        _append_message_to_session(response_dct)
+                        
                 # Fall back to regular stream response if agent not available
                 else:
-                    st.warning("You are not connect to MCP servers!")
+                    st.warning("You are not connected to MCP servers!")
                     response_stream = get_response_stream(
                         main_prompt,
                         llm_provider=st.session_state['params']['model_id'],
@@ -130,12 +153,13 @@ def main():
                     with messages_container.chat_message("assistant"):
                         response = st.write_stream(response_stream)
                         response_dct = {"role": "assistant", "content": response}
+                        _append_message_to_session(response_dct)
+                        
             except Exception as e:
                 response = f"⚠️ Something went wrong: {str(e)}"
                 st.error(response)
                 st.code(traceback.format_exc(), language="python")
+                _append_message_to_session({"role": "assistant", "content": response})
                 st.stop()
-        # Add assistant message to chat history
-        _append_message_to_session(response_dct)
             
     display_tool_executions()

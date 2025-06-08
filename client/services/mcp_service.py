@@ -1,9 +1,10 @@
-from typing import Dict, List
+from typing import Dict, List, Union
 import streamlit as st
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
 from langchain_core.tools import BaseTool
+from langchain_core.messages import BaseMessage
 from services.ai_service import create_llm_model
 from utils.async_helpers import run_async
 
@@ -17,9 +18,17 @@ async def get_tools_from_client(client: MultiServerMCPClient) -> List[BaseTool]:
     """Get tools from the MCP client."""
     return client.get_tools()
 
-async def run_agent(agent, message: str) -> Dict:
-    """Run the agent with the provided message."""
-    return await agent.ainvoke({"messages": message})
+async def run_agent(agent, messages: Union[str, List[BaseMessage]]) -> Dict:
+    """Run the agent with the provided message(s)."""
+    if isinstance(messages, str):
+        # If it's a string, treat it as a simple message
+        return await agent.ainvoke({"messages": [messages]})
+    elif isinstance(messages, list):
+        # If it's a list of messages, use them directly for conversation memory
+        return await agent.ainvoke({"messages": messages})
+    else:
+        # Fallback for other types
+        return await agent.ainvoke({"messages": str(messages)})
 
 async def run_tool(tool, **kwargs):
     """Run a tool with the provided parameters."""
@@ -33,7 +42,6 @@ def connect_to_mcp_servers():
             run_async(client.__aexit__(None, None, None))
         except Exception as e:
             st.warning(f"Error closing previous client: {str(e)}")
-
 
     # Collect LLM config dynamically from session state
     params = st.session_state['params']

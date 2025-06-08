@@ -2,7 +2,7 @@ import streamlit as st
 from config import MODEL_OPTIONS
 import traceback
 from services.mcp_service import connect_to_mcp_servers
-from services.chat_service import create_chat, delete_chat
+from services.chat_service import create_chat, delete_chat, switch_chat
 from utils.tool_schema_parser import extract_tool_parameters
 from utils.async_helpers import reset_connection_state
 
@@ -17,17 +17,32 @@ def create_history_chat_container():
         chat_history_menu = chat_history_menu[:50][::-1]
         
         if chat_history_menu:
-            current_chat = st.radio(
+            # Get current selection index
+            current_selection = None
+            for i, chat_option in enumerate(chat_history_menu):
+                chat_id = chat_option.split("_::_")[1]
+                if chat_id == st.session_state.get("current_chat_id"):
+                    current_selection = i
+                    break
+            
+            if current_selection is None:
+                current_selection = 0
+            
+            selected_chat = st.radio(
                 label="History Chats",
                 format_func=lambda x: x.split("_::_")[0] + '...' if "_::_" in x else x,
                 options=chat_history_menu,
                 label_visibility="collapsed",
-                index=st.session_state["current_chat_index"],
-                key="current_chat"
+                index=current_selection,
+                key="chat_selector"
             )
             
-            if current_chat:
-                st.session_state['current_chat_id'] = current_chat.split("_::_")[1]
+            if selected_chat:
+                selected_chat_id = selected_chat.split("_::_")[1]
+                # Only switch if it's a different chat
+                if selected_chat_id != st.session_state.get("current_chat_id"):
+                    switch_chat(selected_chat_id)
+                    st.rerun()
 
 
 def create_sidebar_chat_buttons():
@@ -109,13 +124,13 @@ def create_mcp_connection_widget():
         if st.session_state.get("agent"):
             st.success(f"📶 Connected to {len(st.session_state.servers)} MCP servers!"
                        f" Found {len(st.session_state.tools)} tools.")
-            if st.button("Disconnect to MCP Servers"):
-                with st.spinner("Connecting to MCP servers..."):
+            if st.button("Disconnect from MCP Servers"):
+                with st.spinner("Disconnecting from MCP servers..."):
                     try:
                         reset_connection_state()
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error disconnecting to MCP servers: {str(e)}")
+                        st.error(f"Error disconnecting from MCP servers: {str(e)}")
                         st.code(traceback.format_exc(), language="python")
         else:
             st.warning("⚠️ Not connected to MCP server")

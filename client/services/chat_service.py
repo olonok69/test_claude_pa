@@ -1,6 +1,7 @@
 import streamlit as st
 from config import SERVER_CONFIG
 import uuid
+from langchain_core.messages import HumanMessage, AIMessage
 
 # Session state initialization
 def init_session():
@@ -14,7 +15,8 @@ def init_session():
         "agent": None,
         "tools": [],
         "tool_executions": [],
-        "servers": SERVER_CONFIG['mcpServers']
+        "servers": SERVER_CONFIG['mcpServers'],
+        "conversation_memory": []  # Add conversation memory tracking
     }
     
     for key, val in defaults.items():
@@ -43,15 +45,29 @@ def get_current_chat(chat_id):
 
 def _append_message_to_session(msg: dict) -> None:
     """
-    Append *msg* to the current chat’s message list **and**
+    Append *msg* to the current chat's message list **and**
     keep history_chats in-sync.
     """
     chat_id = st.session_state["current_chat_id"]
+    
+    # Avoid duplicating messages
+    if st.session_state["messages"] and len(st.session_state["messages"]) > 0:
+        last_message = st.session_state["messages"][-1]
+        # Check if this is a duplicate message
+        if (last_message.get("role") == msg.get("role") and 
+            last_message.get("content") == msg.get("content") and
+            last_message.get("tool") == msg.get("tool")):
+            return  # Don't add duplicate
+    
     st.session_state["messages"].append(msg)
+    
     for chat in st.session_state["history_chats"]:
         if chat["chat_id"] == chat_id:
             chat["messages"] = st.session_state["messages"]     # same list
-            if chat["chat_name"] == "New chat":                 # rename once
+            # Only rename chat based on user messages, not tool messages
+            if (chat["chat_name"] == "New chat" and 
+                msg["role"] == "user" and 
+                "content" in msg):                 
                 chat["chat_name"] = " ".join(msg["content"].split()[:5]) or "Empty"
             break
 
@@ -65,7 +81,23 @@ def create_chat():
     st.session_state["history_chats"].append(new_chat)
     st.session_state["current_chat_index"] = 0
     st.session_state["current_chat_id"] = chat_id
+    st.session_state["messages"] = []  # Clear current messages
+    st.session_state["conversation_memory"] = []  # Clear conversation memory
     return new_chat
+
+def switch_chat(chat_id: str):
+    """Switch to a different chat and load its context."""
+    if chat_id == st.session_state.get("current_chat_id"):
+        return  # Already on this chat
+        
+    st.session_state["current_chat_id"] = chat_id
+    st.session_state["messages"] = get_current_chat(chat_id)
+    
+    # Update current chat index
+    for i, chat in enumerate(st.session_state["history_chats"]):
+        if chat["chat_id"] == chat_id:
+            st.session_state["current_chat_index"] = i
+            break
 
 def delete_chat(chat_id: str):
     """Delete a chat from history."""
@@ -88,4 +120,41 @@ def delete_chat(chat_id: str):
         else:                                            # if all deleted → new empty
             new_chat = create_chat()
             st.session_state["messages"] = new_chat["messages"]
+        
+        # Clear conversation memory when switching/deleting chats
+        st.session_state["conversation_memory"] = []
     return
+
+def get_conversation_summary(max_messages: int = 10):
+    """Get a summary of recent conversation for context."""
+    if not st.session_state.get("messages"):
+        return "This is the start of a new conversation."
+    
+    recent_messages = st.session_state["messages"][-max_messages:]
+    summary_parts = []
+    
+    for msg in recent_messages:
+        if msg["role"] == "user":
+            summary_parts.append(f"User: {msg['content'][:100]}...")
+        elif msg["role"] == "assistant" and "content" in msg and msg["content"]:
+            summary_parts.append(f"Assistant: {msg['content'][:100]}...")
+    
+    return "\n".join(summary_parts)
+
+def get_clean_conversation_memory():
+    """Get conversation memory with only user/assistant content messages for LLM compatibility."""
+    conversation_messages = []
+    
+    if st.session_state.get('current_chat_id'):
+        messages = get_current_chat(st.session_state['current_chat_id'])
+        
+        for msg in messages:
+            if msg["role"] == "user" and "content" in msg:
+                conversation_messages.append(HumanMessage(content=msg["content"]))
+            elif (msg["role"] == "assistant" and 
+                  "content" in msg and 
+                  msg["content"] and 
+                  "tool" not in msg):  # Only regular assistant messages, not tool messages
+                conversation_messages.append(AIMessage(content=msg["content"]))
+    
+    return conversation_messages
