@@ -1,8 +1,6 @@
 version: "3.9"
 
 services:
-
-
   mcpserver3:
     build: ./servers/server3
     container_name: mcpserver_3
@@ -11,6 +9,22 @@ services:
       - ./servers/server3:/app
     ports:
       - "8002:8002"
+
+  mcpserver4:
+    build: ./servers/server4
+    container_name: mcpserver_4
+    restart: always
+    volumes:
+      - ./servers/server4:/app
+    ports:
+      - "8003:8003"
+    environment:
+      - NEO4J_URI=${NEO4J_URI:-bolt://host.docker.internal:7687}
+      - NEO4J_USERNAME=${NEO4J_USERNAME:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
+    env_file:
+      - .env
       
   hostclient:
     build: ./client
@@ -24,4 +38,7 @@ services:
       streamlit run app.py
     depends_on:
       - mcpserver3
+      - mcpserver4
+    env_file:
+      - .env
 
