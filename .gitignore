@@ -23,7 +23,7 @@ venv.bak/
 # Distribution / packaging
 *.egg
 *.egg-info/
-dist/
+
 build/
 *.tar.gz
 
