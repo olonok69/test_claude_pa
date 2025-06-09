@@ -25,6 +25,21 @@ services:
       - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
     env_file:
       - .env
+
+  mcpserver5:
+    build: ./servers/server5
+    container_name: mcpserver_5
+    restart: always
+    volumes:
+      - ./servers/server5:/app
+    ports:
+      - "8004:8004"
+    environment:
+      - PRIVATE_APP_ACCESS_TOKEN=${PRIVATE_APP_ACCESS_TOKEN}
+      - HOST=0.0.0.0
+      - PORT=8004
+    env_file:
+      - .env
       
   hostclient:
     build: ./client
@@ -39,6 +54,6 @@ services:
     depends_on:
       - mcpserver3
       - mcpserver4
+      - mcpserver5
     env_file:
       - .env
-

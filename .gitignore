@@ -23,7 +23,7 @@ venv.bak/
 # Distribution / packaging
 *.egg
 *.egg-info/
-
+dist/
 build/
 *.tar.gz
 
@@ -85,3 +85,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+servers/server5/node_modules
