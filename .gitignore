@@ -86,3 +86,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 servers/server5/node_modules
+servers/server5/archive
