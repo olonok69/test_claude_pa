@@ -23,18 +23,15 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Set up minimal logging
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("mcp_neo4j_cypher")
-logging.basicConfig(level=logging.INFO)
 
 # Get Neo4j connection details from environment
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
-
-print(f"Connecting to Neo4j at: {NEO4J_URI}")
-print(f"Database: {NEO4J_DATABASE}")
-print(f"Username: {NEO4J_USERNAME}")
 
 async def _read(tx: AsyncTransaction, query: str, params: dict[str, Any]) -> str:
     raw_results = await tx.run(query, params)
@@ -83,10 +80,8 @@ RETURN label, apoc.map.fromPairs(attributes) as attributes, apoc.map.fromPairs(r
             results_json_str = await session.execute_read(
                 _read, get_schema_query, dict()
             )
-            logger.debug(f"Read query returned {len(results_json_str)} rows")
             return [types.TextContent(type="text", text=results_json_str)]
     except Exception as e:
-        logger.error(f"Database error retrieving schema: {e}")
         return [types.TextContent(type="text", text=f"Error: {e}")]
 
 @mcp.tool()
@@ -103,10 +98,8 @@ async def read_neo4j_cypher(
     try:
         async with neo4j_driver.session(database=NEO4J_DATABASE) as session:
             results_json_str = await session.execute_read(_read, query, params)
-            logger.debug(f"Read query returned {len(results_json_str)} rows")
             return [types.TextContent(type="text", text=results_json_str)]
     except Exception as e:
-        logger.error(f"Database error executing query: {e}\n{query}\n{params}")
         return [
             types.TextContent(type="text", text=f"Error: {e}\n{query}\n{params}")
         ]
@@ -128,10 +121,8 @@ async def write_neo4j_cypher(
             counters_json_str = json.dumps(
                 raw_results._summary.counters.__dict__, default=str
             )
-        logger.debug(f"Write query affected {counters_json_str}")
         return [types.TextContent(type="text", text=counters_json_str)]
     except Exception as e:
-        logger.error(f"Database error executing query: {e}\n{query}\n{params}")
         return [
             types.TextContent(type="text", text=f"Error: {e}\n{query}\n{params}")
         ]
@@ -166,6 +157,4 @@ if __name__ == "__main__":
     import uvicorn
     print("Starting Neo4j MCP server on port 8003...")
     print(f"Connect to this server using http://localhost:8003/sse")
-    print(f"Neo4j URI: {NEO4J_URI}")
-    print(f"Neo4j Database: {NEO4J_DATABASE}")
-    uvicorn.run(app, host="0.0.0.0", port=8003, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=8003, log_level="warning")

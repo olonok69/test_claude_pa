@@ -3,11 +3,17 @@ FROM node:20-slim
 # Set working directory
 WORKDIR /app
 
-# Copy package.json
+# Copy package.json (make sure it exists)
 COPY package.json ./
+
+# Debug: show the package.json content
+RUN echo "=== Package.json content ===" && cat package.json
 
 # Install dependencies
 RUN npm install
+
+# Debug: show installed packages
+RUN echo "=== Installed packages ===" && ls -la node_modules/ | head -20
 
 # Copy source code
 COPY . .

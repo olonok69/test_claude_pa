@@ -39,6 +39,7 @@ const server = new Server({
 
 // Handler for listing tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+    console.error('Handling tools/list request');
     return {
         tools: getTools(),
     };
@@ -46,12 +47,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Handler for calling tools
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    console.error(`Handling tools/call request: ${request.params.name}`);
     const { name, arguments: args } = request.params;
     return handleToolCall(name, args);
 });
 
 // Handler for listing prompts
 server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    console.error('Handling prompts/list request');
     return {
         prompts: getPrompts(),
     };
@@ -59,6 +62,7 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
 
 // Handler for getting specific prompt
 server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    console.error(`Handling prompts/get request: ${request.params.name}`);
     const { name, arguments: args } = request.params;
     return getPromptMessages(name, args);
 });
@@ -89,14 +93,21 @@ const router = express.Router();
 const POST_ENDPOINT = "/messages";
 
 router.post(POST_ENDPOINT, async (req, res) => {
+    console.error("Message request received: ", JSON.stringify(req.body, null, 2));
+    console.error("Query params: ", req.query);
+    
+    // When client sends messages with `SSEClientTransport`,
+    // the sessionId will be atomically set as query parameter.
     const sessionId = req.query.sessionId;
     if (typeof (sessionId) != "string") {
+        console.error("Bad session id:", sessionId);
         res.status(400).send({ message: "Bad session id." });
         return;
     }
     
     const transport = transports[sessionId];
     if (!transport) {
+        console.error("No transport found for sessionId:", sessionId);
         res.status(400).send({ message: "No transport found for sessionId." });
         return;
     }
@@ -108,16 +119,20 @@ router.post(POST_ENDPOINT, async (req, res) => {
 
 // SSE endpoint - this is what the client connects to first
 router.get("/sse", async (req, res) => {
+    console.error("SSE connection request received");
+    
     try {
         // Create a new transport to connect and send an endpoint event
         // containing a URI for the client to use for sending messages
         const transport = new SSEServerTransport(POST_ENDPOINT, res);
+        console.error("New transport created with session id: ", transport.sessionId);
         
         // Store the transport for message routing
         transports[transport.sessionId] = transport;
         
         // Clean up when connection closes
         res.on("close", () => {
+            console.error("SSE connection closed for session:", transport.sessionId);
             delete transports[transport.sessionId];
         });
         
@@ -128,6 +143,7 @@ router.get("/sse", async (req, res) => {
         
         // Connect the MCP server to this transport
         await server.connect(transport);
+        console.error("MCP server connected via SSE transport");
         
         return;
     } catch (error) {
@@ -152,16 +168,20 @@ app.use('/', router);
 // Start the server
 async function main() {
     try {
-        console.log(`Starting ${APP_NAME} v${APP_VERSION}...`);
+        console.error(`Starting ${APP_NAME} v${APP_VERSION}...`);
         
         // Verify HubSpot access token
         if (!process.env.PRIVATE_APP_ACCESS_TOKEN) {
-            console.warn('Warning: PRIVATE_APP_ACCESS_TOKEN not found in environment variables');
+            console.error('Warning: PRIVATE_APP_ACCESS_TOKEN not found in environment variables');
+        } else {
+            console.error('HubSpot access token found');
         }
         
         app.listen(PORT, HOST, () => {
-            console.log(`HubSpot MCP Server running on http://${HOST}:${PORT}`);
-            console.log(`Health check: http://${HOST}:${PORT}/health`);
+            console.error(`HubSpot MCP SSE Server running on http://${HOST}:${PORT}`);
+            console.error(`SSE endpoint: http://${HOST}:${PORT}/sse`);
+            console.error(`Messages endpoint: http://${HOST}:${PORT}${POST_ENDPOINT}`);
+            console.error(`Health check: http://${HOST}:${PORT}/health`);
         });
         
     } catch (error) {
@@ -172,10 +192,11 @@ async function main() {
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
-    console.log('Shutting down server...');
+    console.error('Shutting down server...');
     try {
         // Close all active transports
         for (const [sessionId, transport] of Object.entries(transports)) {
+            console.error(`Closing transport for session: ${sessionId}`);
             try {
                 await transport.close();
             } catch (error) {
@@ -191,7 +212,7 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-    console.log('Received SIGTERM, shutting down...');
+    console.error('Received SIGTERM, shutting down...');
     try {
         for (const [sessionId, transport] of Object.entries(transports)) {
             try {
