@@ -525,6 +525,3 @@ Our implementation further enhances the original indicator by combining it with 
 
 ---
 
-*Developed by: Advanced Trading System*  
-*Date: 2025*  
-*Version: 1.0*

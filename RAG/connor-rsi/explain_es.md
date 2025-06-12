@@ -419,6 +419,3 @@ Nuestra implementación mejora aún más el indicador original al combinarlo con
 
 ---
 
-*Desarrollado por: Sistema de Trading Avanzado*  
-*Fecha: 2025*  
-*Versión: 1.0*
