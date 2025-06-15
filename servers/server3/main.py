@@ -1,9 +1,11 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 import yfinance as yf
 from fastapi.responses import HTMLResponse
 from typing import List
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
+from starlette.responses import JSONResponse as StarletteJSONResponse
 import logging
 import numpy as np
 import pandas as pd
@@ -672,9 +674,26 @@ async def handle_sse(request):
         )
 
 
-# Build a small Starlette app for the two MCP endpoints
+# Custom route handlers for health and root endpoints
+async def health_handler(request):
+    return StarletteJSONResponse({
+        "message": "Yahoo Finance MCP Server is running", 
+        "version": "1.0.0",
+        "status": "healthy",
+        "timestamp": "2025-06-15"
+    })
+
+async def root_handler(request):
+    return StarletteJSONResponse({
+        "message": "Yahoo Finance MCP Server is running", 
+        "version": "1.0.0"
+    })
+
+# Build a small Starlette app for all endpoints
 sse_app = Starlette(
     routes=[
+        Route("/", root_handler, methods=["GET"]),
+        Route("/health", health_handler, methods=["GET"]),
         Route("/sse", handle_sse, methods=["GET"]),
         # Note the trailing slash to avoid 307 redirects
         Mount("/messages/", app=transport.handle_post_message),
@@ -686,13 +705,9 @@ app = FastAPI()
 app.mount("/", sse_app)
 
 
-@app.get("/health")
-def read_root():
-    return {"message": "MCP SSE Server is running"}
-
-
 if __name__ == "__main__":
     import uvicorn
     print("Starting Yahoo Finance Service MCP server on port 8002...")
     print("Connect to this server using http://localhost:8002/sse")
+    print("Health check: http://localhost:8002/health")
     uvicorn.run(app, host="0.0.0.0", port=8002, log_level="info")

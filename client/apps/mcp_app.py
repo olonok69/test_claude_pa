@@ -20,7 +20,20 @@ def main():
 
 # ------------------------------------------------------------------ Chat Part
     # Main chat interface
-    st.header("Chat with Agent")
+    st.header("Chat with AI Agent")
+    
+    # Show server connection status
+    if st.session_state.get("agent"):
+        server_count = len(st.session_state.servers)
+        tool_count = len(st.session_state.tools)
+        st.success(f"✅ Connected to {server_count} MCP servers with {tool_count} tools available")
+        
+        # Show which servers are connected
+        connected_servers = list(st.session_state.servers.keys())
+        st.info(f"📡 Active servers: {', '.join(connected_servers)}")
+    else:
+        st.warning("⚠️ Not connected to MCP servers. Click 'Connect to MCP Servers' in the sidebar to enable tools.")
+    
     messages_container = st.container(border=True, height=600)
     
 # ------------------------------------------------------------------ Chat history
@@ -35,7 +48,7 @@ def main():
                     st.markdown(m["content"])
 
 # ------------------------------------------------------------------ Chat input
-    user_text = st.chat_input("Ask a question or explore available MCP tools")
+    user_text = st.chat_input("Ask about finance, databases, CRM, or explore available tools")
 
 # ------------------------------------------------------------------ SideBar widgets
     # Main sidebar widgets

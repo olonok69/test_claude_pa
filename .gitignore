@@ -85,4 +85,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+servers/server3/node_modules
 servers/server5/node_modules

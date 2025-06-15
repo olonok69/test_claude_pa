@@ -7,6 +7,7 @@ from typing import Any, Literal, Optional
 from fastapi import FastAPI
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
+from starlette.responses import JSONResponse as StarletteJSONResponse
 
 import mcp.types as types
 from mcp.server.fastmcp import FastMCP
@@ -230,9 +231,39 @@ async def handle_sse(request):
             in_stream, out_stream, mcp._mcp_server.create_initialization_options()
         )
 
-# Build a Starlette app for the MCP endpoints
+# Custom route handlers for health and root endpoints
+async def health_handler(request):
+    """Health check endpoint that also verifies Neo4j connection."""
+    try:
+        connection_status = await validate_neo4j_connection()
+        return StarletteJSONResponse({
+            "message": "Neo4j MCP Server is running", 
+            "database": NEO4J_DATABASE,
+            "neo4j_connection": "healthy" if connection_status else "error",
+            "version": "1.0.0",
+            "status": "healthy" if connection_status else "degraded"
+        })
+    except Exception as e:
+        return StarletteJSONResponse({
+            "message": "Neo4j MCP Server is running", 
+            "database": NEO4J_DATABASE,
+            "neo4j_connection": "error",
+            "error": str(e),
+            "version": "1.0.0",
+            "status": "degraded"
+        })
+
+async def root_handler(request):
+    return StarletteJSONResponse({
+        "message": "Neo4j MCP Server is running", 
+        "version": "1.0.0"
+    })
+
+# Build a Starlette app for all endpoints
 sse_app = Starlette(
     routes=[
+        Route("/", root_handler, methods=["GET"]),
+        Route("/health", health_handler, methods=["GET"]),
         Route("/sse", handle_sse, methods=["GET"]),
         Mount("/messages/", app=transport.handle_post_message),
     ]
@@ -241,24 +272,6 @@ sse_app = Starlette(
 # Create FastAPI app and mount the SSE app
 app = FastAPI()
 app.mount("/", sse_app)
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint that also verifies Neo4j connection."""
-    try:
-        await validate_neo4j_connection()
-        return {
-            "message": "Neo4j MCP Server is running", 
-            "database": NEO4J_DATABASE,
-            "neo4j_connection": "healthy"
-        }
-    except Exception as e:
-        return {
-            "message": "Neo4j MCP Server is running", 
-            "database": NEO4J_DATABASE,
-            "neo4j_connection": "error",
-            "error": str(e)
-        }
 
 if __name__ == "__main__":
     import uvicorn

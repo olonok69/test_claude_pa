@@ -155,7 +155,7 @@ def create_mcp_connection_widget():
                         st.error(f"Error disconnecting from MCP servers: {str(e)}")
                         st.code(traceback.format_exc(), language="python")
         else:
-            st.warning("⚠️ Not connected to MCP server")
+            st.warning("⚠️ Not connected to MCP servers")
             if st.button("Connect to MCP Servers"):
                 with st.spinner("Connecting to MCP servers..."):
                     try:
