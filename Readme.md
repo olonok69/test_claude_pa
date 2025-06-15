@@ -1,44 +1,47 @@
 # AI-Powered CRM & Graph Database Integration Platform
 
-A comprehensive full-stack application that provides AI-powered interactions with Neo4j graph databases and HubSpot CRM systems through Model Context Protocol (MCP) servers. This platform enables seamless data analysis, management, and automation across your database and CRM infrastructure.
+A comprehensive full-stack application that provides AI-powered interactions with Neo4j graph databases, HubSpot CRM systems, and Yahoo Finance data through Model Context Protocol (MCP) servers. This platform enables seamless data analysis, management, and automation across your database, CRM, and financial data infrastructure.
 
 ## 🚀 System Overview
 
-This application consists of three integrated components:
+This application consists of four integrated components:
 
 1. **Streamlit Client** - AI chat interface with multi-provider support
-2. **Neo4j MCP Server** - Graph database operations via Cypher queries  
-3. **HubSpot MCP Server** - Complete CRM integration with 25+ tools
+2. **Yahoo Finance MCP Server** - Financial data analysis and technical indicators
+3. **Neo4j MCP Server** - Graph database operations via Cypher queries  
+4. **HubSpot MCP Server** - Complete CRM integration with 25+ tools
 
 ### Architecture Diagram
 
 ```
-┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
-│   Streamlit Client  │    │   Neo4j Database    │    │   HubSpot CRM       │
-│                     │    │                     │    │                     │
-│  - AI Chat UI       │    │  - Graph Data       │    │  - Contacts         │
-│  - Multi-Provider   │◄──►│  - Cypher Queries   │    │  - Companies        │
-│  - Tool Management  │    │  - Schema Discovery │    │  - Deals & Tickets  │
-│  - Conversation     │    │                     │    │                     │
-│    History          │    └─────────────────────┘    └─────────────────────┘
-│                     │              ▲                          ▲
-└─────────────────────┘              │                          │
-           ▲                         │                          │
-           │                    ┌────┴─────┐               ┌────┴─────┐
-           │                    │ Server 4 │               │ Server 5 │
-           │                    │ Neo4j    │               │ HubSpot  │
-           │                    │ MCP      │               │ MCP      │
-           │                    │ Server   │               │ Server   │
-           │                    └──────────┘               └──────────┘
-           │                         ▲                          ▲
-           │                         │                          │
-           └─────────────────────────┼──────────────────────────┘
-                                     │
-                              ┌───────────────┐
-                              │     MCP       │
-                              │  Protocol     │
-                              │ Communication │
-                              └───────────────┘
+┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
+│   Streamlit Client  │    │   Yahoo Finance     │    │   Neo4j Database    │    │   HubSpot CRM       │
+│                     │    │                     │    │                     │    │                     │
+│  - AI Chat UI       │    │  - Stock Analysis   │    │  - Graph Data       │    │  - Contacts         │
+│  - Multi-Provider   │◄──►│  - Technical        │    │  - Cypher Queries   │    │  - Companies        │
+│  - Tool Management  │    │    Indicators       │    │  - Schema Discovery │    │  - Deals & Tickets  │
+│  - Conversation     │    │  - Market Data      │    │                     │    │                     │
+│    History          │    │                     │    └─────────────────────┘    └─────────────────────┘
+│                     │    └─────────────────────┘              ▲                          ▲
+└─────────────────────┘              ▲                          │                          │
+           ▲                         │                     ┌────┴─────┐               ┌────┴─────┐
+           │                    ┌────┴─────┐               │ Server 4 │               │ Server 5 │
+           │                    │ Server 3 │               │ Neo4j    │               │ HubSpot  │
+           │                    │ Yahoo    │               │ MCP      │               │ MCP      │
+           │                    │ Finance  │               │ Server   │               │ Server   │
+           │                    │ MCP      │               └──────────┘               └──────────┘
+           │                    │ Server   │                    ▲                          ▲
+           │                    └──────────┘                    │                          │
+           │                         ▲                          │                          │
+           └─────────────────────────┼──────────────────────────┼──────────────────────────┘
+                                     │                          │
+                              ┌───────────────┐                 │
+                              │     MCP       │                 │
+                              │  Protocol     │                 │
+                              │ Communication │                 │
+                              └───────────────┘                 │
+                                      ▲                         │
+                                      └─────────────────────────┘
 ```
 
 ## ⚡ Quick Start
@@ -80,6 +83,7 @@ PRIVATE_APP_ACCESS_TOKEN=your_hubspot_private_app_token
 docker-compose up --build
 
 # Or start individual services
+docker-compose up mcpserver3  # Yahoo Finance MCP Server
 docker-compose up mcpserver4  # Neo4j MCP Server
 docker-compose up mcpserver5  # HubSpot MCP Server  
 docker-compose up hostclient  # Streamlit Client
@@ -88,6 +92,7 @@ docker-compose up hostclient  # Streamlit Client
 ### 3. Access the Application
 
 - **Main Interface**: http://localhost:8501
+- **Yahoo Finance Server Health**: http://localhost:8002/health
 - **Neo4j Server Health**: http://localhost:8003/health
 - **HubSpot Server Health**: http://localhost:8004/health
 
@@ -95,9 +100,15 @@ docker-compose up hostclient  # Streamlit Client
 
 ### **AI-Powered Interactions**
 - Multi-provider AI support (OpenAI, Azure OpenAI)
-- Natural language queries for database and CRM operations
+- Natural language queries for financial data, database operations, and CRM management
 - Intelligent tool selection and execution
 - Conversation history and context management
+
+### **Financial Data Analysis**
+- **Real-time Stock Data**: Access current market prices and trading information
+- **Technical Analysis**: Advanced indicators including MACD, Bollinger Bands, Donchian Channels
+- **Custom Scoring Systems**: Proprietary algorithms for trading signals and market analysis
+- **Portfolio Analysis**: Combined indicator scoring for investment decisions
 
 ### **Graph Database Operations**
 - **Schema Discovery**: Automatic Neo4j structure analysis
@@ -125,6 +136,15 @@ docker-compose up hostclient  # Streamlit Client
 
 ## 📚 Usage Examples
 
+### **Financial Analysis Workflows**
+
+```
+"What's the current MACD score for AAPL?"
+"Calculate the Bollinger Band position for Tesla stock"
+"Give me a combined technical analysis score for Microsoft"
+"Show me Donchian channel analysis for the S&P 500"
+```
+
 ### **Database Analysis Workflows**
 
 ```
@@ -147,14 +167,22 @@ docker-compose up hostclient  # Streamlit Client
 ### **Advanced Integration Workflows**
 
 ```
+"Analyze AAPL stock performance and create a HubSpot task to review our tech investments"
 "Compare customer data between our graph database and HubSpot CRM"
-"Find orphaned contacts in HubSpot that don't exist in our user database"
-"Create HubSpot contacts for all new users added to Neo4j this week"
+"Find high-value deals in HubSpot and cross-reference with market analysis"
+"Create a comprehensive investment report combining technical analysis and CRM data"
 ```
 
 ## 🔧 Component Documentation
 
 Each component has detailed documentation for advanced configuration and development:
+
+### [📈 Yahoo Finance MCP Server Documentation](./servers/server3/Readme.md)
+- Financial data access and analysis tools
+- Technical indicator calculations
+- Market data retrieval and processing
+- Trading signal generation
+- Docker deployment options
 
 ### [🖥️ Streamlit Client Documentation](./client/Readme.md)
 - UI configuration and customization
@@ -190,19 +218,22 @@ cd <project-directory>
 
 # Install dependencies for each component
 cd client && pip install -r requirements.txt
+cd ../servers/server3 && pip install -r requirements.txt
 cd ../servers/server4 && pip install -r requirements.txt
 cd ../servers/server5 && npm install
 ```
 
 ### **Adding Custom Tools**
 
-1. **Neo4j Tools**: Extend the Neo4j server with custom Cypher operations
-2. **HubSpot Tools**: Add new HubSpot API integrations
-3. **Client Tools**: Integrate additional services via MCP protocol
+1. **Yahoo Finance Tools**: Extend the server with custom financial analysis functions
+2. **Neo4j Tools**: Extend the Neo4j server with custom Cypher operations
+3. **HubSpot Tools**: Add new HubSpot API integrations
+4. **Client Tools**: Integrate additional services via MCP protocol
 
 ### **Configuration Management**
 
 - **Client**: Update `servers_config.json` for MCP server endpoints
+- **Yahoo Finance**: Configure data sources and analysis parameters
 - **Neo4j**: Modify connection parameters in environment variables
 - **HubSpot**: Configure API scopes and permissions in HubSpot Developer Console
 
@@ -212,21 +243,25 @@ cd ../servers/server5 && npm install
 - Secure API key management via environment variables
 - HubSpot Private App token authentication
 - Neo4j database credential protection
+- No API keys required for Yahoo Finance (public data)
 
 ### **Data Protection**
 - Input validation across all components
 - Schema validation for database operations
 - Sanitized error messages and logging
+- Financial data caching considerations
 
 ### **Network Security**
 - Containerized deployment isolation
 - Configurable port mapping
 - Health check endpoints for monitoring
+- Rate limiting for external API calls
 
 ## 📊 Monitoring & Debugging
 
 ### **Health Checks**
 - **Overall System**: Streamlit interface status indicators
+- **Yahoo Finance Server**: http://localhost:8002/health
 - **Neo4j Server**: http://localhost:8003/health
 - **HubSpot Server**: http://localhost:8004/health
 
@@ -234,11 +269,13 @@ cd ../servers/server5 && npm install
 - Tool execution history in Streamlit interface
 - Comprehensive logging across all components
 - Error tracking and validation feedback
+- Financial data validation and error handling
 
 ### **Performance Monitoring**
 - Query execution timing
 - API request/response monitoring
 - Resource usage tracking in Docker
+- Financial data update frequencies
 
 ## 🚀 Deployment Options
 
@@ -252,12 +289,14 @@ docker-compose up --build
 - Configure reverse proxy (nginx, traefik)
 - Implement proper secret management
 - Set up monitoring and alerting
+- Configure financial data refresh schedules
 
 ### **Scaling Considerations**
 - Horizontal scaling of MCP servers
 - Load balancing for high-traffic scenarios
 - Database connection pooling
 - Caching strategies for frequently accessed data
+- Financial data rate limiting and quotas
 
 ## 🐛 Troubleshooting
 
@@ -272,16 +311,25 @@ docker-compose up --build
 - Confirm API keys are correctly set in `.env`
 - Verify HubSpot Private App permissions
 - Check Neo4j database accessibility
+- Validate financial data access (no auth required)
 
 **Tool Execution Failures**
 - Review tool execution history in Streamlit
 - Check individual server health endpoints
 - Validate input parameters and data formats
+- Monitor financial data API rate limits
+
+**Financial Data Issues**
+- Check Yahoo Finance service availability
+- Verify stock symbol formatting
+- Monitor technical indicator calculations
+- Review market data freshness
 
 ### **Getting Help**
 - Review component-specific documentation
 - Check Docker logs: `docker-compose logs <service>`
 - Use health check endpoints for diagnostics
+- Monitor financial data service status
 
 ## 🤝 Contributing
 
@@ -292,15 +340,15 @@ docker-compose up --build
 4. Submit pull requests with comprehensive testing
 
 ### **Code Standards**
-- **Python**: PEP 8 compliance for client and Neo4j server
+- **Python**: PEP 8 compliance for client, Yahoo Finance, and Neo4j servers
 - **JavaScript**: ES6+ standards for HubSpot server
 - **Docker**: Multi-stage builds and security best practices
 - **Documentation**: Comprehensive README and inline comments
 
-
 ## 🔗 Additional Resources
 
 - [Model Context Protocol Documentation](https://modelcontextprotocol.io/)
+- [Yahoo Finance API Documentation](https://pypi.org/project/yfinance/)
 - [Neo4j Documentation](https://neo4j.com/docs/)
 - [HubSpot API Documentation](https://developers.hubspot.com/docs/api/overview)
 - [Streamlit Documentation](https://docs.streamlit.io/)
