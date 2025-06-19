@@ -3,13 +3,13 @@ FROM node:20-slim
 # Set working directory
 WORKDIR /app
 
-# Copy package.json
-COPY package.json ./
+# Copy package files first (for better Docker layer caching)
+COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci --only=production
 
-# Copy source code
+# Copy source code (excluding node_modules)
 COPY . .
 
 # Create logs directory
