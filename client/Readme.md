@@ -383,6 +383,204 @@ Enable debug information by:
 - Test authentication edge cases and error conditions
 
 ---
+# 🔧 SSL Setup Fix Instructions
+
+The issue you're experiencing is that the Streamlit command parameters aren't being properly passed. Here's how to fix it:
+
+## 🚀 Quick Fix Steps
+
+### 1. Create the startup script in your client directory
+
+Create `client/startup_ssl.sh`:
+```bash
+cd client
+cat > startup_ssl.sh << 'EOF'
+#!/bin/bash
+
+# Startup script for Streamlit with SSL support
+echo "🚀 CSM MCP Servers - Starting Application..."
+
+if [ "$SSL_ENABLED" = "true" ]; then
+    echo "🔒 SSL mode enabled"
+    
+    # Generate certificates if they don't exist
+    if [ ! -f "ssl/cert.pem" ] || [ ! -f "ssl/private.key" ]; then
+        echo "📝 Generating SSL certificates..."
+        mkdir -p ssl
+        
+        if [ -f "generate_ssl_certificate.sh" ]; then
+            chmod +x generate_ssl_certificate.sh
+            ./generate_ssl_certificate.sh
+        else
+            echo "❌ Certificate generation script not found"
+            echo "🔄 Falling back to HTTP mode"
+            SSL_ENABLED="false"
+        fi
+    else
+        echo "✅ SSL certificates found"
+    fi
+    
+    # Start with HTTPS if certificates exist
+    if [ "$SSL_ENABLED" = "true" ] && [ -f "ssl/cert.pem" ] && [ -f "ssl/private.key" ]; then
+        echo "🔒 Starting Streamlit with HTTPS on port 8502..."
+        echo "📱 Access URL: https://localhost:8502"
+        echo "⚠️  Browser will show security warning for self-signed certificate"
+        echo ""
+        
+        exec streamlit run app.py \
+            --server.port=8502 \
+            --server.address=0.0.0.0 \
+            --server.enableCORS=false \
+            --server.enableXsrfProtection=false \
+            --server.sslCertFile=ssl/cert.pem \
+            --server.sslKeyFile=ssl/private.key
+    fi
+fi
+
+# Default to HTTP mode
+echo "🌐 Starting Streamlit with HTTP on port 8501..."
+echo "📱 Access URL: http://localhost:8501"
+
+exec streamlit run app.py \
+    --server.port=8501 \
+    --server.address=0.0.0.0
+EOF
+
+chmod +x startup_ssl.sh
+```
+
+### 2. Create the debug script
+
+Create `client/debug_ssl.sh`:
+```bash
+cat > debug_ssl.sh << 'EOF'
+#!/bin/bash
+
+echo "🔍 SSL Debug Information"
+echo "========================"
+
+echo "📊 Environment Variables:"
+echo "SSL_ENABLED: ${SSL_ENABLED:-not set}"
+echo ""
+
+echo "📁 SSL Directory Status:"
+if [ -d "ssl" ]; then
+    echo "✅ ssl/ directory exists"
+    ls -la ssl/
+else
+    echo "❌ ssl/ directory does not exist"
+fi
+echo ""
+
+echo "📄 SSL Files Status:"
+if [ -f "ssl/cert.pem" ]; then
+    echo "✅ Certificate file exists: ssl/cert.pem"
+else
+    echo "❌ Certificate file missing: ssl/cert.pem"
+fi
+
+if [ -f "ssl/private.key" ]; then
+    echo "✅ Private key file exists: ssl/private.key"
+else
+    echo "❌ Private key file missing: ssl/private.key"
+fi
+
+if [ -f "ssl/cert.pem" ]; then
+    echo "📅 Certificate Validity:"
+    openssl x509 -in ssl/cert.pem -dates -noout
+fi
+EOF
+
+chmod +x debug_ssl.sh
+```
+
+### 3. Update your Dockerfile
+
+Replace the CMD line in `client/Dockerfile`:
+```dockerfile
+# Replace the last line with:
+CMD ["./startup_ssl.sh"]
+```
+
+### 4. Update docker-compose.yml
+
+Replace the command section for hostclient:
+```yaml
+hostclient:
+  # ... other configuration ...
+  command: ["./startup_ssl.sh"]
+```
+
+### 5. Test the fix
+
+```bash
+# Stop current containers
+docker-compose down
+
+# Rebuild with SSL enabled
+echo "SSL_ENABLED=true" >> .env
+docker-compose up --build
+
+# Check if it's working
+curl -k https://localhost:8502
+```
+
+## 🔍 Debug Steps
+
+If it's still not working, run these debug commands:
+
+### Check the container logs
+```bash
+docker-compose logs hostclient
+```
+
+### Debug inside the container
+```bash
+# Access the running container
+docker-compose exec hostclient bash
+
+# Run debug script
+./debug_ssl.sh
+
+# Check if certificates exist
+ls -la ssl/
+
+# Test certificate
+openssl x509 -in ssl/cert.pem -text -noout | head -10
+```
+
+### Manual certificate generation
+```bash
+# Inside the container or locally
+cd client
+mkdir -p ssl
+./generate_ssl_certificate.sh
+
+# Verify files were created
+ls -la ssl/
+```
+
+## 🚀 Expected Output
+
+When SSL is working correctly, you should see:
+```
+🔒 Starting Streamlit with HTTPS on port 8502...
+📱 Access URL: https://localhost:8502
+
+You can now view your Streamlit app in your browser.
+URL: https://0.0.0.0:8502
+```
+
+And you should be able to access: https://localhost:8502
+
+## 🐛 Common Issues
+
+1. **Port 8501 instead of 8502**: The startup script isn't being used
+2. **Certificate not found**: Generation script didn't run properly
+3. **Permission denied**: Script isn't executable (`chmod +x startup_ssl.sh`)
+4. **SSL parameters ignored**: Using wrong command format in docker-compose
+
+
 
 **Version**: 2.0.0  
 **Last Updated**: June 2025  

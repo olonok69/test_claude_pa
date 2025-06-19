@@ -10,6 +10,13 @@ keys/
 config.yaml
 config.yml
 
+# SSL certificates and private keys
+ssl/
+*.pem
+*.key
+*.crt
+*.csr
+
 # Python
 __pycache__/
 *.py[cod]
