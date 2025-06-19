@@ -1,0 +1,18 @@
+credentials:
+  usernames:
+    juan:
+      email: olonok@gmail.com
+      name: Juanito 
+      password: password # To be replaced with hashed password
+    giovanni_romero:
+      email: g.romero@closerstillmedia.com
+      name: Giovanni Romero
+      password: password # To be replaced with hashed password
+cookie:
+  expiry_days: 0
+  key: here_your_key # Must be string
+  name: thecokkei
+preauthorized:
+  emails:
+  - olonok@gmail.com
+  - g.romero@closerstillmedia.com
