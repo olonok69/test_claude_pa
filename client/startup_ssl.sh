@@ -2,8 +2,8 @@
 
 # Startup script for Streamlit with SSL support
 # This script handles both HTTP and HTTPS modes
-
 echo "🚀 CSM MCP Servers - Starting Application..."
+
 
 # Check if SSL is enabled
 if [ "$SSL_ENABLED" = "true" ]; then

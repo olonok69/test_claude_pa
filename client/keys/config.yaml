@@ -1,0 +1,28 @@
+credentials:
+  usernames:
+    admin:
+      email: admin@csm.com
+      name: Administrator
+      password: $2b$12$EaxG0LfXY634bAwnc/zckeaywA2MElcnh0bfDPnuhNh9u6eMwy.XC
+    juan:
+      email: olonok@gmail.com
+      name: Juan Perez
+      password: $2b$12$MNyEzqxn3w7OLa.BU40gh.huI7XiNs01Rmr7k7Qr.c7iff/tHAKEe
+    giovanni_romero:
+      email: g.romero@closerstillmedia.com
+      name: Giovanni Romero
+      password: $2b$12$AZY2k8Y5LrnGTMTQurytoOBYZgTyxMGe7mx5LyR4YdlVkFQAu9hoi
+    demo_user:
+      email: demo@example.com
+      name: Demo User
+      password: $2b$12$Io7oVlw4iTNJzGjIXUsztueZYLhYHJ9qFsJk0QqX/Gwy9mhvfqiRK
+cookie:
+  expiry_days: 30
+  key: csm_mcp_auth_key_2024_secure_random_string_change_in_production
+  name: csm_mcp_auth_cookie
+preauthorized:
+  emails:
+  - admin@csm.com
+  - olonok@gmail.com
+  - g.romero@closerstillmedia.com
+  - demo@example.com

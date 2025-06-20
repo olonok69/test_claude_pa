@@ -17,10 +17,12 @@ RUN mkdir -p keys ssl
 # Copy the application code
 COPY . .
 
-# Copy SSL-related scripts and make them executable
+# Copy SSL-related scripts and fix line endings
 COPY generate_ssl_certificate.sh startup_ssl.sh ./
-RUN chmod +x generate_ssl_certificate.sh startup_ssl.sh
+RUN sed -i 's/\r$//' startup_ssl.sh generate_ssl_certificate.sh
 
+RUN chmod +x /app/generate_ssl_certificate.sh /app/startup_ssl.sh
+RUN chmod 777 /app/startup_ssl.sh
 # Ensure proper permissions for directories
 RUN chmod 755 keys ssl
 
@@ -29,4 +31,5 @@ EXPOSE 8501
 EXPOSE 8502
 
 # Use the startup script as default command
-CMD ["./startup_ssl.sh"]
+CMD ["/app/startup_ssl.sh"]
+#ENTRYPOINT ["/bin/sh"]
