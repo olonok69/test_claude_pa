@@ -8,7 +8,7 @@
       "sse_read_timeout": 900
     },
     "Neo4j": {
-      "transport": "sse",
+      "transport": "sse", 
       "url": "http://mcpserver4:8003/sse",
       "timeout": 600,
       "headers": null,
@@ -16,7 +16,7 @@
     },
     "HubSpot": {
       "transport": "sse",
-      "url": "http://mcpserver5:8004/sse",
+      "url": "http://mcpserver5:8004/sse", 
       "timeout": 600,
       "headers": null,
       "sse_read_timeout": 900

@@ -9,6 +9,8 @@ services:
       - "8002:8002"
     env_file:
       - .env
+    networks:
+      - mcp-network
 
   mcpserver4:
     build: ./servers/server4
@@ -64,10 +66,12 @@ services:
       - ./client/keys:/app/keys
       - ./client/ssl:/app/ssl
     depends_on:
+      - mcpserver3
       - mcpserver4
       - mcpserver5
     networks:
       - mcp-network
+
 networks:
   mcp-network:
     driver: bridge

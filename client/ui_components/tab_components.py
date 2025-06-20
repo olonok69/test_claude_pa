@@ -244,7 +244,7 @@ def create_connection_tab():
         
         **🔴 Connection Failed:**
         - Ensure MCP servers are running
-        - Check if ports 8003 (Neo4j) and 8004 (HubSpot) are accessible
+        - Check if ports 8002 (Yahoo Finance), 8003 (Neo4j) and 8004 (HubSpot) are accessible
         - Verify server URLs in `servers_config.json`
         
         **🟡 Authentication Issues:**
@@ -278,30 +278,61 @@ def create_tools_tab():
     with st.container(border=True):
         st.subheader("📊 Tools Overview")
         
-        col1, col2, col3 = st.columns(3)
+        # Debug: Show first few tool names to understand naming pattern
+        if st.checkbox("🔍 Debug: Show Tool Names", value=False):
+            st.write("**Tool Names for Debugging:**")
+            for i, tool in enumerate(st.session_state.tools[:10]):  # Show first 10 tools
+                st.text(f"{i+1}. {tool.name}")
+            if len(st.session_state.tools) > 10:
+                st.text(f"... and {len(st.session_state.tools) - 10} more tools")
+        
+        # Count tools by server (comprehensive detection)
+        yahoo_tools = len([tool for tool in st.session_state.tools if 
+                          any(keyword in tool.name.lower() for keyword in 
+                              ['yahoo', 'finance', 'stock', 'market', 'price', 'ticker', 'yfinance', 
+                               'get_stock', 'analyze', 'technical', 'macd', 'bollinger', 'donchian',
+                               'fetch', 'quote', 'data', 'financial', 'trading', 'analysis'])])
+        
+        neo4j_tools = len([tool for tool in st.session_state.tools if 
+                          any(keyword in tool.name.lower() for keyword in 
+                              ['neo4j', 'cypher', 'graph', 'node', 'relationship', 'read_neo4j', 'write_neo4j', 'get_neo4j'])])
+        
+        hubspot_tools = len([tool for tool in st.session_state.tools if 
+                            any(keyword in tool.name.lower() for keyword in 
+                                ['hubspot', 'contact', 'company', 'deal', 'ticket', 'crm', 'hubspot-'])])
+        
+        other_tools = len(st.session_state.tools) - yahoo_tools - neo4j_tools - hubspot_tools
+        
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.metric("Total Tools", len(st.session_state.tools))
         
-        # Count tools by server (based on tool name prefixes)
-        neo4j_tools = len([tool for tool in st.session_state.tools if 'neo4j' in tool.name.lower()])
-        hubspot_tools = len([tool for tool in st.session_state.tools if 'hubspot' in tool.name.lower()])
-        other_tools = len(st.session_state.tools) - neo4j_tools - hubspot_tools
-        
         with col2:
-            st.metric("Neo4j Tools", neo4j_tools)
+            st.metric("📈 Yahoo Finance", yahoo_tools)
         
         with col3:
-            st.metric("HubSpot Tools", hubspot_tools)
+            st.metric("🗄️ Neo4j", neo4j_tools)
+        
+        with col4:
+            st.metric("🏢 HubSpot", hubspot_tools)
         
         if other_tools > 0:
-            st.metric("Other Tools", other_tools)
+            st.metric("🔧 Other Tools", other_tools)
 
     # Tool Categories
     st.subheader("🗂️ Tools by Category")
     
     # Create tabs for different tool categories
-    neo4j_tab, hubspot_tab, all_tab = st.tabs(["🗄️ Neo4j Tools", "🏢 HubSpot Tools", "📋 All Tools"])
+    yahoo_tab, neo4j_tab, hubspot_tab, all_tab = st.tabs([
+        "📈 Yahoo Finance Tools", 
+        "🗄️ Neo4j Tools", 
+        "🏢 HubSpot Tools", 
+        "📋 All Tools"
+    ])
+    
+    with yahoo_tab:
+        display_tools_category("yahoo_finance", "Yahoo Finance & Market Data Operations")
     
     with neo4j_tab:
         display_tools_category("neo4j", "Neo4j Database Operations")
@@ -315,10 +346,36 @@ def create_tools_tab():
 
 def display_tools_category(category_filter, category_title):
     """Display tools for a specific category."""
-    filtered_tools = [tool for tool in st.session_state.tools if category_filter in tool.name.lower()]
+    if category_filter == "yahoo_finance":
+        # More comprehensive filtering for Yahoo Finance tools
+        filtered_tools = [tool for tool in st.session_state.tools if 
+                         any(keyword in tool.name.lower() for keyword in 
+                             ['yahoo', 'finance', 'stock', 'market', 'price', 'ticker', 'yfinance', 
+                              'get_stock', 'analyze', 'technical', 'macd', 'bollinger', 'donchian',
+                              'fetch', 'quote', 'data', 'financial', 'trading', 'analysis']) or
+                         any(keyword in tool.description.lower() for keyword in 
+                             ['yahoo', 'finance', 'stock', 'market', 'financial', 'trading', 'yfinance'])]
+    elif category_filter == "neo4j":
+        filtered_tools = [tool for tool in st.session_state.tools if 
+                         any(keyword in tool.name.lower() for keyword in 
+                             ['neo4j', 'cypher', 'graph', 'node', 'relationship', 'read_neo4j', 'write_neo4j', 'get_neo4j'])]
+    elif category_filter == "hubspot":
+        filtered_tools = [tool for tool in st.session_state.tools if 
+                         any(keyword in tool.name.lower() for keyword in 
+                             ['hubspot', 'contact', 'company', 'deal', 'ticket', 'crm', 'hubspot-'])]
+    else:
+        filtered_tools = [tool for tool in st.session_state.tools if category_filter in tool.name.lower()]
     
     if not filtered_tools:
-        st.info(f"No {category_filter} tools available.")
+        st.info(f"No {category_filter.replace('_', ' ')} tools available.")
+        if category_filter == "yahoo_finance":
+            st.warning("💡 **Tip**: Check if Yahoo Finance MCP server is running on port 8002")
+            with st.expander("🔍 Debug Yahoo Finance Tools"):
+                st.write("Looking for tools with these keywords in name or description:")
+                st.code("yahoo, finance, stock, market, price, ticker, yfinance, get_stock, analyze, technical, macd, bollinger, donchian, fetch, quote, data, financial, trading, analysis")
+                st.write("**All available tool names:**")
+                for tool in st.session_state.tools:
+                    st.text(f"- {tool.name}")
         return
     
     st.markdown(f"### {category_title}")
@@ -413,10 +470,18 @@ def display_tool_details(tool):
         st.markdown("**Usage Example:**")
         st.code(f'Ask the AI: "Use the {tool.name} tool to..."', language="text")
         
-        # Tool category badge
-        if 'neo4j' in tool.name.lower():
-            st.success("🗄️ Neo4j Database Tool")
-        elif 'hubspot' in tool.name.lower():
-            st.info("🏢 HubSpot CRM Tool")
+        # Tool category badge (improved detection)
+        if (any(keyword in tool.name.lower() for keyword in 
+               ['yahoo', 'finance', 'stock', 'market', 'price', 'ticker', 'yfinance',
+                'fetch', 'quote', 'data', 'financial', 'trading', 'analysis']) or
+            any(keyword in tool.description.lower() for keyword in 
+               ['yahoo', 'finance', 'stock', 'market', 'financial', 'trading', 'yfinance'])):
+            st.success("📈 Yahoo Finance Tool")
+        elif any(keyword in tool.name.lower() for keyword in 
+                 ['neo4j', 'cypher', 'graph', 'node', 'relationship', 'read_neo4j', 'write_neo4j', 'get_neo4j']):
+            st.info("🗄️ Neo4j Database Tool")
+        elif any(keyword in tool.name.lower() for keyword in 
+                 ['hubspot', 'contact', 'company', 'deal', 'ticket', 'crm', 'hubspot-']):
+            st.warning("🏢 HubSpot CRM Tool")
         else:
-            st.warning("🔧 General Tool")
+            st.error("🔧 General Tool")
