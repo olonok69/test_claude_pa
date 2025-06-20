@@ -2,8 +2,10 @@
 
 # Startup script for Streamlit with SSL support
 # This script handles both HTTP and HTTPS modes
-echo "🚀 CSM MCP Servers - Starting Application..."
 
+echo "🚀 CSM MCP Servers - Starting Application..."
+echo "Working directory: $(pwd)"
+echo "Available files: $(ls -la)"
 
 # Check if SSL is enabled
 if [ "$SSL_ENABLED" = "true" ]; then
@@ -16,17 +18,24 @@ if [ "$SSL_ENABLED" = "true" ]; then
         # Create ssl directory
         mkdir -p ssl
         
-        # Generate certificates using the shell script
-        if [ -f "generate_ssl_certificate.sh" ]; then
+        # Try Python certificate generator first
+        if [ -f "generate_ssl_certificate.py" ]; then
+            echo "Using Python certificate generator..."
+            python generate_ssl_certificate.py
+        # Fallback to shell script
+        elif [ -f "generate_ssl_certificate.sh" ]; then
+            echo "Using shell certificate generator..."
             chmod +x generate_ssl_certificate.sh
             ./generate_ssl_certificate.sh
         else
-            echo "❌ Certificate generation script not found"
+            echo "❌ No certificate generation script found"
             echo "🔄 Falling back to HTTP mode"
             SSL_ENABLED="false"
         fi
     else
         echo "✅ SSL certificates found"
+        echo "Certificate details:"
+        ls -la ssl/
     fi
     
     # Start with HTTPS if certificates exist

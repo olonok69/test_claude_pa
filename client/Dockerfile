@@ -2,8 +2,8 @@ FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
-# Install OpenSSL for certificate generation
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# Install OpenSSL and dos2unix for certificate generation and line ending fixes
+RUN apt-get update && apt-get install -y openssl dos2unix && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .
@@ -17,12 +17,12 @@ RUN mkdir -p keys ssl
 # Copy the application code
 COPY . .
 
-# Copy SSL-related scripts and fix line endings
-COPY generate_ssl_certificate.sh startup_ssl.sh ./
-RUN sed -i 's/\r$//' startup_ssl.sh generate_ssl_certificate.sh
+# Fix line endings for all shell scripts (more comprehensive)
+RUN find . -name "*.sh" -type f -exec dos2unix {} \;
 
-RUN chmod +x /app/generate_ssl_certificate.sh /app/startup_ssl.sh
-RUN chmod 777 /app/startup_ssl.sh
+# Make all shell scripts executable
+RUN find . -name "*.sh" -type f -exec chmod +x {} \;
+
 # Ensure proper permissions for directories
 RUN chmod 755 keys ssl
 
@@ -32,4 +32,3 @@ EXPOSE 8502
 
 # Use the startup script as default command
 CMD ["/app/startup_ssl.sh"]
-#ENTRYPOINT ["/bin/sh"]
