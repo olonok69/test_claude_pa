@@ -1,0 +1,80 @@
+steps:
+  - name: "Load Data"
+    active: false
+    module: "src.storage"
+    function: "download_new_data"
+    parameters:
+      root_dir: "null"
+      config: "null"
+      container_name: "landing"
+      data_dir: "csm_data"
+      storage_account_name: "strategicaistuksdev01"
+
+  - name: "Preprocess Data"
+    active: true
+    module: "src.create_dataframes"
+    function: "create_dataframe"
+    parameters:
+      root_dir: "null"
+      config: "null"
+      create_dataframe: "no"
+      post_event_process: "yes"
+      include_previous_scan_data: "no"
+
+  - name: "Inference Visitors"
+    active: true
+    module: "src.inference_visitors"
+    function: "classify_visitors_sequencial"
+    parameters:
+      root_dir: "null"
+      config: "null"
+      num_samples: 100000000
+      create_files: "no"
+      model: "llama3.1:latest"
+      temperature: 0.5
+      top_p: 0.9
+      top_k: 30
+      repetition_penalty: 1.1
+      do_sample: true
+      num_ctx: 16184
+      format: "json"
+      base_url: ["http://localhost:11434"]
+      include_examples: true
+      timestamp_str: "2022-02-22T12:00:00"
+      post_event_process: "no"
+      include_previous_scan_data: "no"
+  
+  - name: "Inference Visitors Batch"
+    active: false
+    module: "src.inference_visitors_batch"
+    function: "classify_visitors_sequencial_batch"
+    parameters:
+      root_dir: "null"
+      config: "null"
+      num_samples: 100000000
+      create_files: "no"
+      model: "gpt-4o-mini-2"
+      temperature: 0.5
+      top_p: 0.9
+      top_k: 30
+      repetition_penalty: 1.1
+      do_sample: true
+      num_ctx: 16184
+      format: "json"
+      include_examples: true
+      timestamp_str: "2022-02-22T12:00:00"
+      max_chunk_size: 190
+      post_event_process: "no"
+      include_previous_scan_data: "no"
+
+  - name: "Transform Output"
+    active: true
+    module: "src.transform"
+    function: "transform_inference_file"
+    parameters:
+      root_dir: "null"
+      config: "null"
+      model: "llama3.1:latest"
+      timestamp_str: "2022-02-22T12:00:00"
+      post_event_process: "no"
+      include_previous_scan_data: "no"

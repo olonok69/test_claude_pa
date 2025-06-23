@@ -1,0 +1,12 @@
+matplotlib 
+onnx 
+azure-core
+azure-ai-ml 
+azure-identity 
+datasets 
+azure-cli 
+mlflow
+numpy
+pandas
+python-dotenv
+azureml-core
