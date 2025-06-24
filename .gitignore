@@ -1,0 +1,6 @@
+data
+.env
+csm_data/
+logs/
+__pycache__/
+login/

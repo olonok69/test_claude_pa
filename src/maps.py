@@ -1,4 +1,4 @@
-from IPython import embed
+# -*- coding: utf-8 -*-
 import logging
 
 

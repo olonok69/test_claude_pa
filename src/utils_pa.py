@@ -1,8 +1,6 @@
 import pandas as pd
 import json
-from pandas import json_normalize
 import warnings
-from typing import List
 from pandas.errors import SettingWithCopyWarning
 from datetime import datetime
 import string

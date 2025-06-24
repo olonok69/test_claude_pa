@@ -1,8 +1,7 @@
 from neo4j import GraphDatabase
 import csv
-import pandas as pd
 import logging
-import os
+
 
 
 def load_csv_to_neo4j(

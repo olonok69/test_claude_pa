@@ -4,8 +4,6 @@ import os
 from pathlib import Path
 import json
 from dotenv import dotenv_values
-from google.oauth2 import service_account
-import vertexai
 from datetime import datetime
 from src.maintenance import (
     selected_modifica,
@@ -17,7 +15,7 @@ from src.utils import print_stack
 from src.maps import config as conf, init_session_num, reset_session_num
 from src.conf import *
 from src.classes import LLama_PromptTemplate
-from src.work_gemini import create_llm, inference_llama, inference_gpt_azure_online
+from src.work_llms import create_llm, inference_llama, inference_gpt_azure_online
 
 # Read all Dataframe need in this page
 # where I am
@@ -199,26 +197,7 @@ if __name__ == "__main__":
         placeholder_modifica = st.empty()
         with placeholder_modifica.container():
             config = dotenv_values(os.path.join(PROJECT_DIR, "keys", ".env"))
-            with open(
-                os.path.join(
-                    PROJECT_DIR, "keys", "complete-tube-421007-208a4862c992.json"
-                )
-            ) as source:
-                info = json.load(source)
-            # Initialize vertex ai
-            vertex_credentials = service_account.Credentials.from_service_account_info(
-                info
-            )
-            vertexai.init(
-                project=config["PROJECT"],
-                location=config["REGION"],
-                credentials=vertex_credentials,
-            )
-            # key access gemini
-            if "GEMINI_API_KEY" not in os.environ:
-                os.environ["GEMINI_API_KEY"] = config.get("GEMINI-API-KEY")
-            if "GOOGLE_API_KEY" not in os.environ:
-                os.environ["GOOGLE_API_KEY"] = config.get("GEMINI-API-KEY")
+
 
             if "examples_12" not in st.session_state:
                 # OPEN FILES

@@ -1,9 +1,8 @@
-from typing import List, Any, Dict, Literal, Tuple
+from typing import  Dict, Literal, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class Labels_Nomenclature(BaseModel):

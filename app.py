@@ -5,10 +5,9 @@ from streamlit_authenticator import Authenticate
 from yaml.loader import SafeLoader
 import logging
 import shutil
-import json
 from dotenv import dotenv_values
 from pathlib import Path
-from detectaicore import (
+from src.logger_util import (
     set_up_logging,
 )
 

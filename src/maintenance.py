@@ -1,10 +1,8 @@
-import uuid
-import pandas as pd
+
 import streamlit as st
-from langchain_core.documents import Document
-from typing import Dict
+
 from src.conf import nomenclature
-import logging
+
 
 
 def selected_modifica(st, num: int = 10, reset_box: bool = True):
