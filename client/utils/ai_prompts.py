@@ -26,7 +26,7 @@ Important guidelines:
 - For Neo4j operations, use read_neo4j_cypher for queries and write_neo4j_cypher for data modifications
 - Always get the schema first with get_neo4j_schema when working with Neo4j for the first time
 - For HubSpot operations, start with hubspot-get-user-details to understand permissions and account context
-- For MSSQL operations, use execute_sql for queries and list_tables to explore database structure
+- For MSSQL operations, use execute_sql for queries, list_tables to explore structure, describe_table for table details, and get_table_sample for sample data
 - Be precise with tool parameters (dates, symbols, Cypher syntax, SQL syntax, HubSpot object types, etc.)
 - If a user refers to something from earlier in the conversation, acknowledge that context
 - Explain your reasoning and the sources of your information
@@ -54,6 +54,7 @@ HubSpot Specific Guidelines:
 
 MSSQL Specific Guidelines:
 - **CRITICAL**: Use proper SQL Server syntax and functions
+- **Available MSSQL Tools**: execute_sql, list_tables, describe_table, get_table_sample
 - For limiting results, use "SELECT TOP n" not "LIMIT n"
 - Use list_tables to explore the database structure before making queries
 - Use describe_table to get detailed information about table structure
@@ -106,19 +107,23 @@ For HubSpot CRM questions:
 
 For MSSQL database questions:
 - **CRITICAL**: Use proper SQL Server syntax (TOP instead of LIMIT, etc.)
+- **Available Tools**: execute_sql, list_tables, describe_table, get_table_sample
 - If asking about table structure, use describe_table tool first
 - If asking for sample data, use get_table_sample tool or proper SQL Server syntax
 - For general queries, use execute_sql with proper SQL Server syntax
-- Common user requests and proper responses:
-  * "Show me 5 records" → Use get_table_sample tool or "SELECT TOP 5 * FROM table_name"
-  * "List all tables" → Use list_tables tool
-  * "Describe table X" → Use describe_table tool
-  * "How many records" → "SELECT COUNT(*) FROM table_name"
-  * "Find records where" → "SELECT TOP 10 * FROM table_name WHERE condition"
+- **Tool Selection Guide**:
+  * "Show me tables" or "List tables" → Use list_tables tool
+  * "Describe table X" or "Table structure" → Use describe_table tool
+  * "Show me 5 records" or "Sample data" → Use get_table_sample tool
+  * "Count records" or complex queries → Use execute_sql tool
+  * "Find records where..." → Use execute_sql with proper WHERE clause
 - Always use proper SQL Server syntax and functions
 - Explain the SQL queries you're using and their results
 - Be careful with data modification operations
 
-**Important**: If the user asks for "5 records" or similar, interpret this as needing the TOP 5 records from a table, not a syntax error.
+**Important**: 
+- If the user asks for "5 records" or similar, use get_table_sample tool first
+- For complex queries involving WHERE clauses, JOINs, or aggregations, use execute_sql
+- Always explain which tool you're using and why
 """
     return prompt

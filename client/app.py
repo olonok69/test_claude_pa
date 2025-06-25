@@ -116,8 +116,8 @@ def show_authentication_required_message():
         st.markdown("""
         ### Welcome to CSM MCP Servers
         
-        This application provides AI-powered interactions with Neo4j graph databases 
-        and HubSpot CRM systems through Model Context Protocol (MCP) servers.
+        This application provides AI-powered interactions with **Neo4j graph databases**, 
+        **HubSpot CRM systems**, and **MSSQL databases** through Model Context Protocol (MCP) servers.
         
         **Please authenticate using the sidebar to access the application.**
         
@@ -126,10 +126,34 @@ def show_authentication_required_message():
         #### 🚀 Features Available After Login:
         
         - **💬 AI Chat Interface**: Interactive conversations with AI agents
-        - **🗄️ Neo4j Database Operations**: Query and manage graph data
-        - **🏢 HubSpot CRM Integration**: Access contacts, companies, deals, and more
-        - **🔧 Tool Management**: Execute specialized MCP tools
-        - **📊 Real-time Analytics**: Monitor and analyze your data
+        - **🗄️ Neo4j Database Operations**: Query and manage graph data with Cypher
+        - **🏢 HubSpot CRM Integration**: Access contacts, companies, deals, tickets, and more
+        - **🗃️ MSSQL Database Operations**: Execute SQL queries, explore tables, and manage data
+        - **🔧 Tool Management**: Execute specialized MCP tools across all platforms
+        - **📊 Real-time Analytics**: Monitor and analyze your data across databases
+        - **🔄 Cross-Platform Integration**: Compare and sync data between systems
+        
+        ---
+        
+        #### 🗄️ Database Capabilities:
+        
+        **Neo4j Graph Database:**
+        - Schema discovery and visualization
+        - Complex relationship queries with Cypher
+        - Graph data creation and modification
+        - Performance analytics and insights
+        
+        **HubSpot CRM System:**
+        - Contact and company management
+        - Deal tracking and pipeline analysis
+        - Ticket management and support workflows
+        - Custom properties and associations
+        
+        **MSSQL Database:**
+        - Table exploration and schema analysis
+        - SQL query execution with proper syntax
+        - Sample data retrieval and analysis
+        - Data modification and management operations
         
         ---
         
@@ -140,8 +164,35 @@ def show_authentication_required_message():
         If you don't have access credentials, please contact your administrator.
         """)
         
-        # Add some visual elements
-        st.info("👈 Use the sidebar to authenticate and start using the application")
+        # Add visual elements with updated info
+        st.info("👈 Use the sidebar to authenticate and start using the multi-database platform")
+        
+        # Add quick stats about the platform
+        with st.container():
+            st.markdown("#### 📈 Platform Overview")
+            col_a, col_b, col_c = st.columns(3)
+            
+            with col_a:
+                st.metric(
+                    label="🗄️ Database Types",
+                    value="3",
+                    help="Neo4j, HubSpot CRM, MSSQL"
+                )
+            
+            with col_b:
+                st.metric(
+                    label="🧰 Tool Categories", 
+                    value="25+",
+                    help="Graph, CRM, SQL operations"
+                )
+            
+            with col_c:
+                st.metric(
+                    label="🔌 MCP Servers",
+                    value="3",
+                    help="Specialized protocol servers"
+                )
+
 
 
 def main():

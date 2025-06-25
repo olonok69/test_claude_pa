@@ -261,6 +261,17 @@ Use the credentials generated in step 2 (default: admin/very_Secure_p@ssword_123
 "Generate a link to view the Microsoft account in HubSpot"
 ```
 
+### **MSSQL Database Workflows**
+
+```
+"Show me all tables in the database"
+"Describe the structure of the customers table"
+"Get 5 sample records from the orders table"
+"Find all customers with orders over $1000"
+"Count the total number of products in inventory"
+"Show me the top 10 best-selling products"
+```
+
 ### **Cross-Platform Integration Workflows**
 
 ```
@@ -424,7 +435,7 @@ docker-compose up --build
 
 ---
 
-**Version**: 2.2.0  
+**Version**: 3.0.0  
 **Last Updated**: June 2025  
-**Compatibility**: Docker 20+, Python 3.11+, Node.js 18+, Neo4j 5.0+, MSSQL Server 2019+  
+**Compatibility**: Docker 20+, Python 3.11+, Node.js 18+, Neo4j 5.0+, MSSQL Server 2019+, HubSpot API v3  
 **Security**: Streamlit Authenticator 0.3.2, bcrypt password hashing, SSL/HTTPS support, ODBC 18+
