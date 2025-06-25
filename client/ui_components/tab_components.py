@@ -128,10 +128,23 @@ def create_configuration_tab():
         
         **For MCP Servers:**
         ```
+        # Neo4j Configuration
         NEO4J_URI=bolt://localhost:7687
         NEO4J_USERNAME=neo4j
         NEO4J_PASSWORD=your_password
+        NEO4J_DATABASE=neo4j
+        
+        # HubSpot Configuration
         PRIVATE_APP_ACCESS_TOKEN=your_hubspot_token
+        
+        # MSSQL Configuration
+        MSSQL_HOST=localhost
+        MSSQL_USER=your_username
+        MSSQL_PASSWORD=your_password
+        MSSQL_DATABASE=your_database
+        MSSQL_DRIVER=ODBC Driver 18 for SQL Server
+        TrustServerCertificate=yes
+        Trusted_Connection=no
         ```
         """)
 
@@ -150,11 +163,22 @@ def create_connection_tab():
             st.info(f"🔧 Found {len(st.session_state.tools)} available tools")
             
             # Connection details
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Connected Servers", len(st.session_state.servers))
             with col2:
                 st.metric("Available Tools", len(st.session_state.tools))
+            with col3:
+                # Count tools by server type
+                neo4j_tools = len([tool for tool in st.session_state.tools if 'neo4j' in tool.name.lower()])
+                hubspot_tools = len([tool for tool in st.session_state.tools if 'hubspot' in tool.name.lower()])
+                mssql_tools = len([tool for tool in st.session_state.tools if any(keyword in tool.name.lower() for keyword in ['sql', 'mssql', 'execute_sql', 'list_tables'])])
+                other_tools = len(st.session_state.tools) - neo4j_tools - hubspot_tools - mssql_tools
+                
+                if mssql_tools > 0:
+                    st.metric("MSSQL Tools", mssql_tools)
+                elif other_tools > 0:
+                    st.metric("Other Tools", other_tools)
                 
         else:
             st.warning("🟡 Not connected to MCP servers")
@@ -174,6 +198,17 @@ def create_connection_tab():
                     st.markdown(f"**Transport:** {config['transport']}")
                     st.markdown(f"**Timeout:** {config['timeout']}s")
                     st.markdown(f"**SSE Read Timeout:** {config['sse_read_timeout']}s")
+                    
+                    # Add server-specific info
+                    if name == "Neo4j":
+                        st.markdown("**Type:** Graph Database")
+                        st.markdown("**Operations:** Cypher queries, schema discovery")
+                    elif name == "HubSpot":
+                        st.markdown("**Type:** CRM System")
+                        st.markdown("**Operations:** Contacts, companies, deals, tickets")
+                    elif name == "MSSQL":
+                        st.markdown("**Type:** SQL Database")
+                        st.markdown("**Operations:** SQL queries, table operations")
                 
                 with col2:
                     if st.button(f"🗑️ Remove", key=f"remove_{name}"):
@@ -244,12 +279,13 @@ def create_connection_tab():
         
         **🔴 Connection Failed:**
         - Ensure MCP servers are running
-        - Check if ports 8003 (Neo4j) and 8004 (HubSpot) are accessible
+        - Check if ports 8003 (Neo4j), 8004 (HubSpot), and 8008 (MSSQL) are accessible
         - Verify server URLs in `servers_config.json`
         
         **🟡 Authentication Issues:**
         - Check NEO4J_PASSWORD in .env file
         - Verify PRIVATE_APP_ACCESS_TOKEN for HubSpot
+        - Check MSSQL_USER and MSSQL_PASSWORD for MSSQL server
         - Ensure tokens have required permissions
         
         **🟠 Timeout Issues:**
@@ -261,6 +297,12 @@ def create_connection_tab():
         - Restart MCP servers
         - Check server logs for errors
         - Verify server implementation
+        
+        **🟣 MSSQL Specific Issues:**
+        - Verify ODBC driver is installed
+        - Check SQL Server connectivity
+        - Ensure TrustServerCertificate is set correctly
+        - Verify database permissions
         """)
 
 
@@ -278,21 +320,25 @@ def create_tools_tab():
     with st.container(border=True):
         st.subheader("📊 Tools Overview")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.metric("Total Tools", len(st.session_state.tools))
         
-        # Count tools by server (based on tool name prefixes)
+        # Count tools by server (based on tool name prefixes/keywords)
         neo4j_tools = len([tool for tool in st.session_state.tools if 'neo4j' in tool.name.lower()])
         hubspot_tools = len([tool for tool in st.session_state.tools if 'hubspot' in tool.name.lower()])
-        other_tools = len(st.session_state.tools) - neo4j_tools - hubspot_tools
+        mssql_tools = len([tool for tool in st.session_state.tools if any(keyword in tool.name.lower() for keyword in ['sql', 'mssql', 'execute_sql', 'list_tables'])])
+        other_tools = len(st.session_state.tools) - neo4j_tools - hubspot_tools - mssql_tools
         
         with col2:
             st.metric("Neo4j Tools", neo4j_tools)
         
         with col3:
             st.metric("HubSpot Tools", hubspot_tools)
+            
+        with col4:
+            st.metric("MSSQL Tools", mssql_tools)
         
         if other_tools > 0:
             st.metric("Other Tools", other_tools)
@@ -301,13 +347,16 @@ def create_tools_tab():
     st.subheader("🗂️ Tools by Category")
     
     # Create tabs for different tool categories
-    neo4j_tab, hubspot_tab, all_tab = st.tabs(["🗄️ Neo4j Tools", "🏢 HubSpot Tools", "📋 All Tools"])
+    neo4j_tab, hubspot_tab, mssql_tab, all_tab = st.tabs(["🗄️ Neo4j Tools", "🏢 HubSpot Tools", "🗃️ MSSQL Tools", "📋 All Tools"])
     
     with neo4j_tab:
         display_tools_category("neo4j", "Neo4j Database Operations")
     
     with hubspot_tab:
         display_tools_category("hubspot", "HubSpot CRM Operations")
+        
+    with mssql_tab:
+        display_tools_category_mssql("MSSQL Database Operations")
     
     with all_tab:
         display_all_tools()
@@ -330,6 +379,37 @@ def display_tools_category(category_filter, category_title):
         options=[tool.name for tool in filtered_tools],
         index=0,
         key=f"{category_filter}_tool_selector"
+    )
+    
+    if selected_tool_name:
+        selected_tool = next(
+            (tool for tool in filtered_tools if tool.name == selected_tool_name),
+            None
+        )
+        
+        if selected_tool:
+            display_tool_details(selected_tool)
+
+
+def display_tools_category_mssql(category_title):
+    """Display MSSQL tools specifically."""
+    # Filter for MSSQL tools by looking for SQL-related keywords
+    mssql_keywords = ['sql', 'mssql', 'execute_sql', 'list_tables']
+    filtered_tools = [tool for tool in st.session_state.tools if any(keyword in tool.name.lower() for keyword in mssql_keywords)]
+    
+    if not filtered_tools:
+        st.info("No MSSQL tools available.")
+        return
+    
+    st.markdown(f"### {category_title}")
+    st.write(f"Found **{len(filtered_tools)}** tools in this category.")
+    
+    # Tool selector
+    selected_tool_name = st.selectbox(
+        "Select a Tool",
+        options=[tool.name for tool in filtered_tools],
+        index=0,
+        key="mssql_tool_selector"
     )
     
     if selected_tool_name:
@@ -418,5 +498,7 @@ def display_tool_details(tool):
             st.success("🗄️ Neo4j Database Tool")
         elif 'hubspot' in tool.name.lower():
             st.info("🏢 HubSpot CRM Tool")
+        elif any(keyword in tool.name.lower() for keyword in ['sql', 'mssql', 'execute_sql', 'list_tables']):
+            st.warning("🗃️ MSSQL Database Tool")
         else:
-            st.warning("🔧 General Tool")
+            st.secondary("🔧 General Tool")

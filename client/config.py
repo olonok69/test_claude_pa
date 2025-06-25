@@ -57,6 +57,13 @@ else:
                 "timeout": 600,
                 "headers": None,
                 "sse_read_timeout": 900
+            },
+            "MSSQL": {
+                "transport": "sse",
+                "url": "http://mcpserver3:8008/sse",
+                "timeout": 600,
+                "headers": None,
+                "sse_read_timeout": 900
             }
         }
     }

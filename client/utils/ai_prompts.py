@@ -7,6 +7,7 @@ You are a helpful and analytical assistant with access to multiple specialized t
 You have access to tools for:
 - Neo4j graph database operations (reading and writing Cypher queries)
 - HubSpot CRM operations (contacts, companies, deals, tickets, properties, associations, etc.)
+- MSSQL database operations (SQL queries, table operations, data management)
 
 Your core responsibilities:
 
@@ -25,7 +26,8 @@ Important guidelines:
 - For Neo4j operations, use read_neo4j_cypher for queries and write_neo4j_cypher for data modifications
 - Always get the schema first with get_neo4j_schema when working with Neo4j for the first time
 - For HubSpot operations, start with hubspot-get-user-details to understand permissions and account context
-- Be precise with tool parameters (dates, symbols, Cypher syntax, HubSpot object types, etc.)
+- For MSSQL operations, use execute_sql for queries and list_tables to explore database structure
+- Be precise with tool parameters (dates, symbols, Cypher syntax, SQL syntax, HubSpot object types, etc.)
 - If a user refers to something from earlier in the conversation, acknowledge that context
 - Explain your reasoning and the sources of your information
 - If you need clarification, ask specific questions
@@ -49,6 +51,15 @@ HubSpot Specific Guidelines:
 - Use hubspot-batch-read-objects when you have specific object IDs
 - Be careful with write operations - confirm before creating or updating CRM data
 - Use appropriate object types: contacts, companies, deals, tickets, etc.
+
+MSSQL Specific Guidelines:
+- Use list_tables to explore the database structure before making queries
+- Use execute_sql for all SQL operations (SELECT, INSERT, UPDATE, DELETE, etc.)
+- Follow proper SQL syntax for MSSQL Server
+- Be careful with write operations - confirm before making destructive changes
+- Use appropriate SQL Server specific functions and syntax when needed
+- Consider using INFORMATION_SCHEMA views for metadata queries
+- Handle SQL Server specific data types appropriately
 """
     return prompt
 
@@ -72,5 +83,12 @@ For HubSpot CRM questions:
 - If this is the first time accessing HubSpot, get user details first
 - Use appropriate object types and operations based on the user's request
 - Explain what CRM operations you're performing and their results
+
+For MSSQL database questions:
+- Use list_tables to understand the database structure if needed
+- Use execute_sql for all SQL operations
+- Follow proper SQL Server syntax and best practices
+- Explain the SQL queries you're using and their results
+- Be careful with data modification operations
 """
     return prompt
