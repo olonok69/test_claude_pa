@@ -53,13 +53,33 @@ HubSpot Specific Guidelines:
 - Use appropriate object types: contacts, companies, deals, tickets, etc.
 
 MSSQL Specific Guidelines:
+- **CRITICAL**: Use proper SQL Server syntax and functions
+- For limiting results, use "SELECT TOP n" not "LIMIT n"
 - Use list_tables to explore the database structure before making queries
+- Use describe_table to get detailed information about table structure
+- Use get_table_sample to get sample records from a table
 - Use execute_sql for all SQL operations (SELECT, INSERT, UPDATE, DELETE, etc.)
-- Follow proper SQL syntax for MSSQL Server
+- Follow proper SQL Server syntax:
+  - Use [brackets] around table/column names if they contain spaces or special characters
+  - Use TOP instead of LIMIT: "SELECT TOP 5 * FROM table_name"
+  - Use proper date formats and functions
+  - Use GETDATE() for current date/time
+  - Use LEN() instead of LENGTH()
+  - Use CHARINDEX() instead of LOCATE()
 - Be careful with write operations - confirm before making destructive changes
 - Use appropriate SQL Server specific functions and syntax when needed
 - Consider using INFORMATION_SCHEMA views for metadata queries
-- Handle SQL Server specific data types appropriately
+- Handle SQL Server specific data types appropriately (datetime, varchar, nvarchar, etc.)
+- For text search, use LIKE operator with % wildcards
+- For case-insensitive comparisons, consider using UPPER() or LOWER()
+
+**MSSQL Query Examples:**
+- List tables: Use list_tables tool
+- Get table structure: Use describe_table tool  
+- Sample data: Use get_table_sample tool or "SELECT TOP 5 * FROM table_name"
+- Count records: "SELECT COUNT(*) FROM table_name"
+- Filter data: "SELECT TOP 10 * FROM table_name WHERE column_name = 'value'"
+- Order results: "SELECT TOP 10 * FROM table_name ORDER BY column_name DESC"
 """
     return prompt
 
@@ -85,10 +105,20 @@ For HubSpot CRM questions:
 - Explain what CRM operations you're performing and their results
 
 For MSSQL database questions:
-- Use list_tables to understand the database structure if needed
-- Use execute_sql for all SQL operations
-- Follow proper SQL Server syntax and best practices
+- **CRITICAL**: Use proper SQL Server syntax (TOP instead of LIMIT, etc.)
+- If asking about table structure, use describe_table tool first
+- If asking for sample data, use get_table_sample tool or proper SQL Server syntax
+- For general queries, use execute_sql with proper SQL Server syntax
+- Common user requests and proper responses:
+  * "Show me 5 records" → Use get_table_sample tool or "SELECT TOP 5 * FROM table_name"
+  * "List all tables" → Use list_tables tool
+  * "Describe table X" → Use describe_table tool
+  * "How many records" → "SELECT COUNT(*) FROM table_name"
+  * "Find records where" → "SELECT TOP 10 * FROM table_name WHERE condition"
+- Always use proper SQL Server syntax and functions
 - Explain the SQL queries you're using and their results
 - Be careful with data modification operations
+
+**Important**: If the user asks for "5 records" or similar, interpret this as needing the TOP 5 records from a table, not a syntax error.
 """
     return prompt
