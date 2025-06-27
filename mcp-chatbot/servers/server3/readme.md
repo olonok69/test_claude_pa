@@ -1,6 +1,6 @@
 # MSSQL MCP Server
 
-A Model Context Protocol (MCP) server that provides AI-powered interactions with Microsoft SQL Server databases. This server enables natural language queries, table exploration, and data management operations through a secure, containerized interface.
+A Model Context Protocol (MCP) server that provides AI-powered interactions with Microsoft SQL Server databases. This server enables natural language queries, table exploration, and data management operations through a secure, containerized interface as part of the CSM MCP Servers platform.
 
 ## 🚀 Features
 
@@ -24,18 +24,25 @@ A Model Context Protocol (MCP) server that provides AI-powered interactions with
 - **Input Validation**: SQL injection protection
 - **Certificate Trust**: Configurable SSL certificate handling
 
+### **Integration with CSM Platform**
+- **MCP Protocol**: Seamless integration with Streamlit client
+- **Multi-Database Environment**: Works alongside Neo4j and HubSpot servers
+- **Cross-Platform Queries**: Compare and analyze data across database systems
+- **Unified AI Interface**: Natural language queries through the main application
+
 ## 📋 Prerequisites
 
 - Docker and Docker Compose
 - Microsoft SQL Server instance
 - ODBC Driver 18 for SQL Server
 - Network access to SQL Server instance
+- Part of the CSM MCP Servers platform
 
 ## 🛠️ Installation & Setup
 
 ### 1. Environment Configuration
 
-Create a `.env` file in the server directory:
+As part of the CSM MCP Servers platform, configure your `.env` file in the project root:
 
 ```env
 # MSSQL Database Configuration
@@ -46,23 +53,32 @@ MSSQL_DATABASE=your-database-name
 MSSQL_DRIVER=ODBC Driver 18 for SQL Server
 TrustServerCertificate=yes
 Trusted_Connection=no
+
+# Other platform configurations
+OPENAI_API_KEY=your_openai_api_key
+NEO4J_URI=bolt://host.docker.internal:7687
+PRIVATE_APP_ACCESS_TOKEN=your_hubspot_token
 ```
 
-### 2. Docker Deployment
+### 2. Platform Deployment
 
 ```bash
-# Build and run the server
-docker build -t mssql-mcp-server .
-docker run -p 8008:8008 --env-file .env mssql-mcp-server
+# Build and run all CSM MCP servers
+docker-compose up --build
 
-# Or using docker-compose
+# Or run just the MSSQL server
 docker-compose up mcpserver3
+
+# Access the main application
+# HTTP: http://localhost:8501
+# HTTPS: https://localhost:8502 (if SSL enabled)
 ```
 
 ### 3. Local Development
 
 ```bash
 # Install dependencies
+cd servers/server3
 pip install -r requirements.txt
 
 # Run the server
@@ -284,6 +300,34 @@ SELECT * FROM Customers WHERE CustomerName LIKE '%Corp%'
 - User-based access control through SQL Server roles
 - Connection pooling with secure credential management
 
+## 💬 Usage Through CSM Platform
+
+### **Natural Language Queries**
+Access the MSSQL server through the main CSM application using natural language:
+
+```
+"Show me all tables in the database"
+"Describe the structure of the customers table"
+"Get 5 sample records from the orders table"
+"Find all customers with orders over $1000"
+"Count the total number of products in inventory"
+"Show me the top 10 best-selling products"
+```
+
+### **Cross-Database Integration**
+Combine MSSQL queries with other data sources:
+
+```
+"Compare customer data between Neo4j graph database and MSSQL tables"
+"Find customers in HubSpot that don't exist in our SQL database"
+"Show me sales data from MSSQL and corresponding deal information from HubSpot"
+```
+
+### **Authentication**
+- Log into the main CSM application using provided credentials
+- All database operations are performed through the authenticated session
+- Full audit trail of all SQL operations
+
 ## 🐛 Troubleshooting
 
 ### **Common Connection Issues**
@@ -435,19 +479,15 @@ Add support for:
 
 ## 📚 Examples
 
-### **Basic Usage**
-```python
-# List all available tables
-await list_tables()
+### **Basic Usage Through CSM Platform**
+Access through the main application at http://localhost:8501 or https://localhost:8502:
 
-# Get table structure
-await describe_table("Customers")
-
-# Get sample data
-await get_table_sample("Orders", 10)
-
-# Execute custom query
-await execute_sql("SELECT COUNT(*) FROM Customers WHERE City = 'New York'")
+```
+# Natural language queries
+"List all available tables"
+"Get table structure for Customers"
+"Show me sample data from Orders with limit 10"
+"Execute a query to find top customers by revenue"
 ```
 
 ### **Advanced Queries**
@@ -469,9 +509,20 @@ SET LastContactDate = GETDATE()
 WHERE CustomerID = 123
 ```
 
+## 🤝 Integration with CSM Platform
+
+This MSSQL MCP Server is designed to work seamlessly with:
+
+- **Streamlit Client**: Main AI chat interface with authentication
+- **Neo4j MCP Server**: Graph database operations and schema discovery
+- **HubSpot MCP Server**: Complete CRM integration with 25+ tools
+
+All servers communicate through the Model Context Protocol (MCP) and are accessible through a unified AI-powered interface.
+
 ---
 
 **Version**: 1.0.0  
 **Last Updated**: June 2025  
 **Compatibility**: MSSQL Server 2019+, ODBC Driver 18+, Python 3.11+  
+**Platform**: CSM MCP Servers v3.0.0  
 **License**: MIT
