@@ -1,178 +1,380 @@
-# AI & ML Repository - Comprehensive Guide
+# Strategic AI CSM Applications
 
-A comprehensive collection of AI/ML projects showcasing cutting-edge implementations across computer vision, natural language processing, financial analysis, distributed systems, and modern AI integration patterns.
+A comprehensive suite of AI-powered applications for data processing, visitor classification, and CRM integration designed for event management and customer analytics.
 
-## 📋 Table of Contents
+## 🏗️ Project Overview
 
-| Category | Project | Description | Documentation |
-|----------|---------|-------------|---------------|
-| **Medical AI** | DICOM Anonymization | DICOM medical image anonymization using Microsoft Presidio | [📖 English](DICOM_FHIR/Readme_en.md) |
-| **Google AI** | Video Summarizer | AI-powered video transcription and summarization with Gemini Pro | [📖 English](Google_AI/Video_summarizer/Readme.md) |
-| **Google AI** | Content Caching | Google AI Context Caching optimization with Gemini API | [📖 English](Google_AI/content_caching/Readme_en.md) |
-| **Distributed OCR** | NATS OCR System | Distributed OCR system with NATS messaging and RapidOCR | [📖 English](Nats/Readme_en.md) |
-| **Financial RAG** | Financial Analysis | RAG system for fundamental financial analysis with real-time data | [📖 English](RAG/Intro/Readme.md) |
-| **Trading Strategy** | Bollinger RSI Strategy | Trading strategy combining Bollinger Bands and RSI crossover | [📖 English](RAG/bollinger%20z-score%20rsi%20startegy/Readme.md) |
-| **Trading Analysis** | Bollinger Z-Score | Financial trading analysis with Bollinger Bands and Z-Score | [📖 English](RAG/bollinger%20z-score/Readme.md) |
-| **Trading Strategy** | Bollinger Fibonacci | Advanced strategy combining Bollinger Bands and Fibonacci retracements | [📖 English](RAG/bollinger-fibonacci_retracements/Readme.md) |
-| **Trading Strategy** | Connors RSI Strategy | Advanced momentum oscillator with LangGraph integration for enhanced mean reversion signals | [📖 English](RAG/connor-rsi/Readme.md) |
-| **Trading Strategy** | MACD Donchian | Combined MACD and Donchian Channels trading strategy | [📖 English](RAG/macd_downchain%20startegy/Readme.md) |
-| **Graph Database** | Neo4j RAG System | Natural language interface for Neo4j graph databases | [📖 English](RAG/speak%20with%20your%20Graph%20Database/Readme.md) |
-| **MCP Integration** | MCP Servers | Model Context Protocol servers for Claude AI integration | [📖 English](mcp/mcp_server/readme_en.md) |
-| **MCP Development** | Python MCP Client/Server | Python-based MCP financial analysis server with SSE transport | [📖 English](mcp/python_client_server/README.md) |
-| **MCP Client** | Multi-Language MCP Client | Comprehensive MCP client with financial analysis tools and multi-server support | [📖 English](mcp/mcp-client/README.md) |
-| **Claude Desktop** | Claude Desktop Setup Guide | Complete guide for Claude Desktop installation and MCP configuration | [📖 English](mcp/claude_desktop/Readme.md) |
+This repository contains multiple interconnected applications that leverage artificial intelligence for:
+- Event visitor behavior analysis and classification
+- Graph database analytics with Neo4j
+- CRM integration with HubSpot
+- Recommendation systems for personalized experiences
+- Multi-model AI inference and processing pipelines
 
-## 🌟 Repository Overview
+## 📁 Repository Structure
 
-This repository represents a comprehensive exploration of modern AI/ML technologies, demonstrating practical implementations across multiple domains:
-
-### 🏥 Medical AI & Computer Vision
-- **DICOM Anonymization**: Advanced medical image processing system that automatically detects and redacts Personal Health Information (PHI) in DICOM medical images using Microsoft's Presidio framework, ensuring HIPAA compliance.
-
-### 🤖 Google AI Ecosystem
-- **Video Summarizer**: Leverage Google's Gemini 2.0 Flash model for intelligent video content analysis, providing structured summaries and complete transcriptions with cloud integration.
-- **Content Caching**: Optimize token usage and reduce costs through Google's Context Caching feature, demonstrating 99.5% token reduction and 12-18x speed improvements.
-
-### ⚡ Distributed Systems
-- **NATS OCR System**: High-performance distributed OCR processing using NATS JetStream for reliable message delivery and RapidOCR for text extraction, perfect for microservice architectures.
-
-### 💰 Financial Analysis & Trading
-- **Comprehensive RAG System**: Fundamental financial analysis combining traditional techniques with modern AI/ML, featuring real-time data integration and intelligent insights.
-- **Multiple Trading Strategies**: Implementation of sophisticated trading algorithms including:
-  - **Bollinger Bands with RSI crossover analysis**: Multi-indicator confirmation for trending markets
-  - **Z-Score statistical analysis**: Market positioning and mean reversion signals
-  - **Fibonacci retracement integration**: Precise entry/exit points with advanced scoring systems
-  - **Connors RSI Strategy**: Advanced momentum oscillator developed by Larry Connors combining three distinct components:
-    - **Price RSI (33.33%)**: 3-day RSI for recent price momentum
-    - **Streak RSI (33.33%)**: RSI applied to consecutive up/down movements
-    - **Percent Rank (33.33%)**: Percentile ranking over 100-day rolling window
-    - **Enhanced Features**: Z-Score integration, combined scoring system (-100 to +100), LangGraph agent integration
-  - **MACD and Donchian Channels combination**: Momentum analysis with volatility indicators
-
-### 🔗 Graph Databases & Knowledge Systems
-- **Neo4j RAG Integration**: Natural language interface for complex graph database interactions, enabling conversational queries across interconnected data structures.
-
-### 🔌 Model Context Protocol (MCP)
-- **MCP Server Ecosystem**: Complete implementation of Anthropic's MCP standard, demonstrating the "USB-C for AI integrations" with multiple server configurations.
-- **Python MCP Framework**: Advanced financial analysis server with Server-Sent Events transport, showcasing real-time AI-tool integration.
-- **Multi-Language MCP Client**: Comprehensive client implementation bridging Claude AI with external tools, featuring specialized financial analysis capabilities across Python and Node.js servers.
-- **Claude Desktop Integration**: Complete setup guide for Claude Desktop application with MCP server configuration, enabling seamless AI-tool interactions on your desktop.
-
-## 🛠️ Technology Stack
-
-### Core AI/ML Frameworks
-- **LangChain & LangGraph**: Advanced AI orchestration and agent workflows
-- **Google Gemini Pro**: State-of-the-art language models for various applications
-- **OpenAI GPT Models**: Integration with OpenAI's API for intelligent processing
-- **Microsoft Presidio**: Privacy protection and PII detection framework
-
-### Data Processing & Analytics
-- **Yahoo Finance & Financial APIs**: Real-time and historical financial data
-- **PyDICOM**: Medical image processing and DICOM standard compliance
-- **Pandas & NumPy**: Comprehensive data manipulation and analysis
-- **Plotly & Matplotlib**: Advanced data visualization and interactive charts
-
-### Distributed Systems & Messaging
-- **NATS JetStream**: High-performance distributed messaging system
-- **FastAPI**: Modern, fast web framework for building APIs
-- **Docker**: Containerization for scalable deployment
-- **Server-Sent Events (SSE)**: Real-time bidirectional communication
-
-### Databases & Storage
-- **Neo4j**: Graph database for complex relationship modeling
-- **Qdrant**: Vector database for similarity search and RAG applications
-- **Google Cloud Storage**: Scalable cloud storage integration
-
-### Development Tools
-- **UV Package Manager**: Fast Python package management
-- **Jupyter Notebooks**: Interactive development and documentation
-- **Environment Management**: Secure configuration with environment variables
-
-## 🚀 Key Features & Innovations
-
-### 🔥 Advanced AI Integration Patterns
-- **Retrieval-Augmented Generation (RAG)**: Multiple implementations showing different approaches to combining retrieval with generation
-- **Multi-Modal AI**: Integration of text, image, and video processing capabilities
-- **Agent-Based Systems**: Intelligent agents that can discover and use tools dynamically
-- **Model Context Protocol**: Standardized AI-tool integration across multiple languages and platforms
-
-### 📊 Sophisticated Financial Analysis
-- **Multi-Indicator Strategies**: Complex trading strategies combining 3-4 technical indicators
-- **Advanced Momentum Analysis**: Connors RSI implementation with component analysis and AI-powered recommendations
-- **Scoring Systems**: Standardized (-100 to +100) scoring for consistent signal interpretation
-- **Real-Time Processing**: Live market data integration with intelligent analysis
-- **Cross-Platform Integration**: Financial tools accessible via multiple transport mechanisms
-
-### 🏗️ Production-Ready Architecture
-- **Microservice Design**: Distributed systems with clear separation of concerns
-- **Security Best Practices**: Proper authentication, authorization, and data protection
-- **Scalable Infrastructure**: Cloud-native designs with containerization support
-- **Multi-Transport Support**: STDIO, SSE, and HTTP transport mechanisms for flexible deployment
-
-### 🔧 Developer Experience
-- **Comprehensive Documentation**: Detailed READMEs with setup instructions and examples
-- **Interactive Notebooks**: Jupyter notebooks for learning and experimentation
-- **Type Safety**: Python type hints and schema validation throughout
-- **Tool Discovery**: Automatic discovery and orchestration of available capabilities
-
-## 🎯 Use Cases & Applications
-
-### Healthcare & Medical
-- **Medical Image Anonymization**: HIPAA-compliant processing of medical images
-- **Clinical Workflow Integration**: Seamless integration with existing medical systems
-
-### Financial Services
-- **Algorithmic Trading**: Automated trading signal generation and analysis including advanced momentum strategies
-- **Mean Reversion Analysis**: Connors RSI and Z-Score based strategies for overbought/oversold conditions
-- **Risk Assessment**: Advanced risk metrics and portfolio analysis
-- **Market Research**: Intelligent analysis of financial trends and patterns
-- **Multi-Platform Access**: Financial analysis accessible through web, desktop, and API interfaces
-
-### Enterprise AI
-- **Document Processing**: Automated extraction and analysis of business documents
-- **Knowledge Management**: Graph-based knowledge systems for complex data relationships
-- **AI-Powered Analytics**: Integration of AI capabilities into existing business workflows
-- **Tool Orchestration**: Intelligent discovery and coordination of external services
-- **Desktop AI Integration**: Native Claude Desktop application with MCP protocol support for enhanced productivity
-
-### Media & Content
-- **Video Analysis**: Automated transcription, summarization, and content analysis
-- **Real-Time Processing**: Live content analysis and intelligent insights
-
-## 🚦 Getting Started
-
-### Quick Setup
-1. **Choose Your Domain**: Select a project from the table above based on your interests
-2. **Follow Documentation**: Each project has comprehensive setup instructions
-3. **Environment Setup**: Most projects use Python with specific dependency management
-4. **API Keys**: Secure your API keys in environment variables
-
-### Recommended Learning Path
-1. **Start with RAG Systems**: Begin with the Financial Analysis RAG for foundational concepts
-2. **Explore Trading Strategies**: Progress through the different trading algorithm implementations
-   - Begin with basic Bollinger Z-Score analysis
-   - Advance to Connors RSI for sophisticated momentum analysis
-   - Explore combined strategies like Bollinger-Fibonacci
-3. **Advanced Integration**: Move to MCP servers for understanding modern AI integration patterns
-4. **Multi-Platform Development**: Explore the MCP client for cross-language tool orchestration
-5. **Desktop AI Integration**: Set up Claude Desktop with MCP servers for native AI-tool interactions
-6. **Specialized Applications**: Dive into domain-specific applications like medical AI or distributed OCR
-
-### Research Areas
-- **Multimodal AI**: Advanced integration of different AI modalities
-- **Federated Learning**: Distributed machine learning implementations
-- **Edge Computing**: Edge-deployed AI processing capabilities
-- **Quantum Computing**: Quantum-enhanced algorithms for optimization
-
-## ⚖️ License & Disclaimer
-
-This repository contains educational and research implementations. Individual projects may have specific licensing terms. Please review each project's documentation for:
-
-- **Usage Rights**: Appropriate use cases and restrictions
-- **API Terms**: Third-party service terms and conditions
-- **Financial Disclaimer**: Investment and trading risk warnings
-- **Medical Disclaimer**: Healthcare application limitations
+```
+Strategic_AI_CSM_Applications/
+├── 📊 PA/                          # Personal AGENDAS - Data Processing Pipeline
+├── 🤖 app/                         # CSM LLM Application - HPI Classification
+├── 🏢 mcp-chatbot/                 # AI-Powered CRM & Graph Database Platform
+├── 📈 phase1/                      # Conference Attendee Clustering (Phase 1)
+├── 🎯 phase2/                      # Event Visitor Classification (Phase 2)
+├── ⚡ inference/                   # Multi-Model Inference System
+├── 📁 archive/                     # Legacy components and utilities
+└── 📋 requirements.txt             # Common dependencies
+```
 
 ---
 
-**This repository represents the convergence of traditional domain expertise with cutting-edge AI capabilities, demonstrating how modern AI systems can be integrated into real-world applications while maintaining production-quality standards and best practices.**
+## 🔧 Core Applications
+
+### 📊 PA - Personal AGENDAS
+**A comprehensive data processing and analytics pipeline for veterinary conference data**
+
+**Purpose**: Process registration, attendance, and session information to generate personalized recommendations and insights for veterinary conferences (BVA - British Veterinary Association and LVA - London Vet Show).
+
+**Key Features**:
+- **Data Processing**: Registration, scan, and session data processing
+- **Neo4j Integration**: Knowledge graph creation with visitors, sessions, and streams
+- **AI-Powered Features**: Stream descriptions and session embeddings
+- **Smart Recommendations**: Personalized session recommendations using visitor similarity
+
+**Quick Start**:
+```bash
+cd PA/app
+pip install -r requirements.txt
+python main.py
+```
+
+**Architecture**:
+- Pipeline coordinator with modular processors
+- Neo4j graph database for relationship mapping
+- Business rules engine for recommendation filtering
+- Multi-year visitor tracking and analysis
+
+---
+
+### 🤖 app - CSM LLM Application (HPI)
+**High Purchase Intention visitor classification system for technology events**
+
+**Purpose**: Analyze and categorize technology event attendees based on their purchasing intentions and engagement patterns using multiple Large Language Models.
+
+**Key Features**:
+- **Multi-Model Support**: Llama 3.1, GPT-4o-mini, o3-mini
+- **5-Category Classification**: Networking, Learning, Searching, Early Purchasing, High Purchase Intention
+- **Web Interface**: Streamlit-based authentication and processing
+- **Batch Processing**: Efficient handling of large datasets
+
+**Quick Start**:
+```bash
+cd app
+docker-compose up -d
+streamlit run main.py
+```
+
+**Classification Categories**:
+- **Networking**: Professional relationship building
+- **Learning**: Educational opportunities seeking
+- **Searching**: Information gathering on products/vendors
+- **Early Purchasing Intention**: Active sourcing engagement
+- **High Purchase Intention**: Final purchasing journey stages
+
+---
+
+### 🏢 mcp-chatbot - AI-Powered CRM & Graph Database Platform
+**Full-stack application providing AI-powered interactions with Neo4j and HubSpot**
+
+**Purpose**: Seamless data analysis, management, and automation across database and CRM infrastructure through Model Context Protocol (MCP) servers.
+
+**Key Features**:
+- **Streamlit Client**: AI chat interface with multi-provider support
+- **Neo4j MCP Server**: Graph database operations via Cypher queries
+- **HubSpot MCP Server**: Complete CRM integration with 25+ tools
+- **Security**: User authentication and session management
+
+**Quick Start**:
+```bash
+cd mcp-chatbot
+docker-compose up --build
+# Access: http://localhost:8501
+```
+
+**Components**:
+- **Authentication System**: Secure login with bcrypt hashing
+- **Graph Operations**: Schema discovery and complex queries
+- **CRM Management**: Full CRUD operations across HubSpot objects
+- **Real-time Communication**: Server-Sent Events for MCP
+
+---
+
+## 🔬 Research & Development Phases
+
+### 📈 phase1 - Conference Attendee Clustering
+**Machine learning system for clustering conference attendees based on behavior patterns**
+
+**Purpose**: Identify six main behavioral clusters using various embedding models (Mistral, LLaMA, Nomic) and classification techniques.
+
+**Behavioral Clusters**:
+1. **Networking** - Connection-focused attendees
+2. **Learning** - Educational content seekers
+3. **Searching** - Option explorers
+4. **Sourcing: Early** - Early-stage procurement
+5. **Sourcing: In Process** - Mid-stage sourcing
+6. **Sourcing: Deciding** - Late-stage decision making
+
+**Technical Implementation**:
+- Custom BadgeNet neural network (4-layer architecture)
+- Multiple embedding models comparison
+- Focal loss for class imbalance handling
+- Cosine similarity cluster assignment
+
+---
+
+### 🎯 phase2 - Event Visitor Classification System
+**Advanced visitor classification using multiple LLM models**
+
+**Purpose**: Categorize event visitors into five purchasing intention categories using LLama, Phi3, and DeepSeek models.
+
+**Classification Categories**:
+1. **Networking** - Professional relationship building
+2. **Learning** - Educational motivation
+3. **Searching** - Product/vendor exploration
+4. **Early Purchasing Intention** - Active sourcing
+5. **High Purchase Intention** - Final purchasing stages
+
+**Data Flow**:
+- Registration data processing from multiple events
+- Demographic data integration with questionnaire responses
+- Profile generation combining all data sources
+- Multi-model classification with confidence scoring
+
+---
+
+### ⚡ inference - Multi-Model Inference System
+**High-performance LLM inference implementations with focus on profile classification**
+
+**Purpose**: Various implementations for running large language model inference with support for multiple backends including vLLM, Ollama, OpenAI, Azure OpenAI, and Google Gemini.
+
+**Key Components**:
+- **vLLM Framework**: High-performance serving with Paged Attention
+- **Async Processing**: Multiple concurrent inference implementations
+- **Cost Tracking**: Token usage monitoring and optimization
+- **Load Balancing**: Multi-server deployment support
+
+**Supported Models**:
+- Llama 3.1 (8B, various quantizations)
+- GPT-4o-mini (OpenAI/Azure)
+- Gemini 2.0 Flash Lite
+- Custom model deployments
+
+---
+
+## 🚀 Quick Start Guide
+
+### Prerequisites
+- Python 3.11+
+- Docker & Docker Compose
+- Neo4j Database (with APOC plugin)
+- API Keys (OpenAI, Azure OpenAI, HubSpot, etc.)
+
+### Environment Setup
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd Strategic_AI_CSM_Applications
+```
+
+2. Install common dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Set up environment variables (`.env` file):
+```env
+# AI Provider Configuration
+OPENAI_API_KEY=your_openai_api_key
+AZURE_API_KEY=your_azure_api_key
+AZURE_ENDPOINT=your_azure_endpoint
+AZURE_DEPLOYMENT=your_deployment_name
+
+# Neo4j Configuration
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your_password
+
+# HubSpot Configuration
+PRIVATE_APP_ACCESS_TOKEN=your_hubspot_token
+```
+
+### Running Individual Applications
+
+**PA - Data Processing Pipeline**:
+```bash
+cd PA/app
+python main.py
+```
+
+**CSM LLM Application**:
+```bash
+cd app
+docker-compose up -d
+streamlit run main.py
+```
+
+**MCP Chatbot Platform**:
+```bash
+cd mcp-chatbot
+docker-compose up --build
+```
+
+---
+
+## 🔧 Configuration & Customization
+
+### Data Processing (PA)
+- Configure input/output paths in `PA/app/config/config.yaml`
+- Set up Neo4j credentials and connection parameters
+- Customize business rules for recommendations
+
+### Classification Systems (app/phase1/phase2)
+- Model selection and parameters in configuration files
+- Prompt templates for different classification approaches
+- Batch processing settings for large datasets
+
+### CRM Integration (mcp-chatbot)
+- User authentication in `client/keys/config.yaml`
+- MCP server endpoints in `servers_config.json`
+- HubSpot API scopes and permissions
+
+---
+
+## 📊 Data Flow & Integration
+
+### Typical Workflow
+1. **Data Ingestion**: Events registration and demographic data
+2. **Processing**: PA pipeline for data cleaning and enrichment
+3. **Classification**: AI-powered visitor categorization
+4. **Storage**: Neo4j graph database with relationships
+5. **Analytics**: CRM integration and recommendation generation
+6. **Deployment**: Real-time inference and monitoring
+
+### Integration Points
+- **Neo4j ↔ HubSpot**: Sync visitor data between graph DB and CRM
+- **Classification ↔ Recommendations**: Use categories for personalized suggestions
+- **Inference ↔ Applications**: Real-time model serving for web interfaces
+
+---
+
+## 🔒 Security & Best Practices
+
+### Authentication & Authorization
+- **User Management**: Secure authentication with bcrypt hashing
+- **API Security**: Environment-based credential management
+- **Session Control**: Configurable session timeouts and policies
+
+### Data Protection
+- **Input Validation**: Schema validation across all components
+- **Error Handling**: Sanitized error messages and comprehensive logging
+- **Privacy Compliance**: Data anonymization and protection measures
+
+### Deployment Security
+- **Containerization**: Isolated service deployment
+- **Network Security**: Configurable port mapping and CORS
+- **Monitoring**: Health checks and performance tracking
+
+---
+
+## 📈 Performance & Scalability
+
+### Optimization Strategies
+- **Async Processing**: Concurrent inference for improved throughput
+- **Batch Operations**: Efficient handling of large datasets
+- **Caching**: Strategic caching of embeddings and classifications
+- **Load Balancing**: Multi-server deployment support
+
+### Monitoring & Debugging
+- **Health Checks**: Service availability monitoring
+- **Logging**: Comprehensive logging across all components
+- **Metrics**: Performance tracking and resource usage
+- **Error Tracking**: Detailed error reporting and debugging tools
+
+---
+
+## 🤝 Contributing
+
+### Development Guidelines
+1. **Component-Specific**: Follow individual component development guides
+2. **Code Standards**: PEP 8 for Python, ES6+ for JavaScript
+3. **Documentation**: Comprehensive README and inline comments
+4. **Testing**: Unit tests and integration testing for all components
+5. **Security**: Follow authentication and security best practices
+
+### Adding New Features
+- **New Models**: Extend inference system with additional LLM models
+- **Custom Tools**: Add new integrations via MCP protocol
+- **Data Sources**: Integrate additional event or CRM data sources
+- **Analytics**: Extend reporting and visualization capabilities
+
+---
+
+## 📚 Documentation Links
+
+### Component-Specific Documentation
+- **[PA - Data Processing Pipeline](./PA/readme.md)**: Comprehensive data processing and Neo4j integration
+- **[CSM LLM Application](./app/readme.md)**: HPI classification system with multi-model support
+- **[MCP Chatbot Platform](./mcp-chatbot/Readme.md)**: AI-powered CRM and graph database integration
+- **[Phase 1 - Clustering](./phase1/readme.md)**: Conference attendee clustering and classification
+- **[Phase 2 - Classification](./phase2/readme.md)**: Event visitor classification system
+- **[Inference System](./inference/readme.md)**: Multi-model inference implementations
+
+### External Resources
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Neo4j Documentation](https://neo4j.com/docs/)
+- [HubSpot API Documentation](https://developers.hubspot.com/docs/api/overview)
+- [Streamlit Documentation](https://docs.streamlit.io/)
+- [LangChain Documentation](https://python.langchain.com/)
+
+---
+
+## 🐛 Troubleshooting
+
+### Common Issues
+**Environment Setup**:
+- Verify all required API keys are configured
+- Check Docker service availability
+- Ensure Neo4j database connectivity
+
+**Model Inference**:
+- Verify model availability and compatibility
+- Check GPU/CPU resource allocation
+- Monitor token usage and rate limits
+
+**Data Processing**:
+- Validate input data formats and schemas
+- Check file permissions and access rights
+- Verify Neo4j schema and constraints
+
+### Getting Help
+- Review component-specific documentation
+- Check service logs: `docker-compose logs <service>`
+- Use health check endpoints for diagnostics
+- Verify authentication and permissions
+
+---
+
+## 📄 License & Version Information
+
+**Version**: 2.0.0  
+**Last Updated**: June 2025  
+**Compatibility**: 
+- Python 3.11+
+- Docker 20+
+- Neo4j 5.0+
+- Node.js 18+
+
+**Dependencies**: See individual component requirements and `requirements.txt`
+
+---
+
+**For detailed usage instructions and advanced configuration, please refer to the individual component documentation linked above.**
