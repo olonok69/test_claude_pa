@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "pdf-document-processor": {
+      "command": "python",
+      "args": ["/absolute/path/to/pdf_processor_server.py"],
+      "env": {
+        "PYTHONPATH": "/absolute/path/to/server/directory"
+      }
+    }
+  }
+}
