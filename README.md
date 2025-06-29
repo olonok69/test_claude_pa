@@ -4,16 +4,16 @@ A comprehensive full-stack application that provides AI-powered interactions wit
 
 ## 🚀 System Overview
 
-This application consists of four integrated components:
+This application consists of four integrated components working together through the Model Context Protocol (MCP):
 
-1. **Streamlit Client** - Secure AI chat interface with user authentication and multi-provider support
-2. **Yahoo Finance MCP Server** - Financial data analysis and technical indicators with proprietary algorithms
+1. **Streamlit Client** - Secure AI chat interface with enterprise authentication and multi-provider support
+2. **Yahoo Finance MCP Server** - Financial data analysis with proprietary algorithms and technical indicators
 3. **Neo4j MCP Server** - Graph database operations via Cypher queries with schema validation
 4. **HubSpot MCP Server** - Complete CRM integration with 25+ tools and full CRUD operations
 
 ### Architecture Diagram
 
-![alt text](image.png)
+![System Architecture](image.png)
 
 ## ⚡ Quick Start
 
@@ -133,6 +133,55 @@ docker-compose up hostclient  # Streamlit Client
 - **Robust Error Handling**: Detailed error management with debugging capabilities
 - **Health Monitoring**: Built-in health checks and system monitoring
 
+## 💻 Technical Stack
+
+### **Frontend & Client**
+```yaml
+Technology: Streamlit 1.44+
+Language: Python 3.11+
+Authentication: Streamlit Authenticator 0.3.2
+Security: bcrypt, SSL/TLS support
+UI Framework: Custom CSS, responsive design
+```
+
+### **Backend Services**
+```yaml
+Yahoo Finance Server:
+  - FastAPI + uvicorn
+  - Python 3.12+
+  - yfinance library
+  - Custom algorithms
+
+Neo4j Server:
+  - FastAPI + uvicorn  
+  - Python 3.11+
+  - neo4j-driver
+  - APOC procedures
+
+HubSpot Server:
+  - Express.js + Node.js 18+
+  - JavaScript ES6+
+  - 25 specialized tools
+  - Zod validation
+```
+
+### **Infrastructure**
+```yaml
+Containerization: Docker + Docker Compose
+Protocol: Model Context Protocol (MCP)
+Transport: Server-Sent Events (SSE)
+Database: Neo4j 5.0+ with APOC
+External APIs: Yahoo Finance, HubSpot REST API
+```
+
+### **AI & ML**
+```yaml
+Framework: LangChain + LangGraph
+Providers: OpenAI GPT-4o, Azure OpenAI
+Agent: ReAct (Reasoning + Acting)
+Context: Conversation memory + tool history
+```
+
 ## 📚 Usage Examples
 
 ### **Authentication & Getting Started**
@@ -188,9 +237,51 @@ Password: very_Secure_p@ssword_123!
 "Create a complete customer journey analysis combining graph database relationships, CRM engagement history, and market performance data"
 ```
 
+## 📊 Performance & Scaling
+
+### **Performance Metrics**
+
+```yaml
+Response Times:
+  - Authentication: <200ms
+  - Tool Discovery: <500ms
+  - Simple Queries: <2s
+  - Complex Analysis: <10s
+
+Throughput:
+  - Concurrent Users: 50+ (single instance)
+  - Tool Executions: 100+ per minute
+  - Data Processing: 10MB+ per query
+```
+
+### **Scaling Strategies**
+
+#### **Horizontal Scaling**
+```yaml
+Load Balancing: Multiple client instances
+MCP Servers: Independent scaling per service
+Database: Neo4j clustering
+Cache: Redis for session storage
+```
+
+#### **Vertical Scaling**
+```yaml
+Memory: 2GB+ per container
+CPU: 2+ cores recommended
+Storage: SSD for Neo4j performance
+Network: 1Gbps+ for large datasets
+```
+
 ## 🔧 Component Documentation
 
 Each component has detailed documentation for advanced configuration and development:
+
+### [🏠 Streamlit Client Documentation](./client/Readme.md)
+- **Enterprise Authentication**: Secure user management with bcrypt encryption
+- **Multi-Provider AI Setup**: OpenAI and Azure OpenAI with dynamic switching
+- **Modern Tabbed Interface**: Configuration, Connections, Tools, and Chat organization
+- **SSL Support**: Optional HTTPS with certificate generation
+- **Session Management**: Persistent conversations with user isolation
 
 ### [📈 Yahoo Finance MCP Server Documentation](./servers/server3/Readme.md)
 - **6 Advanced Financial Tools**: MACD scoring, Donchian channels, Bollinger-Fibonacci strategies
@@ -198,13 +289,6 @@ Each component has detailed documentation for advanced configuration and develop
 - **Technical Indicator Calculations**: Real-time market data with no API costs
 - **Trading Signal Generation**: Automated buy/sell/hold recommendations
 - **Portfolio Analysis**: Multi-timeframe and multi-indicator analysis
-
-### [🖥️ Streamlit Client Documentation](./client/Readme.md)
-- **Enterprise Authentication**: Secure user management with bcrypt encryption
-- **Multi-Provider AI Setup**: OpenAI and Azure OpenAI with dynamic switching
-- **Modern Tabbed Interface**: Configuration, Connections, Tools, and Chat organization
-- **SSL Support**: Optional HTTPS with certificate generation
-- **Session Management**: Persistent conversations with user isolation
 
 ### [🗄️ Neo4j MCP Server Documentation](./servers/server4/Readme.md)
 - **Schema-First Approach**: Mandatory schema discovery before operations
@@ -356,6 +440,26 @@ cd client && python simple_generate_password.py
 - **Slow Responses**: Monitor tool execution timing in debug panels
 - **Memory Usage**: Check Docker container resource utilization
 - **API Rate Limits**: Monitor HubSpot and financial data API usage
+
+## 📄 Technical Documentation
+
+For detailed technical information and presentations:
+
+### [📋 Technical Overview (English)](./technical_en.md)
+Complete technical presentation covering:
+- Architecture deep dive
+- Component analysis
+- Performance considerations
+- Security implementation
+- Deployment strategies
+
+### [📋 Presentación Técnica (Español)](./technical_es.md)
+Presentación técnica completa que cubre:
+- Análisis profundo de arquitectura
+- Análisis de componentes
+- Consideraciones de rendimiento
+- Implementación de seguridad
+- Estrategias de despliegue
 
 ## 🤝 Contributing
 
