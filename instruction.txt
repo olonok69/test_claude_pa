@@ -1,9 +1,0 @@
-I want to create a mcp server wich extract / sumarize a document using a custom list of prompts
-- We have tools to extract content of a pdf to markdown and scanned pdf to markdown. Identify scanned files with more that two pages, those include in the system
-prompts to translate directly to markdown using the model
-- we have a list of prompts  in the file prompts.json. Each entry in the list is a dict with keys ['id', 'name_prompt', 'prompt', 'keywords']
-- the flow will be the client mcp will upload a document pdf and we will apply extract to markdown and the a prompt among of the list of available prompts on the serverit will generate an output in markdown
-- create the code in python
-- create process to install and  create environment using uv
--create detailed process to install in windows or linux
-- integrate with claude Destop app
