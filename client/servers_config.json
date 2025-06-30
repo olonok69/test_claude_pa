@@ -1,5 +1,12 @@
 {
   "mcpServers": {
+    "Google Search": {
+      "transport": "sse",
+      "url": "http://mcpserver2:8002/sse",
+      "timeout": 600,
+      "headers": null,
+      "sse_read_timeout": 900
+    },
     "Neo4j": {
       "transport": "sse",
       "url": "http://mcpserver4:8003/sse",

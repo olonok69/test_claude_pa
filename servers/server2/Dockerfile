@@ -4,10 +4,10 @@ FROM node:20-slim
 WORKDIR /app
 
 # Copy package files first (for better Docker layer caching)
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json* ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --only=production || npm install
 
 # Copy source code (excluding node_modules)
 COPY . .
@@ -16,7 +16,7 @@ COPY . .
 RUN mkdir -p logs
 
 # Expose port
-EXPOSE 8004
+EXPOSE 8002
 
 # Start the application
 CMD ["node", "main.js"]

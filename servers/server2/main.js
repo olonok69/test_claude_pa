@@ -12,7 +12,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 
-// Import HubSpot tools and prompts
+// Import Google Search tools and prompts
 import { getTools, handleToolCall } from './tools/index.js';
 import { getPrompts, getPromptMessages } from './prompts/index.js';
 
@@ -20,9 +20,9 @@ import { getPrompts, getPromptMessages } from './prompts/index.js';
 import './tools/toolsRegistry.js';
 import './prompts/promptsRegistry.js';
 
-const APP_NAME = 'hubspot-mcp-sse-server';
+const APP_NAME = 'google-search-mcp-sse-server';
 const APP_VERSION = '1.0.0';
-const PORT = parseInt(process.env.PORT || '8004');
+const PORT = parseInt(process.env.PORT || '8002');
 const HOST = process.env.HOST || '0.0.0.0';
 
 // Create MCP server
@@ -154,13 +154,17 @@ async function main() {
     try {
         console.log(`Starting ${APP_NAME} v${APP_VERSION}...`);
         
-        // Verify HubSpot access token
-        if (!process.env.PRIVATE_APP_ACCESS_TOKEN) {
-            console.warn('Warning: PRIVATE_APP_ACCESS_TOKEN not found in environment variables');
+        // Verify Google API credentials
+        if (!process.env.GOOGLE_API_KEY) {
+            console.warn('Warning: GOOGLE_API_KEY not found in environment variables');
+        }
+        
+        if (!process.env.GOOGLE_SEARCH_ENGINE_ID) {
+            console.warn('Warning: GOOGLE_SEARCH_ENGINE_ID not found in environment variables');
         }
         
         app.listen(PORT, HOST, () => {
-            console.log(`HubSpot MCP Server running on http://${HOST}:${PORT}`);
+            console.log(`Google Search MCP Server running on http://${HOST}:${PORT}`);
             console.log(`Health check: http://${HOST}:${PORT}/health`);
         });
         
