@@ -1,0 +1,24 @@
+FROM node:18-slim
+
+WORKDIR /app
+
+# Install npm and update to latest version
+RUN npm install -g npm@latest
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install dependencies
+RUN npm ci --only=production || npm install
+
+# Copy the rest of the application
+COPY . .
+
+# Create logs directory
+RUN mkdir -p logs
+
+# Expose the port
+EXPOSE 8004
+
+# Command to run the server
+CMD ["node", "main.js"]

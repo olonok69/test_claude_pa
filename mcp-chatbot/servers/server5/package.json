@@ -1,0 +1,27 @@
+{
+  "name": "hubspot-mcp-sse-server",
+  "version": "1.0.0",
+  "description": "HubSpot MCP Server with SSE transport",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "node --watch main.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "node-fetch": "^3.3.2",
+    "zod": "^3.25.56",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "keywords": [
+    "mcp",
+    "hubspot",
+    "sse"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
