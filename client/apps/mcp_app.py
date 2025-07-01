@@ -7,7 +7,7 @@ from services.mcp_service import run_agent
 from services.chat_service import get_current_chat, _append_message_to_session, get_clean_conversation_memory
 from utils.async_helpers import run_async
 from utils.ai_prompts import make_system_prompt, make_main_prompt
-import ui_components.sidebar_components as sd_compents
+import ui_components.sidebar_components as sd_components
 from ui_components.main_components import display_tool_executions
 from ui_components.tab_components import create_configuration_tab, create_connection_tab, create_tools_tab
 from config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
@@ -36,14 +36,10 @@ def main():
     # Create the main tabs
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "⚙️ Configuration", "🔌 Connections", "🧰 Tools"])
     
-    # Sidebar with chat history and user info
+    # Sidebar with CSM icon and components
     with st.sidebar:
-        # Show user info at the top
-        sd_compents.create_user_info_sidebar()
-        
-        # Chat history (only shown if authenticated)
-        sd_compents.create_history_chat_container()
-        sd_compents.create_sidebar_chat_buttons()
+        # Use the new complete sidebar function with CSM icon
+        sd_components.create_complete_sidebar()
 
     # Chat Tab - Main conversation interface
     with tab1:

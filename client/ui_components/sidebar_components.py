@@ -1,5 +1,42 @@
 import streamlit as st
+import os
 from services.chat_service import create_chat, delete_chat, switch_chat
+
+
+def create_sidebar_header_with_icon():
+    """Create sidebar header with CSM icon and title."""
+    with st.sidebar:
+        # Create container for icon and title
+        header_container = st.container()
+        
+        with header_container:
+            # Check if CSM icon exists
+            icon_path = os.path.join('.', 'icons', 'CSM.png')
+            
+            if os.path.exists(icon_path):
+                # Create columns for better layout
+                col1, col2 = st.columns([1, 3])
+                
+                with col1:
+                    st.image(icon_path, width=60)
+                
+                with col2:
+                    st.markdown("""
+                    <div style="padding-top: 10px;">
+                        <h3 style="margin: 0; color: #2F2E78;">CSM</h3>
+                        <p style="margin: 0; font-size: 12px; color: #666;">MCP Client</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                # Fallback if icon doesn't exist
+                st.markdown("""
+                <div class="icon-text-container">
+                    <span>🔍 CSM MCP Client</span>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Add separator
+            st.markdown("---")
 
 
 def categorize_tools_for_sidebar(tools):
@@ -157,6 +194,20 @@ def create_user_info_sidebar():
             minutes, _ = divmod(remainder, 60)
             
             st.markdown(f"**Session Time:** {hours:02d}:{minutes:02d}")
+
+
+def create_complete_sidebar():
+    """Create the complete sidebar with all components including CSM icon."""
+    # Add the CSM icon header at the top
+    create_sidebar_header_with_icon()
+    
+    # Show user info if authenticated
+    create_user_info_sidebar()
+    
+    # Show chat history and controls if authenticated
+    if st.session_state.get("authentication_status"):
+        create_history_chat_container()
+        create_sidebar_chat_buttons()
 
 
 # Legacy functions maintained for backward compatibility but not used in new tab layout

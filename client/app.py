@@ -113,6 +113,15 @@ def show_authentication_required_message():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
+        # Add CSM logo in the welcome message if available
+        csm_logo_path = os.path.join('.', 'icons', 'CSM.png')
+        if os.path.exists(csm_logo_path):
+            # Center the logo
+            col_a, col_b, col_c = st.columns([1, 1, 1])
+            with col_b:
+                st.image(csm_logo_path, width=120)
+            st.markdown("<br>", unsafe_allow_html=True)
+        
         st.markdown("""
         ### Welcome to Google Search MCP Client
         
@@ -212,7 +221,6 @@ def show_authentication_required_message():
             - "Find and analyze multiple sources about cryptocurrency trends"
             - "Search for best practices in software engineering and summarize them"
             """)
-
 
 
 def main():

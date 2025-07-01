@@ -45,6 +45,45 @@ section.main > div {
 	padding-top: 0px;
 }
 
+/* CSM Icon and Header Styles */
+.csm-header-container {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	padding: 10px 0;
+	margin-bottom: 15px;
+	border-bottom: 1px solid rgba(47, 46, 120, 0.1);
+}
+
+.csm-logo {
+	width: 60px !important;
+	height: 60px !important;
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	margin-right: 15px;
+}
+
+.csm-title {
+	flex: 1;
+}
+
+.csm-title h3 {
+	margin: 0 0 2px 0 !important;
+	font-size: 20px !important;
+	font-weight: 600 !important;
+	color: #2F2E78 !important;
+	line-height: 1.2 !important;
+}
+
+.csm-title p {
+	margin: 0 !important;
+	font-size: 12px !important;
+	color: #666 !important;
+	font-weight: 400 !important;
+	line-height: 1.2 !important;
+}
+
+/* Enhanced icon-text-container for fallback */
 .icon-text-container {
 	display: flex;
 	justify-content: center;
@@ -53,20 +92,36 @@ section.main > div {
 	margin-bottom: 8px;
 	margin-top: 0px;
 	margin-left: -8px;
+	padding: 10px 0;
+	border-bottom: 1px solid rgba(47, 46, 120, 0.1);
 }
 
 .icon-text-container img {
 	width: 60px;
 	height: 60px;
 	margin-right: 0;
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .icon-text-container span {
 	text-align: center;
 	text-shadow: 1px 1px #ccc;
-	font-size: 28px !important;
+	font-size: 18px !important;
 	font-family: "auto";
-	font-weight: 500 !important;
+	font-weight: 600 !important;
+	color: #2F2E78 !important;
+	margin-left: 10px;
+}
+
+/* Sidebar section spacing */
+.stSidebar .element-container {
+	margin-bottom: 10px;
+}
+
+.stSidebar h2, .stSidebar h3 {
+	margin-top: 15px !important;
+	margin-bottom: 10px !important;
 }
 
 hr {
@@ -251,6 +306,12 @@ div[data-testid="metric-container"] {
 	margin: 4px 0;
 }
 
+/* Sidebar image styling specifically for CSM logo */
+.stSidebar img {
+	border-radius: 8px;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
 	.stTabs [data-baseweb="tab"] {
@@ -262,5 +323,18 @@ div[data-testid="metric-container"] {
 	div[data-testid="column"] > div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] > div {
 		padding: 15px;
 		margin-bottom: 15px;
+	}
+	
+	.csm-logo {
+		width: 50px !important;
+		height: 50px !important;
+	}
+	
+	.csm-title h3 {
+		font-size: 18px !important;
+	}
+	
+	.icon-text-container span {
+		font-size: 16px !important;
 	}
 }
