@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
@@ -20,7 +21,13 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stderr)  # Send logs to stderr so they appear in Claude Desktop logs
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Initialize FastMCP server
@@ -68,9 +75,11 @@ def get_linkedin_client() -> Linkedin:
         password = os.getenv("LINKEDIN_PASSWORD")
         
         if not username or not password:
+            logger.error("LinkedIn credentials not found in environment variables")
             raise ValueError("LinkedIn credentials not found in environment variables")
         
         try:
+            logger.info(f"Initializing LinkedIn client for user: {username}")
             linkedin_client = Linkedin(username, password)
             logger.info("LinkedIn client initialized successfully")
         except Exception as e:
@@ -93,12 +102,14 @@ def get_profile(public_id: Optional[str] = None, urn_id: Optional[str] = None) -
         Profile data including name, experience, education, skills, etc.
     """
     try:
+        logger.info(f"Getting profile: public_id={public_id}, urn_id={urn_id}")
         client = get_linkedin_client()
         
         if not public_id and not urn_id:
             raise ValueError("Either public_id or urn_id must be provided")
         
         profile = client.get_profile(public_id=public_id, urn_id=urn_id)
+        logger.info("Profile retrieved successfully")
         return profile
     except Exception as e:
         logger.error(f"Error getting profile: {e}")
@@ -106,7 +117,7 @@ def get_profile(public_id: Optional[str] = None, urn_id: Optional[str] = None) -
 
 
 @mcp.tool()
-def get_profile_contact_info(public_id: Optional[str] = None, urn_id: Optional[str] = None) -> ProfileContact:
+def get_profile_contact_info(public_id: Optional[str] = None, urn_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Get contact information for a LinkedIn profile.
     
@@ -118,20 +129,22 @@ def get_profile_contact_info(public_id: Optional[str] = None, urn_id: Optional[s
         Contact information including email, websites, phone numbers
     """
     try:
+        logger.info(f"Getting contact info: public_id={public_id}, urn_id={urn_id}")
         client = get_linkedin_client()
         
         if not public_id and not urn_id:
             raise ValueError("Either public_id or urn_id must be provided")
         
         contact_info = client.get_profile_contact_info(public_id=public_id, urn_id=urn_id)
-        return ProfileContact(**contact_info)
+        logger.info("Contact info retrieved successfully")
+        return contact_info
     except Exception as e:
         logger.error(f"Error getting contact info: {e}")
-        return ProfileContact()
+        return {"error": str(e)}
 
 
 @mcp.tool()
-def get_profile_connections(urn_id: str, limit: int = 10) -> List[ConnectionInfo]:
+def get_profile_connections(urn_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Get connections for a LinkedIn profile.
     
@@ -143,10 +156,22 @@ def get_profile_connections(urn_id: str, limit: int = 10) -> List[ConnectionInfo
         List of connection information
     """
     try:
+        logger.info(f"Getting connections: urn_id={urn_id}, limit={limit}")
         client = get_linkedin_client()
         connections = client.get_profile_connections(urn_id, limit=limit)
         
-        return [ConnectionInfo(**conn) for conn in connections]
+        result = []
+        for conn in connections:
+            result.append({
+                "urn_id": conn.get("urn_id", ""),
+                "distance": conn.get("distance"),
+                "jobtitle": conn.get("jobtitle"),
+                "location": conn.get("location"),
+                "name": conn.get("name")
+            })
+        
+        logger.info(f"Retrieved {len(result)} connections")
+        return result
     except Exception as e:
         logger.error(f"Error getting connections: {e}")
         return []
@@ -162,7 +187,7 @@ def search_people(
     schools: Optional[List[str]] = None,
     network_depths: Optional[List[str]] = None,
     limit: int = 10
-) -> SearchResult:
+) -> Dict[str, Any]:
     """
     Search for people on LinkedIn.
     
@@ -180,7 +205,11 @@ def search_people(
         Search results with people data
     """
     try:
+        logger.info(f"Searching people: keywords={keywords}, limit={limit}")
         client = get_linkedin_client()
+        
+        # Ensure limit is reasonable
+        limit = min(limit, 49)  # LinkedIn API limit
         
         results = client.search_people(
             keywords=keywords,
@@ -193,14 +222,22 @@ def search_people(
             limit=limit
         )
         
-        return SearchResult(results=results, total_results=len(results))
+        logger.info(f"Search completed successfully, found {len(results)} results")
+        return {
+            "results": results,
+            "total_results": len(results)
+        }
     except Exception as e:
         logger.error(f"Error searching people: {e}")
-        return SearchResult(results=[], total_results=0)
+        return {
+            "results": [],
+            "total_results": 0,
+            "error": str(e)
+        }
 
 
 @mcp.tool()
-def search_companies(keywords: Optional[str] = None, limit: int = 10) -> SearchResult:
+def search_companies(keywords: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
     """
     Search for companies on LinkedIn.
     
@@ -212,14 +249,26 @@ def search_companies(keywords: Optional[str] = None, limit: int = 10) -> SearchR
         Search results with company data
     """
     try:
+        logger.info(f"Searching companies: keywords={keywords}, limit={limit}")
         client = get_linkedin_client()
+        
+        # Ensure limit is reasonable
+        limit = min(limit, 49)  # LinkedIn API limit
         
         results = client.search_companies(keywords=keywords, limit=limit)
         
-        return SearchResult(results=results, total_results=len(results))
+        logger.info(f"Company search completed successfully, found {len(results)} results")
+        return {
+            "results": results,
+            "total_results": len(results)
+        }
     except Exception as e:
         logger.error(f"Error searching companies: {e}")
-        return SearchResult(results=[], total_results=0)
+        return {
+            "results": [],
+            "total_results": 0,
+            "error": str(e)
+        }
 
 
 @mcp.tool()
@@ -234,8 +283,10 @@ def get_company(public_id: str) -> Dict[str, Any]:
         Company data including name, description, industry, etc.
     """
     try:
+        logger.info(f"Getting company: public_id={public_id}")
         client = get_linkedin_client()
         company = client.get_company(public_id)
+        logger.info("Company data retrieved successfully")
         return company
     except Exception as e:
         logger.error(f"Error getting company: {e}")
@@ -260,6 +311,7 @@ def get_profile_posts(
         List of posts from the profile
     """
     try:
+        logger.info(f"Getting profile posts: public_id={public_id}, urn_id={urn_id}, count={post_count}")
         client = get_linkedin_client()
         
         posts = client.get_profile_posts(
@@ -268,6 +320,7 @@ def get_profile_posts(
             post_count=post_count
         )
         
+        logger.info(f"Retrieved {len(posts)} posts")
         return posts
     except Exception as e:
         logger.error(f"Error getting profile posts: {e}")
@@ -279,7 +332,7 @@ def send_message(
     message_body: str,
     conversation_urn_id: Optional[str] = None,
     recipients: Optional[List[str]] = None
-) -> MessageResult:
+) -> Dict[str, Any]:
     """
     Send a message on LinkedIn.
     
@@ -292,6 +345,7 @@ def send_message(
         Result indicating success or failure
     """
     try:
+        logger.info(f"Sending message: body_length={len(message_body)}")
         client = get_linkedin_client()
         
         error = client.send_message(
@@ -300,10 +354,15 @@ def send_message(
             recipients=recipients
         )
         
-        return MessageResult(success=not error, error_message=str(error) if error else None)
+        success = not error
+        logger.info(f"Message send result: success={success}")
+        return {
+            "success": success,
+            "error_message": str(error) if error else None
+        }
     except Exception as e:
         logger.error(f"Error sending message: {e}")
-        return MessageResult(success=False, error_message=str(e))
+        return {"success": False, "error_message": str(e)}
 
 
 @mcp.tool()
@@ -315,9 +374,12 @@ def get_conversations() -> List[Dict[str, Any]]:
         List of conversation data
     """
     try:
+        logger.info("Getting conversations")
         client = get_linkedin_client()
         conversations = client.get_conversations()
-        return conversations.get("elements", [])
+        result = conversations.get("elements", [])
+        logger.info(f"Retrieved {len(result)} conversations")
+        return result
     except Exception as e:
         logger.error(f"Error getting conversations: {e}")
         return []
@@ -335,8 +397,10 @@ def get_conversation_details(profile_urn_id: str) -> Dict[str, Any]:
         Conversation details
     """
     try:
+        logger.info(f"Getting conversation details: profile_urn_id={profile_urn_id}")
         client = get_linkedin_client()
         details = client.get_conversation_details(profile_urn_id)
+        logger.info("Conversation details retrieved successfully")
         return details
     except Exception as e:
         logger.error(f"Error getting conversation details: {e}")
@@ -361,6 +425,7 @@ def add_connection(
         Result indicating success or failure
     """
     try:
+        logger.info(f"Adding connection: profile_public_id={profile_public_id}")
         client = get_linkedin_client()
         
         error = client.add_connection(
@@ -369,10 +434,12 @@ def add_connection(
             profile_urn=profile_urn
         )
         
+        success = not error
+        logger.info(f"Connection request result: success={success}")
         return {
-            "success": not error,
+            "success": success,
             "error": str(error) if error else None,
-            "message": "Connection request sent successfully" if not error else "Failed to send connection request"
+            "message": "Connection request sent successfully" if success else "Failed to send connection request"
         }
     except Exception as e:
         logger.error(f"Error adding connection: {e}")
@@ -388,8 +455,10 @@ def get_current_user_profile() -> Dict[str, Any]:
         Current user's profile data
     """
     try:
+        logger.info("Getting current user profile")
         client = get_linkedin_client()
         profile = client.get_user_profile()
+        logger.info("Current user profile retrieved successfully")
         return profile
     except Exception as e:
         logger.error(f"Error getting current user profile: {e}")
@@ -400,6 +469,7 @@ def get_current_user_profile() -> Dict[str, Any]:
 def get_profile_resource(public_id: str) -> str:
     """Get LinkedIn profile as a resource"""
     try:
+        logger.info(f"Getting profile resource: public_id={public_id}")
         client = get_linkedin_client()
         profile = client.get_profile(public_id=public_id)
         
@@ -415,8 +485,10 @@ def get_profile_resource(public_id: str) -> str:
             for exp in profile['experience'][:3]:  # Show top 3 experiences
                 output += f"- {exp.get('title', 'N/A')} at {exp.get('companyName', 'N/A')}\n"
         
+        logger.info("Profile resource formatted successfully")
         return output
     except Exception as e:
+        logger.error(f"Error retrieving profile resource: {e}")
         return f"Error retrieving profile: {str(e)}"
 
 
@@ -424,6 +496,7 @@ def get_profile_resource(public_id: str) -> str:
 def get_company_resource(public_id: str) -> str:
     """Get LinkedIn company as a resource"""
     try:
+        logger.info(f"Getting company resource: public_id={public_id}")
         client = get_linkedin_client()
         company = client.get_company(public_id)
         
@@ -434,10 +507,17 @@ def get_company_resource(public_id: str) -> str:
         output += f"Company Size: {company.get('staffCountRange', {}).get('start', 'N/A')}-{company.get('staffCountRange', {}).get('end', 'N/A')} employees\n"
         output += f"Description: {company.get('description', 'N/A')}\n"
         
+        logger.info("Company resource formatted successfully")
         return output
     except Exception as e:
+        logger.error(f"Error retrieving company resource: {e}")
         return f"Error retrieving company: {str(e)}"
 
 
 if __name__ == "__main__":
-    mcp.run()
+    try:
+        logger.info("Starting LinkedIn MCP Server...")
+        mcp.run()
+    except Exception as e:
+        logger.error(f"Server failed to start: {e}")
+        sys.exit(1)
