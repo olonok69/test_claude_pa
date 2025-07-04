@@ -1,36 +1,36 @@
-# Perplexity MCP Server with SSE Protocol & CSV Categories
+# Perplexity MCP Server with Company Tagging & CSV Categories
 
-A Model Context Protocol (MCP) server that provides AI-powered web search capabilities using the Perplexity API, plus access to categorized show/industry data from CSV files. This version uses Server-Sent Events (SSE) for real-time communication, making it compatible with web-based MCP clients and browsers.
+A comprehensive Model Context Protocol (MCP) server that provides AI-powered web search capabilities using the Perplexity API, plus specialized company tagging functionality for trade show exhibitor categorization. This version uses Server-Sent Events (SSE) for real-time communication, making it compatible with web-based MCP clients and browsers.
 
 ## 🚀 Features
 
-### **Web Search Capabilities**
+### **AI-Powered Web Search**
 - **Intelligent Search**: Leverage Perplexity's AI-powered search across the web
 - **Recency Filtering**: Filter results by time period (day, week, month, year)
 - **Multiple Models**: Support for all Perplexity AI models
 - **Citation Support**: Automatic source citations for all results
 - **Advanced Parameters**: Fine-tune search with custom parameters
 
+### **Company Tagging & Categorization** ⭐ NEW
+- **Automated Company Research**: Research companies using web sources and LinkedIn
+- **Taxonomy Matching**: Match companies to precise industry/product categories
+- **Trade Show Context**: Focus on relevant shows (CAI, DOL, CCSE, BDAIW, DCW)
+- **Structured Output**: Generate tables with up to 4 industry/product pairs per company
+- **Data Analyst Workflow**: Professional data analysis approach with accuracy focus
+
 ### **CSV Categories Data Access**
-- **Show Categories**: Access categorized data organized by shows (CAI, DOL, CCSE, BDAIW, DCW)
+- **Show Categories**: Access categorized data organized by shows
 - **Industry Organization**: Browse categories by industry and product classifications
 - **Search Functionality**: Search across all category data with flexible filtering
 - **Dynamic Resources**: Real-time access to CSV data through MCP resources
+- **Tagging Context**: Formatted categories specifically for company tagging
 
 ### **Technical Features**
 - **SSE Protocol**: Real-time communication using Server-Sent Events
-- **Health Monitoring**: Built-in health check endpoints with CSV status
+- **Health Monitoring**: Built-in health check endpoints with comprehensive status
 - **Async Operations**: High-performance async/await architecture
 - **Error Handling**: Comprehensive error management and logging
 - **Environment Configuration**: Flexible configuration via environment variables
-
-### **Available Models**
-- **sonar-deep-research**: 128k context - Enhanced research capabilities
-- **sonar-reasoning-pro**: 128k context - Advanced reasoning with professional focus
-- **sonar-reasoning**: 128k context - Enhanced reasoning capabilities
-- **sonar-pro**: 200k context - Professional grade model
-- **sonar**: 128k context - Default model (recommended)
-- **r1-1776**: 128k context - Alternative architecture
 
 ## 📋 Prerequisites
 
@@ -74,24 +74,18 @@ docker run -p 8001:8001 \
   perplexity-mcp-sse
 ```
 
-## 🔧 Available Tools (3 Tools)
+## 🔧 Available Tools (4 Tools)
 
-### **perplexity_search_web**
+### **Web Search Tools**
+
+#### **perplexity_search_web**
 Standard web search with recency filtering.
 
 **Parameters:**
 - `query` (string, required): The search query
 - `recency` (string, optional): Time filter - "day", "week", "month", "year" (default: "month")
 
-**Example:**
-```python
-await perplexity_search_web(
-    query="latest developments in AI",
-    recency="week"
-)
-```
-
-### **perplexity_advanced_search**
+#### **perplexity_advanced_search**
 Advanced search with custom parameters for fine-tuned control.
 
 **Parameters:**
@@ -101,7 +95,9 @@ Advanced search with custom parameters for fine-tuned control.
 - `max_tokens` (int, optional): Maximum response tokens (default: 512, max: 2048)
 - `temperature` (float, optional): Response randomness 0.0-1.0 (default: 0.2)
 
-### **search_show_categories** ⭐ NEW
+### **Category Management Tools**
+
+#### **search_show_categories**
 Search and filter show categories from the CSV data.
 
 **Parameters:**
@@ -109,96 +105,234 @@ Search and filter show categories from the CSV data.
 - `industry_filter` (string, optional): Filter by industry name (partial match)
 - `product_filter` (string, optional): Filter by product name (partial match)
 
+### **Company Tagging Tool** ⭐ NEW
+
+#### **tag_company**
+Advanced company research and taxonomy tagging for trade show exhibitors.
+
+**Parameters:**
+- `company_name` (string, required): The main company name
+- `trading_name` (string, optional): Alternative trading name
+- `target_shows` (string, optional): Comma-separated show codes (e.g., "CAI,DOL,BDAIW")
+- `company_description` (string, optional): Brief description of the company
+
 **Example:**
 ```python
-await search_show_categories(
-    show_name="CAI",
-    industry_filter="Cloud",
-    product_filter="AI"
+await tag_company(
+    company_name="Microsoft Corporation",
+    trading_name="Microsoft",
+    target_shows="CAI,BDAIW",
+    company_description="Technology company specializing in cloud and AI solutions"
 )
 ```
 
-## 🗂️ Available Resources (6 Resources)
+**Output Format:**
+The tool generates a comprehensive analysis including:
+- Research findings from web sources and LinkedIn
+- Taxonomy analysis and matching
+- Structured table with up to 4 industry/product pairs
+- Complete audit trail of the tagging process
 
-### **categories://all**
-Get complete CSV data with all show categories.
+## 📋 Available Prompts (1 Prompt)
 
-**Returns:**
-- Total count of categories
-- Complete dataset with Show, Industry, Product columns
-- Structured JSON format
-
-### **categories://shows**
-Get categories organized by show with statistics.
-
-**Returns:**
-- Overview of all shows (CAI, DOL, CCSE, BDAIW, DCW)
-- Categories count per show
-- Industry breakdown per show
-
-### **categories://shows/{show_name}**
-Get categories for a specific show.
+### **company_tagging_analyst** ⭐ NEW
+Professional data analyst prompt for company categorization.
 
 **Parameters:**
-- `show_name`: Show identifier (CAI, DOL, CCSE, BDAIW, DCW)
+- `company_name` (string): The main company name
+- `trading_name` (string): Alternative trading name (optional)
+- `target_shows` (string): Shows the company is interested in
+- `company_description` (string): Brief description (optional)
 
-**Example URLs:**
-- `categories://shows/CAI` - Cloud and AI Infrastructure categories
-- `categories://shows/DOL` - DevOps Lifecycle categories
-- `categories://shows/CCSE` - Cloud and Cyber Security Expo categories
-- `categories://shows/BDAIW` - Big Data & AI World categories
-- `categories://shows/DCW` - Data Centre World categories
+**Purpose:**
+This prompt provides the AI with a complete data analyst persona and workflow for accurately tagging companies with industry and product categories from the taxonomy.
 
-### **categories://industries**
-Get categories organized by industry.
+**Key Features:**
+- Professional data analyst role definition
+- Complete taxonomy context
+- Step-by-step analysis process
+- Accuracy and consistency focus
+- Structured output format requirements
 
-**Returns:**
-- All industries with their products
-- Show associations for each industry
-- Product counts per industry
+## 🗂️ Available Resources (7 Resources)
 
-### **categories://industries/{industry_name}**
-Get categories for a specific industry.
+### **Basic Category Resources**
 
-**Parameters:**
-- `industry_name`: Industry name (case-insensitive, partial match)
+#### **categories://all**
+Complete CSV data with all show categories in JSON format.
 
-**Example URLs:**
-- `categories://industries/cloud` - Cloud-related categories
-- `categories://industries/security` - Security-related categories
-- `categories://industries/ai` - AI-related categories
+#### **categories://shows**
+Categories organized by show with statistics and industry breakdowns.
 
-### **categories://search/{query}**
-Search across all category data.
+#### **categories://shows/{show_name}**
+Categories for a specific show (CAI, DOL, CCSE, BDAIW, DCW).
 
-**Parameters:**
-- `query`: Search term to find in Show, Industry, or Product fields
+#### **categories://industries**
+Categories organized by industry with product associations.
 
-**Example URLs:**
-- `categories://search/artificial intelligence` - Find AI-related categories
-- `categories://search/security` - Find security-related entries
-- `categories://search/cloud` - Find cloud-related categories
+#### **categories://industries/{industry_name}**
+Categories for a specific industry (case-insensitive, partial match).
 
-## 🎯 CSV Data Structure
+#### **categories://search/{query}**
+Search across all category data with flexible query matching.
 
-The CSV file contains show categories with the following structure:
+### **Company Tagging Resource** ⭐ NEW
 
-```csv
-Show,Industry,Product
-CAI,IT Infrastructure & Hardware,Semiconductor Technologies
-CAI,Cloud and AI Infrastructure Services,Hyperscale Cloud Solutions
-DOL,Application Delivery & Runtime,Application Delivery
-CCSE,Application Security,Application Security
-BDAIW,AI & ML Platforms,Cloud AI Platform
-DCW,Building Equipment,Electrical Systems
+#### **categories://for-tagging**
+Categories formatted specifically for company tagging analysis.
+
+**Special Features:**
+- Formatted for prompt consumption
+- Organized by show with full names
+- Exact spelling and formatting preservation
+- Usage instructions included
+
+**Output Format:**
+```
+TAXONOMY CATEGORIES - Industry and Product Pairs by Show:
+
+**CAI (Cloud and AI Infrastructure):**
+- IT Infrastructure & Hardware | Semiconductor Technologies
+- Cloud and AI Infrastructure Services | Hyperscale Cloud Solutions
+...
+
+**DOL (DevOps Live):**
+- Application Delivery & Runtime | Application Delivery
+- CI/CD & Automation | CI/CD Pipelines
+...
+
+NOTE: Use industry and product pairs EXACTLY as shown above.
 ```
 
-**Show Categories:**
+## 🎯 Company Tagging Workflow
+
+### **Complete Analysis Process**
+
+The `tag_company` tool follows a comprehensive research and analysis workflow:
+
+1. **Input Validation**
+   - Validates company name (required)
+   - Normalizes trading name and show targets
+   - Determines research name priority (Trading Name > Company Name)
+
+2. **Web Research Phase**
+   - Initial company research using Perplexity AI
+   - Additional context from LinkedIn and company websites
+   - Focus on products/services relevant to target shows
+
+3. **Taxonomy Matching Phase**
+   - Analysis of research findings
+   - Matching to exact taxonomy categories
+   - Selection of up to 4 most relevant industry/product pairs
+
+4. **Structured Output Generation**
+   - Professional analysis summary
+   - Research audit trail
+   - Formatted table with categorization results
+
+### **Usage Examples**
+
+#### **Basic Company Tagging**
+```python
+# Tag a technology company
+result = await tag_company(
+    company_name="NVIDIA Corporation",
+    target_shows="CAI,BDAIW"
+)
+```
+
+#### **Company with Trading Name**
+```python
+# Use trading name for research
+result = await tag_company(
+    company_name="International Business Machines Corporation",
+    trading_name="IBM",
+    target_shows="CAI,DOL,BDAIW",
+    company_description="Enterprise technology and consulting company"
+)
+```
+
+#### **Multi-Show Analysis**
+```python
+# Analyze for multiple relevant shows
+result = await tag_company(
+    company_name="Amazon Web Services",
+    trading_name="AWS",
+    target_shows="CAI,DOL,CCSE,DCW"
+)
+```
+
+### **Expected Output Structure**
+
+The tool generates a comprehensive report including:
+
+```
+COMPANY TAGGING ANALYSIS FOR: [Company Name]
+============================================================
+
+RESEARCH NAME USED: [Name used for web research]
+TARGET SHOWS: [Show codes provided]
+
+INITIAL RESEARCH:
+[Perplexity search results about company products/services]
+
+ADDITIONAL RESEARCH:
+[LinkedIn and website specific research findings]
+
+TAXONOMY ANALYSIS AND TAGGING:
+[Analysis explaining categorization decisions]
+
+TAXONOMY MATCHES:
+| Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | ... |
+|-----------------|----------------|-----------------|----------------|-----|
+| [Exact Industry] | [Exact Product] | [Exact Industry] | [Exact Product] | ... |
+
+TABLE FORMAT:
+| Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | ... |
+|--------------|--------------|-----------------|----------------|-----|
+| [Company]    | [Trading]    | [Industry]      | [Product]      | ... |
+
+CATEGORIES REFERENCE:
+[Complete taxonomy for verification]
+```
+
+## 🎯 Trade Show Context
+
+### **Supported Shows**
 - **CAI**: Cloud and AI Infrastructure
-- **DOL**: DevOps Lifecycle  
+- **DOL**: DevOps Live
 - **CCSE**: Cloud and Cyber Security Expo
-- **BDAIW**: Big Data & AI World
+- **BDAIW**: Big Data and AI World
 - **DCW**: Data Centre World
+
+### **Show-Specific Categories**
+
+Each show has specific industry and product categories relevant to its theme:
+
+**CAI (Cloud and AI Infrastructure):**
+- Focus: Cloud infrastructure, AI platforms, semiconductor technologies
+- Key Industries: IT Infrastructure & Hardware, Cloud and AI Infrastructure Services
+- Example Products: Hyperscale Cloud Solutions, AI Applications
+
+**DOL (DevOps Live):**
+- Focus: Development operations, CI/CD, automation
+- Key Industries: Application Delivery & Runtime, CI/CD & Automation
+- Example Products: DevOps Tools, Configuration Management
+
+**CCSE (Cloud and Cyber Security Expo):**
+- Focus: Security solutions, compliance, threat detection
+- Key Industries: Application Security, Governance Risk and Compliance
+- Example Products: Cloud Security Solutions, Threat Intelligence & Analytics
+
+**BDAIW (Big Data & AI World):**
+- Focus: Data analytics, machine learning, AI platforms
+- Key Industries: AI & ML Platforms, Data Management
+- Example Products: Cloud AI Platform, Analytics Platforms
+
+**DCW (Data Centre World):**
+- Focus: Data center infrastructure, power, cooling
+- Key Industries: Power & Energy, Cooling & Environment
+- Example Products: Energy Storage, Cooling systems
 
 ## 🔌 API Endpoints
 
@@ -207,7 +341,7 @@ DCW,Building Equipment,Electrical Systems
 GET /health
 ```
 
-**Healthy Response:**
+**Enhanced Response with Company Tagging:**
 ```json
 {
   "status": "healthy",
@@ -225,141 +359,133 @@ GET /health
     "categories://all",
     "categories://shows",
     "categories://shows/{show_name}",
-    "categories://industries",
+    "categories://industries", 
     "categories://industries/{industry_name}",
-    "categories://search/{query}"
+    "categories://search/{query}",
+    "categories://for-tagging"
+  ],
+  "available_prompts": [
+    "company_tagging_analyst"
+  ],
+  "available_tools": [
+    "perplexity_search_web",
+    "perplexity_advanced_search",
+    "search_show_categories", 
+    "tag_company"
   ]
 }
 ```
 
-### Server-Sent Events
-```
-GET /sse
-```
-Main endpoint for MCP communication via Server-Sent Events.
+## 🎯 Advanced Usage Examples
 
-### Message Handling
-```
-POST /messages/
-```
-Handles MCP protocol messages.
-
-## 🎯 Usage Examples
-
-### Basic Web Search
+### **Company Research Workflow**
 ```python
-# Search for recent news
-result = await perplexity_search_web(
-    query="breaking news today",
-    recency="day"
+# Step 1: Research company categories context
+categories = await search_show_categories(show_name="CAI")
+
+# Step 2: Tag the company with full analysis
+result = await tag_company(
+    company_name="Salesforce",
+    target_shows="CAI,BDAIW",
+    company_description="CRM and cloud computing company"
 )
 
-# Search for technical information
-result = await perplexity_search_web(
-    query="Python async best practices",
-    recency="month"
-)
+# Step 3: Verify categories used
+verification = client.read_resource("categories://for-tagging")
 ```
 
-### CSV Categories Usage
+### **Batch Company Processing**
 ```python
-# Get all CAI show categories
-result = await search_show_categories(show_name="CAI")
+companies = [
+    {"name": "Microsoft", "trading": "Microsoft", "shows": "CAI,BDAIW"},
+    {"name": "Google LLC", "trading": "Google", "shows": "CAI,BDAIW,DOL"},
+    {"name": "Oracle Corporation", "trading": "Oracle", "shows": "CAI,DCW"}
+]
 
-# Find AI-related categories across all shows
-result = await search_show_categories(product_filter="AI")
-
-# Search for cloud security categories
-result = await search_show_categories(
-    industry_filter="security", 
-    product_filter="cloud"
-)
+for company in companies:
+    result = await tag_company(
+        company_name=company["name"],
+        trading_name=company["trading"],
+        target_shows=company["shows"]
+    )
+    # Process results...
 ```
 
-### Resource Access Examples
+### **Show-Specific Analysis**
 ```python
-# Access via MCP client resources
-all_categories = client.read_resource("categories://all")
+# Focus on specific show categories
 cai_categories = client.read_resource("categories://shows/CAI")
-cloud_categories = client.read_resource("categories://search/cloud")
-```
 
-### Advanced Research with Categories
-```python
-# 1. Search categories for context
-categories = await search_show_categories(
-    show_name="BDAIW",
-    industry_filter="AI"
+# Tag company for CAI show specifically
+result = await tag_company(
+    company_name="Intel Corporation",
+    target_shows="CAI"
 )
 
-# 2. Use category info in Perplexity search
-result = await perplexity_advanced_search(
-    query="latest AI platform developments for enterprise",
-    recency="month",
-    model="sonar-pro",
-    max_tokens=1024
-)
+# Compare with available CAI categories
 ```
 
-## 🔒 Security & Configuration
+## 🔒 Security & Best Practices
 
-### Environment Variables
+### **API Security**
+- Use secure API keys with proper scoping
+- Implement rate limiting for search requests
+- Enable SSL/TLS for all communications
+- Regularly rotate API keys and credentials
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `PERPLEXITY_API_KEY` | Your Perplexity API key | None | Yes |
-| `PERPLEXITY_MODEL` | Default model to use | `sonar` | No |
+### **Data Privacy**
+- Company research respects public information sources
+- No storage of sensitive company data
+- Audit trail for all tagging decisions
+- Transparent research methodology
 
-### CSV File Requirements
-- Located at: `src/perplexity_mcp/categories/classes.csv`
-- Headers: `Show,Industry,Product`
-- UTF-8 encoding
-- Automatically loaded on server startup
+### **Taxonomy Integrity**
+- Exact matching to prevent category drift
+- No modification of industry/product terms
+- Consistent spelling and formatting
+- Validation against source taxonomy
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+### **Company Tagging Issues**
 
-**CSV File Not Found**
+**Research Failures:**
 ```
-Warning: CSV file not found at src/perplexity_mcp/categories/classes.csv
+Error: Unable to find information about company
 ```
-Solution: Ensure the CSV file exists at the correct path with proper headers.
+- **Solution**: Verify company name spelling and try trading name
+- **Check**: Company has web presence and is publicly searchable
+- **Alternative**: Add company description for additional context
 
-**Empty CSV Data**
+**Taxonomy Matching Errors:**
 ```
-Info: CSV data loaded successfully: 0 records
+Warning: No matching categories found for company
 ```
-Solution: Check CSV file format and ensure it contains data rows.
+- **Solution**: Review target shows - company may not fit these show themes
+- **Check**: Expand target shows or verify company's actual business focus
+- **Verify**: CSV data contains relevant categories for the company type
 
-**Resource Not Found**
+**API Rate Limits:**
 ```
-Error: Show 'INVALID' not found
+Error: Perplexity API rate limit exceeded
 ```
-Solution: Use valid show names (CAI, DOL, CCSE, BDAIW, DCW) or check available shows.
+- **Solution**: Implement delays between requests
+- **Monitor**: API usage against quotas
+- **Consider**: Upgrading Perplexity subscription for higher limits
 
-**API Key Not Configured**
-```
-Error: PERPLEXITY_API_KEY environment variable is required
-```
-Solution: Set the `PERPLEXITY_API_KEY` environment variable.
+### **CSV Data Issues**
 
-### Debug Mode
-
-Enable debug logging:
-```python
-logging.basicConfig(level=logging.DEBUG)
+**Missing Categories:**
 ```
-
-### Health Check with CSV Status
-Monitor server and CSV data health:
-```bash
-curl http://localhost:8001/health
+Warning: CSV file not found or empty
 ```
+- **Solution**: Verify CSV file at `src/perplexity_mcp/categories/classes.csv`
+- **Check**: File format with headers `Show,Industry,Product`
+- **Restart**: Server after CSV file changes
 
 ## 🚀 Production Deployment
 
-### Docker Compose with CSV Mount
+### **Docker Compose with Company Tagging**
 ```yaml
 services:
   perplexity-mcp:
@@ -379,83 +505,88 @@ services:
     restart: unless-stopped
 ```
 
-### CSV Data Management
-- **Version Control**: Keep CSV file in version control
-- **Data Updates**: Restart server after CSV updates
-- **Backup**: Regular backup of category data
-- **Validation**: Ensure CSV integrity before deployment
+### **Company Tagging Performance**
+- **Batch Processing**: Process multiple companies with delays
+- **Caching**: Cache research results for repeated company analysis
+- **Rate Limiting**: Respect Perplexity API limits
+- **Quality Control**: Implement validation of tagging results
 
-## 🔄 Integration with MCP Clients
+## 🔄 Integration Examples
 
-### Web-based Clients
-Access both search and category data:
-
+### **Web-based Clients**
 ```javascript
-// Access Perplexity search
-const searchResult = await client.callTool('perplexity_search_web', {
-    query: 'AI trends 2024',
-    recency: 'month'
+// Tag a company with full analysis
+const tagResult = await client.callTool('tag_company', {
+    company_name: 'Adobe Inc.',
+    trading_name: 'Adobe',
+    target_shows: 'CAI,BDAIW',
+    company_description: 'Digital media and marketing software company'
 });
 
-// Access category resources
-const caiCategories = await client.readResource('categories://shows/CAI');
-const aiCategories = await client.readResource('categories://search/artificial intelligence');
+// Access tagging-specific categories
+const taggingCategories = await client.readResource('categories://for-tagging');
 
-// Search categories with tool
-const categoryResult = await client.callTool('search_show_categories', {
-    show_name: 'BDAIW',
-    product_filter: 'AI'
+// Use the tagging prompt
+const promptResult = await client.getPrompt('company_tagging_analyst', {
+    company_name: 'Adobe Inc.',
+    trading_name: 'Adobe',
+    target_shows: 'CAI,BDAIW'
 });
 ```
 
-### MCP Client Configuration
-```json
-{
-  "mcpServers": {
-    "perplexity-search": {
-      "command": "python",
-      "args": ["perplexity_sse_server.py"],
-      "cwd": "/path/to/server",
-      "env": {
-        "PERPLEXITY_API_KEY": "your_api_key"
-      }
+### **Automated Workflows**
+```python
+# Research and tag workflow
+async def research_and_tag_company(company_info):
+    # Step 1: Get relevant categories
+    categories = await search_show_categories(
+        show_name=company_info.get('primary_show')
+    )
+    
+    # Step 2: Tag the company
+    result = await tag_company(
+        company_name=company_info['name'],
+        trading_name=company_info.get('trading_name'),
+        target_shows=company_info.get('target_shows'),
+        company_description=company_info.get('description')
+    )
+    
+    return {
+        'company': company_info,
+        'categories': categories,
+        'tagging_result': result
     }
-  }
-}
 ```
 
-## 📈 Performance Optimization
+## 📈 Performance Monitoring
 
-### CSV Data Caching
-- CSV data loaded once at startup
-- In-memory processing for fast access
-- Minimal overhead for category operations
+### **Company Tagging Metrics**
+- **Research Success Rate**: Percentage of successful company research
+- **Taxonomy Match Rate**: Percentage of companies successfully categorized
+- **API Usage**: Perplexity API calls per company analysis
+- **Processing Time**: Average time per company tagging
+- **Accuracy Validation**: Manual verification of tagging results
 
-### Resource Access Patterns
-- **Static Resources**: `categories://all`, `categories://shows`
-- **Dynamic Resources**: `categories://shows/{show}`, `categories://search/{query}`
-- **Cached Responses**: Industry and show summaries
-
-### Search Optimization
-- Combine category context with Perplexity searches
-- Use category data to refine search queries
-- Filter results using industry/product knowledge
+### **Quality Assurance**
+- **Manual Spot Checks**: Random verification of tagging accuracy
+- **Category Distribution**: Monitor usage of different taxonomy categories
+- **Show Relevance**: Validate categories match intended show themes
+- **Research Quality**: Assess depth and relevance of company research
 
 ## 🤝 Contributing
 
-### Adding New CSV Resources
+### **Extending Company Tagging**
 
-1. **Extend Resource Functions**: Add new `@mcp.resource()` decorators
-2. **Update Health Check**: Include new resources in health response
-3. **Add Documentation**: Update this README with new resource info
-4. **Test Resource Access**: Verify resources work with MCP clients
+1. **Add New Shows**: Extend CSV with new show categories
+2. **Enhance Research**: Add new data sources for company information
+3. **Improve Accuracy**: Refine taxonomy matching algorithms
+4. **Add Validation**: Implement quality checking mechanisms
 
-### CSV Data Extensions
-
-1. **Add New Columns**: Extend CSV structure as needed
-2. **Update Parsing Logic**: Modify `load_csv_data()` function
-3. **Create New Filters**: Add filtering options to search tool
-4. **Update Resources**: Extend resource responses with new data
+### **CSV Data Management**
+- **Category Updates**: Process for updating taxonomy categories
+- **Show Management**: Adding or modifying show definitions
+- **Quality Control**: Validation of CSV data integrity
+- **Version Control**: Track changes to taxonomy over time
 
 ## 📄 License
 
@@ -466,5 +597,7 @@ This project is licensed under the MIT License.
 **Version**: 0.1.7  
 **Last Updated**: July 2025  
 **Compatibility**: Perplexity API v1, MCP 1.0+, Python 3.11+  
-**Tools**: 3 (Perplexity search + CSV categories)  
-**Resources**: 6 (Complete CSV data access)
+**Tools**: 4 (Web search + Categories + Company tagging)  
+**Resources**: 7 (Complete CSV access + Tagging context)  
+**Prompts**: 1 (Professional company tagging analyst)  
+**Shows Supported**: 5 (CAI, DOL, CCSE, BDAIW, DCW)

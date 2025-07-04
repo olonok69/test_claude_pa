@@ -182,8 +182,8 @@ def categorize_tools(tools):
         tool_name_lower = tool.name.lower()
         tool_desc_lower = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
         
-        # Perplexity tool detection (check exact tool names)
-        if any(keyword in tool_name_lower for keyword in ['perplexity_search_web', 'perplexity_advanced_search', 'search_show_categories']) or 'perplexity' in tool_name_lower:
+        # Perplexity tool detection (check exact tool names including company tagging)
+        if any(keyword in tool_name_lower for keyword in ['perplexity_search_web', 'perplexity_advanced_search', 'search_show_categories', 'tag_company']) or 'perplexity' in tool_name_lower:
             perplexity_tools.append(tool)
         # Google Search tool detection
         elif any(keyword in tool_name_lower for keyword in ['google-search', 'read-webpage']) or ('google' in tool_name_lower and 'perplexity' not in tool_name_lower):
@@ -532,7 +532,7 @@ def display_tool_details(tool):
         # Tool category badge
         tool_name_lower = tool.name.lower()
         
-        if any(keyword in tool_name_lower for keyword in ['perplexity_search_web', 'perplexity_advanced_search', 'search_show_categories']) or 'perplexity' in tool_name_lower:
+        if any(keyword in tool_name_lower for keyword in ['perplexity_search_web', 'perplexity_advanced_search', 'search_show_categories', 'tag_company']) or 'perplexity' in tool_name_lower:
             st.info("🔮 Perplexity AI Tool")
         elif any(keyword in tool_name_lower for keyword in ['google-search', 'read-webpage']) or ('google' in tool_name_lower and 'perplexity' not in tool_name_lower):
             st.success("🔍 Google Search Tool")
