@@ -183,7 +183,7 @@ def categorize_tools(tools):
         tool_desc_lower = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
         
         # Perplexity tool detection (check exact tool names)
-        if any(keyword in tool_name_lower for keyword in ['perplexity_search_web', 'perplexity_advanced_search']) or 'perplexity' in tool_name_lower:
+        if any(keyword in tool_name_lower for keyword in ['perplexity_search_web', 'perplexity_advanced_search', 'search_show_categories']) or 'perplexity' in tool_name_lower:
             perplexity_tools.append(tool)
         # Google Search tool detection
         elif any(keyword in tool_name_lower for keyword in ['google-search', 'read-webpage']) or ('google' in tool_name_lower and 'perplexity' not in tool_name_lower):
@@ -252,7 +252,7 @@ def create_connection_tab():
                         st.markdown("**Operations:** Web search, webpage content extraction")
                     elif name == "Perplexity Search":
                         st.markdown("**Type:** AI-Powered Search Engine")
-                        st.markdown("**Operations:** Web search with AI-powered responses, advanced search parameters")
+                        st.markdown("**Operations:** Web search with AI-powered responses, advanced search parameters, CSV categories access")
                 
                 with col2:
                     if st.button(f"🗑️ Remove", key=f"remove_{name}"):
@@ -315,11 +315,25 @@ def create_connection_tab():
                         # Show additional details for different servers
                         try:
                             health_data = response.json()
-                            if name == "Perplexity Search" and "version" in health_data:
-                                st.info(f"   📋 Version: {health_data.get('version', 'Unknown')}")
+                            if name == "Perplexity Search":
+                                if "version" in health_data:
+                                    st.info(f"   📋 Version: {health_data.get('version', 'Unknown')}")
                                 if "api_key_configured" in health_data:
                                     api_status = "✅ Configured" if health_data["api_key_configured"] else "❌ Missing"
                                     st.info(f"   🔑 API Key: {api_status}")
+                                if "csv_data" in health_data:
+                                    csv_info = health_data["csv_data"]
+                                    if csv_info.get("available"):
+                                        st.info(f"   📊 CSV Data: {csv_info.get('total_records', 0)} records")
+                                        if csv_info.get("shows"):
+                                            st.info(f"   🎪 Shows: {', '.join(csv_info['shows'])}")
+                                    else:
+                                        st.warning(f"   📊 CSV Data: Not available")
+                            elif name == "Google Search":
+                                if "version" in health_data:
+                                    st.info(f"   📋 Version: {health_data.get('version', 'Unknown')}")
+                                if "activeConnections" in health_data:
+                                    st.info(f"   🔗 Active Connections: {health_data['activeConnections']}")
                         except:
                             pass  # Ignore JSON parsing errors for health details
                     else:
@@ -358,6 +372,11 @@ def create_connection_tab():
         - Restart MCP servers
         - Check server logs for errors
         - Verify server implementations are working
+        
+        **📊 CSV Data Issues (Perplexity Server):**
+        - Verify CSV file exists at `src/perplexity_mcp/categories/classes.csv`
+        - Check CSV file format (Show,Industry,Product headers)
+        - Restart Perplexity server after CSV changes
         """)
 
 
@@ -513,9 +532,9 @@ def display_tool_details(tool):
         # Tool category badge
         tool_name_lower = tool.name.lower()
         
-        if any(keyword in tool_name_lower for keyword in ['perplexity_search_web', 'perplexity_advanced_search']) or 'perplexity' in tool_name_lower:
+        if any(keyword in tool_name_lower for keyword in ['perplexity_search_web', 'perplexity_advanced_search', 'search_show_categories']) or 'perplexity' in tool_name_lower:
             st.info("🔮 Perplexity AI Tool")
         elif any(keyword in tool_name_lower for keyword in ['google-search', 'read-webpage']) or ('google' in tool_name_lower and 'perplexity' not in tool_name_lower):
             st.success("🔍 Google Search Tool")
         else:
-            st.secondary("🔧 General Tool")
+            st.warning("🔧 General Tool")  # Changed from st.secondary to st.warning
