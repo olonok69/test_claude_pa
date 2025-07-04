@@ -19,6 +19,9 @@ langchain-openai>=0.0.3
 langchain-mcp-adapters==0.0.7
 langgraph==0.3.30
 
+# MCP stdio support for embedded servers
+mcp>=1.0.2
+
 # Enhanced AI Provider Support (optional packages)
 # Note: Install these for enhanced mode functionality:
 # pip install openai anthropic google-generativeai cohere mistralai

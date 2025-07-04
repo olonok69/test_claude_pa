@@ -114,48 +114,6 @@ def get_industry_categories() -> Dict[str, List[str]]:
     
     return industries
 
-def format_categories_for_prompt() -> str:
-    """Format categories data specifically for the company tagging prompt."""
-    csv_data = load_csv_data()
-    
-    if not csv_data:
-        return "No category data available."
-    
-    # Group by show for better organization
-    shows_data = {}
-    for row in csv_data:
-        show = row.get('Show', '').strip()
-        industry = row.get('Industry', '').strip()
-        product = row.get('Product', '').strip()
-        
-        if show and industry and product:
-            if show not in shows_data:
-                shows_data[show] = []
-            shows_data[show].append(f"{industry} | {product}")
-    
-    # Format for prompt
-    formatted_output = "TAXONOMY CATEGORIES - Industry and Product Pairs by Show:\n\n"
-    
-    show_names = {
-        'CAI': 'Cloud and AI Infrastructure',
-        'DOL': 'DevOps Live', 
-        'CCSE': 'Cloud and Cyber Security Expo',
-        'BDAIW': 'Big Data and AI World',
-        'DCW': 'Data Centre World'
-    }
-    
-    for show_code, full_name in show_names.items():
-        if show_code in shows_data:
-            formatted_output += f"**{show_code} ({full_name}):**\n"
-            for category in shows_data[show_code]:
-                formatted_output += f"- {category}\n"
-            formatted_output += "\n"
-    
-    formatted_output += f"Total categories available: {len(csv_data)}\n"
-    formatted_output += "NOTE: Use industry and product pairs EXACTLY as shown above. Do not modify spelling, spacing, or characters."
-    
-    return formatted_output
-
 @mcp.resource("categories://all")
 def get_all_categories() -> str:
     """Get all categories from the CSV file as raw data."""
@@ -290,82 +248,6 @@ def search_categories(query: str) -> str:
         "total_matches": len(matches),
         "matches": matches
     }, indent=2)
-
-@mcp.resource("categories://for-tagging")
-def get_categories_for_tagging() -> str:
-    """Get categories formatted specifically for company tagging prompt."""
-    return format_categories_for_prompt()
-
-@mcp.prompt("company_tagging_analyst")
-def company_tagging_prompt(
-    company_name: str = "",
-    trading_name: str = "",
-    target_shows: str = "",
-    company_description: str = ""
-) -> str:
-    """
-    Prompt for tagging exhibitor companies with accurate industry and product tags.
-    
-    Args:
-        company_name: The main company name
-        trading_name: Alternative trading name (optional)
-        target_shows: Shows the company is interested in (e.g., "CAI,DOL")
-        company_description: Brief description of the company (optional)
-    """
-    
-    # Get formatted categories for the prompt
-    categories_data = format_categories_for_prompt()
-    
-    # Create the complete prompt content
-    prompt_content = f"""You are a data analyst tasked with tagging exhibitor companies with the most accurate tags from an industry and product taxonomy structure we have in our categories, based on products and services that each company is most likely to sell in each trade show.
-
-What is important: Accuracy and consistency.
-
-CONTEXT:
-Companies might be interested in exhibiting at one or more technology shows:
-- Big Data and AI World (BDAIW)
-- DevOps Live (DOL) 
-- Data Centre World (DCW)
-- Cloud and Cyber Security Expo (CCSE)
-- CAI (Cloud and AI Infrastructure)
-
-TAXONOMY STRUCTURE:
-The taxonomy is our categories - a set of pairs (industry and product) connected with show codes that companies might be interested to exhibit at.
-
-IMPORTANT INSTRUCTIONS:
-• The context of which show is important as companies could play in many industries and offer many products, but only the ones more relevant to the topics of the shows must be selected.
-• Use any web sources available, including LinkedIn, as well as websites for each company.
-• Use first the "Trading Name" if it exists. If that is blank (and only if this is blank) then use the main "Company Name".
-• Do NOT add any new or different industries nor products from the taxonomy provided in our categories.
-• A company can have multiple industries and multiple products within each industry, hence select up to 4 pairs of industry and product.
-• Use industry and product pairs EXACTLY as they appear in the taxonomy - no changes at all. Check that there are no spaces and that the spelling and characters used are identical (for example, do not replace & with "and").
-
-PROCESS TO FOLLOW:
-1. Understand the taxonomy categories (pairs of Industry and product for each show).
-2. Check what relevant shows they might be interested in exhibiting at.
-3. Choose what name to use (Trading Name if available, otherwise Company Name) and find relevant information in internet sources (use google-search or perplexity tools) to identify what products and/or services they sell within the context of those shows.
-4. Allocate up to 4 pairs of Industry and Product from the taxonomy matching those products and services you just identified.
-
-OUTPUT FORMAT:
-Generate a table with the Company Name, the alternative "Trading Name", and add 8 columns for:
-- Tech Industry 1, Tech Product 1
-- Tech Industry 2, Tech Product 2  
-- Tech Industry 3, Tech Product 3
-- Tech Industry 4, Tech Product 4
-
-Use the exact industry and product names from the taxonomy provided.
-
-COMPANY INFORMATION:
-- Company Name: {company_name}
-- Trading Name: {trading_name if trading_name else "Not provided"}
-- Target Shows: {target_shows if target_shows else "Not specified"}
-- Company Description: {company_description if company_description else "Not provided"}
-
-{categories_data}
-
-Please research this company using the available search tools and provide accurate industry and product tags from the taxonomy above."""
-    
-    return prompt_content
 
 async def call_perplexity_api(query: str, recency: str = "month") -> Dict[str, Any]:
     """Call the Perplexity API with the given query and recency filter."""
@@ -622,126 +504,6 @@ async def search_show_categories(
     
     return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
-@mcp.tool()
-async def tag_company(
-    company_name: str,
-    trading_name: Optional[str] = None,
-    target_shows: Optional[str] = None,
-    company_description: Optional[str] = None
-) -> list[TextContent]:
-    """Tag a company with industry and product categories using web research and taxonomy matching.
-    
-    Args:
-        company_name: The main company name (required)
-        trading_name: Alternative trading name (optional)
-        target_shows: Comma-separated show codes (e.g., "CAI,DOL,BDAIW")
-        company_description: Brief description of the company (optional)
-    
-    Returns:
-        TextContent with research findings and taxonomy tags
-    """
-    logger.info(f"Tagging company: {company_name}")
-    
-    # Validate inputs
-    if not company_name or not company_name.strip():
-        return [TextContent(type="text", text="Error: Company name is required.")]
-    
-    # Clean and normalize inputs
-    company_name = company_name.strip()
-    trading_name = trading_name.strip() if trading_name else ""
-    target_shows = target_shows.strip() if target_shows else ""
-    company_description = company_description.strip() if company_description else ""
-    
-    # Determine which name to use for research
-    research_name = trading_name if trading_name else company_name
-    
-    # Get categories data
-    categories_data = format_categories_for_prompt()
-    
-    try:
-        # Step 1: Research the company
-        research_query = f"{research_name} company products services technology"
-        if target_shows:
-            show_context = target_shows.replace(",", " ")
-            research_query += f" {show_context}"
-        
-        # Use Perplexity for initial research
-        research_data = await call_perplexity_api(research_query, "year")
-        research_content = research_data["choices"][0]["message"]["content"]
-        
-        # Step 2: Get additional context from company website/LinkedIn
-        website_query = f"{research_name} site:linkedin.com OR site:{research_name.lower().replace(' ', '')}.com products technology solutions"
-        website_data = await call_perplexity_api(website_query, "year")
-        website_content = website_data["choices"][0]["message"]["content"]
-        
-        # Step 3: Analyze findings and match to taxonomy
-        analysis_prompt = f"""Based on the following research about {research_name}, identify up to 4 pairs of Industry and Product from the provided taxonomy.
-
-COMPANY DETAILS:
-- Company Name: {company_name}
-- Trading Name: {trading_name if trading_name else "Not provided"}
-- Target Shows: {target_shows if target_shows else "Not specified"}
-- Description: {company_description if company_description else "Not provided"}
-
-RESEARCH FINDINGS:
-{research_content}
-
-ADDITIONAL CONTEXT:
-{website_content}
-
-{categories_data}
-
-INSTRUCTIONS:
-1. Focus only on products/services relevant to the target shows: {target_shows if target_shows else "all shows"}
-2. Use EXACTLY the industry and product names from the taxonomy above
-3. Select up to 4 pairs that best match the company's offerings
-4. Provide your analysis in this format:
-
-ANALYSIS:
-[Brief explanation of the company's main products/services relevant to the shows]
-
-TAXONOMY MATCHES:
-| Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
-|-----------------|----------------|-----------------|----------------|-----------------|----------------|-----------------|----------------|
-| [Industry]      | [Product]      | [Industry]      | [Product]      | [Industry]      | [Product]      | [Industry]      | [Product]      |
-
-TABLE FORMAT:
-| Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
-|--------------|--------------|-----------------|----------------|-----------------|----------------|-----------------|----------------|-----------------|----------------|
-| {company_name} | {trading_name if trading_name else ""} | [Industry] | [Product] | [Industry] | [Product] | [Industry] | [Product] | [Industry] | [Product] |
-"""
-        
-        # Get final analysis
-        analysis_data = await call_perplexity_api(analysis_prompt, "month")
-        analysis_content = analysis_data["choices"][0]["message"]["content"]
-        
-        # Compile final result
-        result = f"""COMPANY TAGGING ANALYSIS FOR: {company_name}
-{"="*60}
-
-RESEARCH NAME USED: {research_name}
-TARGET SHOWS: {target_shows if target_shows else "Not specified"}
-
-INITIAL RESEARCH:
-{research_content}
-
-ADDITIONAL RESEARCH:
-{website_content}
-
-TAXONOMY ANALYSIS AND TAGGING:
-{analysis_content}
-
-CATEGORIES REFERENCE:
-{categories_data}
-"""
-        
-        return [TextContent(type="text", text=result)]
-        
-    except Exception as e:
-        error_msg = f"Error tagging company '{company_name}': {str(e)}"
-        logger.error(error_msg)
-        return [TextContent(type="text", text=f"Error: {error_msg}")]
-
 async def health_check(request):
     """Health check endpoint that validates Perplexity API connection and CSV data."""
     try:
@@ -787,17 +549,12 @@ async def health_check(request):
                 "categories://shows/{show_name}",
                 "categories://industries",
                 "categories://industries/{industry_name}",
-                "categories://search/{query}",
-                "categories://for-tagging"
-            ],
-            "available_prompts": [
-                "company_tagging_analyst"
+                "categories://search/{query}"
             ],
             "available_tools": [
                 "perplexity_search_web",
-                "perplexity_advanced_search", 
-                "search_show_categories",
-                "tag_company"
+                "perplexity_advanced_search",
+                "search_show_categories"
             ]
         })
         
@@ -863,14 +620,10 @@ if __name__ == "__main__":
         logger.info("  - categories://industries")
         logger.info("  - categories://industries/{industry_name}")
         logger.info("  - categories://search/{query}")
-        logger.info("  - categories://for-tagging")
-        logger.info("Available MCP prompts:")
-        logger.info("  - company_tagging_analyst")
         logger.info("Available MCP tools:")
         logger.info("  - perplexity_search_web")
         logger.info("  - perplexity_advanced_search")
         logger.info("  - search_show_categories")
-        logger.info("  - tag_company")
         
         uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")
         

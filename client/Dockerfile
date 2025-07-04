@@ -14,18 +14,21 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create directories for authentication config and SSL certificates
-RUN mkdir -p keys ssl
+# Create directories for authentication config, SSL certificates, and MCP servers
+RUN mkdir -p keys ssl mcp_servers/company_tagging/categories
 
 # Copy the application code
 COPY . .
+
+# Copy the company tagging MCP server
+COPY mcp_servers/ /app/mcp_servers/
 
 # Copy SSL-related scripts and make them executable
 COPY generate_ssl_certificate.sh startup_ssl.sh ./
 RUN chmod +x generate_ssl_certificate.sh startup_ssl.sh
 
 # Ensure proper permissions for directories (run as root to avoid permission issues)
-RUN chmod 755 keys ssl
+RUN chmod 755 keys ssl mcp_servers
 
 # Expose both HTTP and HTTPS ports (updated HTTPS port to 8503)
 EXPOSE 8501

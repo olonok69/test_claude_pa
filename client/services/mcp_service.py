@@ -1,5 +1,8 @@
 from typing import Dict, List, Union
 import streamlit as st
+import subprocess
+import os
+from pathlib import Path
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
@@ -34,7 +37,57 @@ async def run_tool(tool, **kwargs):
     """Run a tool with the provided parameters."""
     return await tool.ainvoke(**kwargs)
 
+def expand_env_vars(config: Dict) -> Dict:
+    """Expand environment variables in server configuration."""
+    if isinstance(config, dict):
+        result = {}
+        for key, value in config.items():
+            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+                env_var = value[2:-1]  # Remove ${ and }
+                result[key] = os.getenv(env_var, value)  # Use original value if env var not found
+            elif isinstance(value, dict):
+                result[key] = expand_env_vars(value)
+            elif isinstance(value, list):
+                result[key] = [expand_env_vars(item) if isinstance(item, dict) else item for item in value]
+            else:
+                result[key] = value
+        return result
+    return config
+
+def prepare_server_config(servers: Dict[str, Dict]) -> Dict[str, Dict]:
+    """Prepare server configuration with environment variable expansion and stdio setup."""
+    prepared_config = {}
+    
+    for server_name, config in servers.items():
+        expanded_config = expand_env_vars(config)
+        
+        if expanded_config.get("transport") == "stdio":
+            # For stdio servers, we need to set up the command properly
+            stdio_config = {
+                "transport": "stdio",
+                "command": expanded_config.get("command", "python"),
+                "args": expanded_config.get("args", []),
+                "env": expanded_config.get("env", {})
+            }
+            
+            # Ensure the stdio server is accessible
+            if stdio_config["args"] and stdio_config["args"][0] == "-m":
+                # Convert module path to absolute path if needed
+                module_path = stdio_config["args"][1]
+                if module_path.startswith("mcp_servers."):
+                    # This is our embedded server
+                    app_root = Path(__file__).parent.parent
+                    stdio_config["cwd"] = str(app_root)
+            
+            prepared_config[server_name] = stdio_config
+        else:
+            # SSE servers remain unchanged
+            prepared_config[server_name] = expanded_config
+    
+    return prepared_config
+
 def connect_to_mcp_servers():
+    """Connect to all configured MCP servers (SSE and stdio)."""
     # Clean up existing client if any
     client = st.session_state.get("client")
     if client:
@@ -53,13 +106,62 @@ def connect_to_mcp_servers():
         st.stop()
         return
     
-    # Setup new client
-    st.session_state.client = run_async(setup_mcp_client(st.session_state.servers))
-    st.session_state.tools = run_async(get_tools_from_client(st.session_state.client))
-    st.session_state.agent = create_react_agent(llm, st.session_state.tools)
+    # Prepare server configuration with environment variable expansion
+    prepared_servers = prepare_server_config(st.session_state.servers)
+    
+    # Log server configuration for debugging
+    st.write("Debug: Prepared server configuration:")
+    for name, config in prepared_servers.items():
+        transport_type = config.get("transport", "unknown")
+        if transport_type == "stdio":
+            st.write(f"- {name}: stdio (command: {config.get('command')}, args: {config.get('args')})")
+        else:
+            st.write(f"- {name}: {transport_type} ({config.get('url', 'no url')})")
+    
+    # Setup new client with mixed transports
+    try:
+        st.session_state.client = run_async(setup_mcp_client(prepared_servers))
+        st.session_state.tools = run_async(get_tools_from_client(st.session_state.client))
+        st.session_state.agent = create_react_agent(llm, st.session_state.tools)
         
+        # Log successful connections
+        tool_count = len(st.session_state.tools)
+        st.success(f"Successfully connected to {len(prepared_servers)} MCP servers with {tool_count} tools")
+        
+        # Categorize tools for display
+        google_tools = []
+        perplexity_tools = []
+        company_categorization_tools = []
+        other_tools = []
+        
+        for tool in st.session_state.tools:
+            tool_name = tool.name.lower()
+            if 'google' in tool_name or 'search' in tool_name or 'webpage' in tool_name:
+                google_tools.append(tool.name)
+            elif 'perplexity' in tool_name:
+                perplexity_tools.append(tool.name)
+            elif 'search_show_categories' in tool_name:
+                company_categorization_tools.append(tool.name)
+            else:
+                other_tools.append(tool.name)
+        
+        if google_tools:
+            st.info(f"Google Search tools: {', '.join(google_tools)}")
+        if perplexity_tools:
+            st.info(f"Perplexity tools: {', '.join(perplexity_tools)}")
+        if company_categorization_tools:
+            st.info(f"Company Categorization tools: {', '.join(company_categorization_tools)}")
+        if other_tools:
+            st.info(f"Other tools: {', '.join(other_tools)}")
+            
+    except Exception as e:
+        st.error(f"Failed to connect to MCP servers: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+        raise
 
 def disconnect_from_mcp_servers():
+    """Disconnect from all MCP servers and clean up session state."""
     # Clean up existing client if any and session state connections
     client = st.session_state.get("client")
     if client:
@@ -74,3 +176,26 @@ def disconnect_from_mcp_servers():
     st.session_state.client = None
     st.session_state.tools = []
     st.session_state.agent = None
+
+def test_stdio_server():
+    """Test the stdio server independently."""
+    try:
+        # Test if we can run the stdio server
+        app_root = Path(__file__).parent.parent
+        server_path = app_root / "mcp_servers" / "company_tagging" / "server.py"
+        
+        if not server_path.exists():
+            return False, f"Server file not found: {server_path}"
+        
+        # Try to import the server module
+        import sys
+        sys.path.insert(0, str(app_root))
+        
+        try:
+            import mcp_servers.company_tagging.server
+            return True, "Server module imported successfully"
+        except ImportError as e:
+            return False, f"Failed to import server module: {e}"
+        
+    except Exception as e:
+        return False, f"Error testing stdio server: {e}"

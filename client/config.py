@@ -57,6 +57,15 @@ else:
                 "timeout": 600,
                 "headers": None,
                 "sse_read_timeout": 900
+            },
+            "Company Tagging": {
+                "transport": "stdio",
+                "command": "python",
+                "args": ["-m", "mcp_servers.company_tagging.server"],
+                "env": {
+                    "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}",
+                    "PERPLEXITY_MODEL": "${PERPLEXITY_MODEL}"
+                }
             }
         }
     }
