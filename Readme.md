@@ -14,6 +14,307 @@ This application consists of three integrated components working together to pro
 
 ![Architecture Diagram](docs/mcp_platform_architecture.svg)
 
+## 🔧 Core Technologies & Dependencies
+
+This platform is built using modern, robust technologies that enable scalable AI-powered search capabilities. Here's a comprehensive overview of the key technologies and their roles:
+
+### **🌐 Frontend & User Interface**
+
+#### **[Streamlit](https://streamlit.io/)** - Web Application Framework
+- **Purpose**: Primary web interface for user interactions
+- **Version**: 1.44+
+- **Why**: Rapid development of data applications with built-in authentication
+- **Features**: Real-time updates, component system, session management
+- **Documentation**: [Streamlit Docs](https://docs.streamlit.io/)
+
+#### **[Streamlit Authenticator](https://github.com/mkhorasani/Streamlit-Authenticator)** - Authentication System
+- **Purpose**: Secure user login and session management
+- **Version**: 0.3.2
+- **Why**: bcrypt password hashing, role-based access control
+- **Features**: Session persistence, secure cookies, user management
+- **Security**: Industry-standard password hashing and validation
+
+### **🧠 AI & Language Models**
+
+#### **[LangChain](https://python.langchain.com/)** - AI Framework
+- **Purpose**: AI agent orchestration and tool routing
+- **Version**: 0.3.20+
+- **Why**: Standardized AI model integration with tool calling
+- **Features**: ReAct agents, memory management, tool execution
+- **Documentation**: [LangChain Docs](https://python.langchain.com/docs/introduction/)
+
+#### **[OpenAI API](https://openai.com/api/)** - AI Language Models
+- **Purpose**: Primary AI provider for intelligent responses
+- **Models**: GPT-4o, GPT-4o-mini
+- **Why**: State-of-the-art language understanding and generation
+- **Features**: Tool calling, streaming responses, context handling
+- **Documentation**: [OpenAI API Docs](https://platform.openai.com/docs)
+
+#### **[Azure OpenAI](https://azure.microsoft.com/en-us/products/ai-services/openai-service)** - Enterprise AI
+- **Purpose**: Alternative AI provider for enterprise deployments
+- **Models**: GPT-4o, o3-mini
+- **Why**: Enterprise features, data residency, enhanced security
+- **Features**: Private endpoints, compliance, SLA guarantees
+- **Documentation**: [Azure OpenAI Docs](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
+
+### **🔍 Search & Data Sources**
+
+#### **[Google Custom Search API](https://developers.google.com/custom-search)** - Web Search Engine
+- **Purpose**: Comprehensive web search capabilities
+- **Version**: v1
+- **Why**: Reliable, high-quality search results with customization
+- **Features**: Custom search engines, result filtering, metadata
+- **Documentation**: [Google Custom Search Docs](https://developers.google.com/custom-search/v1/overview)
+
+#### **[Perplexity AI API](https://www.perplexity.ai/)** - AI-Powered Search
+- **Purpose**: Intelligent search with AI-generated responses
+- **Models**: sonar, sonar-pro, sonar-reasoning
+- **Why**: Combines search with AI analysis and citations
+- **Features**: Recency filtering, model selection, advanced parameters
+- **Documentation**: [Perplexity API Docs](https://docs.perplexity.ai/)
+
+### **🔗 Communication Protocols**
+
+#### **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)** - Standardized AI Communication
+- **Purpose**: Universal protocol for AI tool integration
+- **Version**: 1.0+
+- **Why**: Vendor-agnostic standard for AI tool communication
+- **Features**: Tool discovery, schema validation, transport flexibility
+- **Documentation**: [MCP Specification](https://spec.modelcontextprotocol.io/)
+
+#### **[Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)** - Real-time Communication
+- **Purpose**: Real-time bidirectional communication for external MCP servers
+- **Why**: Efficient streaming, browser-compatible, low latency
+- **Features**: Automatic reconnection, message ordering, multiplexing
+- **Documentation**: [MDN SSE Docs](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)
+
+#### **stdio Transport** - Local Process Communication
+- **Purpose**: Embedded MCP server communication within containers
+- **Why**: Zero network latency, simplified deployment, better security
+- **Features**: Process isolation, error handling, lifecycle management
+
+### **🐳 Infrastructure & Deployment**
+
+#### **[Docker](https://www.docker.com/)** - Containerization Platform
+- **Purpose**: Consistent deployment across environments
+- **Version**: 20+
+- **Why**: Environment isolation, scalability, dependency management
+- **Features**: Multi-container orchestration, health checks, volume mounting
+- **Documentation**: [Docker Docs](https://docs.docker.com/)
+
+#### **[Docker Compose](https://docs.docker.com/compose/)** - Multi-Container Orchestration
+- **Purpose**: Coordinated deployment of multiple services
+- **Why**: Service dependencies, networking, environment management
+- **Features**: Service scaling, configuration management, logging
+- **Documentation**: [Docker Compose Docs](https://docs.docker.com/compose/)
+
+### **🐍 Backend Technologies (Python)**
+
+#### **[FastAPI](https://fastapi.tiangolo.com/)** - Modern Python Web Framework
+- **Purpose**: High-performance API servers for MCP services
+- **Why**: Automatic OpenAPI generation, type validation, async support
+- **Features**: Dependency injection, middleware, authentication
+- **Documentation**: [FastAPI Docs](https://fastapi.tiangolo.com/)
+
+#### **[asyncio](https://docs.python.org/3/library/asyncio.html)** - Asynchronous Programming
+- **Purpose**: Concurrent request handling and I/O operations
+- **Why**: High performance, scalable concurrent operations
+- **Features**: Event loops, coroutines, task management
+- **Documentation**: [asyncio Docs](https://docs.python.org/3/library/asyncio.html)
+
+#### **[Pydantic](https://pydantic.dev/)** - Data Validation
+- **Purpose**: Type-safe data validation and serialization
+- **Version**: 2.0+
+- **Why**: Runtime type checking, automatic validation, JSON schema
+- **Features**: Custom validators, error handling, serialization
+- **Documentation**: [Pydantic Docs](https://docs.pydantic.dev/)
+
+### **🟢 Backend Technologies (Node.js)**
+
+#### **[Node.js](https://nodejs.org/)** - JavaScript Runtime
+- **Purpose**: High-performance server for Google Search MCP server
+- **Version**: 18+
+- **Why**: Fast I/O operations, npm ecosystem, V8 engine
+- **Features**: Event-driven architecture, non-blocking I/O
+- **Documentation**: [Node.js Docs](https://nodejs.org/docs/)
+
+#### **[Express.js](https://expressjs.com/)** - Web Application Framework
+- **Purpose**: HTTP server framework for MCP SSE endpoints
+- **Version**: 5.1+
+- **Why**: Lightweight, flexible, extensive middleware ecosystem
+- **Features**: Routing, middleware, template engines
+- **Documentation**: [Express.js Docs](https://expressjs.com/)
+
+#### **[Cheerio](https://cheerio.js.org/)** - Server-side HTML Parsing
+- **Purpose**: Extract and clean content from web pages
+- **Version**: 1.0+
+- **Why**: jQuery-like server-side HTML manipulation
+- **Features**: CSS selectors, DOM manipulation, text extraction
+- **Documentation**: [Cheerio Docs](https://cheerio.js.org/)
+
+### **🔒 Security Technologies**
+
+#### **[bcrypt](https://github.com/pyca/bcrypt/)** - Password Hashing
+- **Purpose**: Secure password storage and validation
+- **Version**: 4.0+
+- **Why**: Industry-standard password hashing with salt
+- **Features**: Adaptive hashing, configurable cost, timing attack resistance
+- **Documentation**: [bcrypt Docs](https://github.com/pyca/bcrypt/)
+
+#### **[OpenSSL](https://www.openssl.org/)** - SSL/TLS Encryption
+- **Purpose**: HTTPS support and certificate generation
+- **Why**: Industry-standard encryption, certificate management
+- **Features**: Self-signed certificates, key generation, encryption
+- **Documentation**: [OpenSSL Docs](https://www.openssl.org/docs/)
+
+#### **[cryptography](https://cryptography.io/)** - Python Cryptographic Library
+- **Purpose**: Certificate generation and cryptographic operations
+- **Version**: 42.0+
+- **Why**: High-level cryptographic recipes and primitives
+- **Features**: X.509 certificates, key generation, secure random
+- **Documentation**: [Cryptography Docs](https://cryptography.io/)
+
+### **📊 Data Processing**
+
+#### **[Pandas](https://pandas.pydata.org/)** - Data Analysis Library
+- **Purpose**: CSV data processing and manipulation
+- **Version**: 2.2+
+- **Why**: Powerful data structures and analysis tools
+- **Features**: DataFrame operations, CSV I/O, data cleaning
+- **Documentation**: [Pandas Docs](https://pandas.pydata.org/docs/)
+
+#### **[Python CSV](https://docs.python.org/3/library/csv.html)** - CSV File Processing
+- **Purpose**: Trade show category data management
+- **Why**: Built-in Python library, reliable CSV parsing
+- **Features**: DictReader, field validation, encoding support
+- **Documentation**: [CSV Module Docs](https://docs.python.org/3/library/csv.html)
+
+### **🎨 UI & Styling**
+
+#### **Custom CSS** - Interface Styling
+- **Purpose**: Modern, responsive user interface design
+- **Features**: Dark/light themes, animations, responsive layout
+- **Location**: `client/.streamlit/style.css`
+
+#### **Responsive Design** - Multi-device Support
+- **Purpose**: Optimal experience across desktop and mobile devices
+- **Features**: Flexible layouts, mobile-optimized components
+
+### **🔧 Validation & Schema**
+
+#### **[Zod](https://zod.dev/)** - TypeScript-first Schema Validation
+- **Purpose**: Input validation for Node.js MCP servers
+- **Version**: 3.25+
+- **Why**: Type-safe validation, excellent error messages
+- **Features**: Schema composition, custom validators, async validation
+- **Documentation**: [Zod Docs](https://zod.dev/)
+
+#### **[JSON Schema](https://json-schema.org/)** - Data Validation Standard
+- **Purpose**: MCP tool parameter validation and documentation
+- **Why**: Standard format for API validation and documentation
+- **Features**: Type validation, documentation generation, tooling support
+- **Documentation**: [JSON Schema Docs](https://json-schema.org/)
+
+### **📚 HTTP & API Libraries**
+
+#### **[aiohttp](https://docs.aiohttp.org/)** - Async HTTP Client/Server
+- **Purpose**: Asynchronous HTTP operations in Python MCP servers
+- **Version**: 3.8+
+- **Why**: High-performance async HTTP client with connection pooling
+- **Features**: Session management, timeout handling, SSL support
+- **Documentation**: [aiohttp Docs](https://docs.aiohttp.org/)
+
+#### **[axios](https://axios-http.com/)** - HTTP Client for Node.js
+- **Purpose**: HTTP requests in Google Search MCP server
+- **Version**: 1.7+
+- **Why**: Promise-based HTTP client with interceptors and error handling
+- **Features**: Request/response transformers, timeout handling, retries
+- **Documentation**: [Axios Docs](https://axios-http.com/docs/intro)
+
+### **🧪 Development & Testing**
+
+#### **[dotenv](https://github.com/theskumar/python-dotenv)** - Environment Configuration
+- **Purpose**: Environment variable management across all services
+- **Why**: Secure configuration management, development flexibility
+- **Features**: .env file loading, variable validation, environment isolation
+- **Documentation**: [python-dotenv Docs](https://saurabh-kumar.com/python-dotenv/)
+
+#### **Health Checks** - Service Monitoring
+- **Purpose**: Container and service health monitoring
+- **Features**: HTTP endpoints, Docker health checks, status reporting
+- **Implementation**: Custom health check endpoints in each service
+
+### **📦 Package Management**
+
+#### **[pip](https://pip.pypa.io/)** - Python Package Manager
+- **Purpose**: Python dependency management
+- **Features**: Requirements.txt, virtual environments, version pinning
+- **Documentation**: [pip Docs](https://pip.pypa.io/en/stable/)
+
+#### **[npm](https://www.npmjs.com/)** - Node.js Package Manager
+- **Purpose**: Node.js dependency management
+- **Features**: package.json, semantic versioning, lockfiles
+- **Documentation**: [npm Docs](https://docs.npmjs.com/)
+
+## 🏗️ Technology Integration Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Streamlit UI   │    │   LangChain     │    │  External APIs  │
+│                 │    │                 │    │                 │
+│ • Python 3.11+  │◄──►│ • AI Agents     │◄──►│ • Google Search │
+│ • Authentication│    │ • Tool Routing  │    │ • Perplexity AI │
+│ • SSL/HTTPS     │    │ • Memory Mgmt   │    │ • OpenAI/Azure  │
+│ • Session Mgmt  │    │ • React Agents  │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         ▲                       ▲                       ▲
+         │              ┌────────┴────────┐              │
+         │              │  MCP Protocol   │              │
+         │              │                 │              │
+         │              │ • SSE Transport │              │
+         │              │ • stdio Transport│             │
+         │              │ • Tool Discovery│              │
+         │              │ • Schema Valid. │              │
+         │              └─────────────────┘              │
+         ▼                                               ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Google MCP    │    │ Perplexity MCP  │    │ Company Tagging │
+│                 │    │                 │    │                 │
+│ • Node.js 18+   │    │ • Python 3.11+  │    │ • Python 3.11+  │
+│ • Express.js    │    │ • FastAPI       │    │ • stdio MCP     │
+│ • Cheerio       │    │ • aiohttp       │    │ • CSV Processing│
+│ • Zod Validation│    │ • Pydantic      │    │ • Embedded      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+## 🚀 Why These Technologies?
+
+### **Performance & Scalability**
+- **Async Architecture**: Python asyncio and Node.js enable high-concurrency operations
+- **Connection Pooling**: Efficient HTTP client management across all services
+- **Containerization**: Docker enables horizontal scaling and resource isolation
+- **Streaming**: SSE provides real-time communication with minimal overhead
+
+### **Security & Reliability**
+- **Industry Standards**: bcrypt, OpenSSL, and HTTPS ensure enterprise-grade security
+- **Input Validation**: Zod and Pydantic provide type-safe validation at all entry points
+- **Error Handling**: Comprehensive error management across all service boundaries
+- **Session Management**: Secure, stateful user experiences with proper isolation
+
+### **Developer Experience**
+- **Type Safety**: Strong typing with Pydantic, Zod, and TypeScript integration
+- **Documentation**: Auto-generated API docs with FastAPI and OpenAPI standards
+- **Debugging**: Comprehensive logging and health checks across all services
+- **Hot Reload**: Development modes with automatic code reloading
+
+### **Maintainability**
+- **Modular Design**: Clear separation of concerns with MCP protocol boundaries
+- **Standard Protocols**: Industry-standard APIs and communication patterns
+- **Version Pinning**: Explicit dependency management for reproducible builds
+- **Configuration Management**: Environment-based configuration with validation
+
+
+
 ## ⚡ Quick Start
 
 ### Prerequisites
