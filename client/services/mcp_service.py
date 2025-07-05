@@ -21,6 +21,37 @@ async def get_tools_from_client(client: MultiServerMCPClient) -> List[BaseTool]:
     """Get tools from the MCP client."""
     return client.get_tools()
 
+async def get_prompts_from_client(client: MultiServerMCPClient) -> List:
+    """Get prompts from the MCP client."""
+    try:
+        # Get prompts using the client's list_prompts method
+        prompts_response = await client._send_request("prompts/list", {})
+        if prompts_response and "prompts" in prompts_response:
+            return prompts_response["prompts"]
+        return []
+    except Exception as e:
+        print(f"Error getting prompts: {e}")
+        return []
+
+async def use_prompt(client: MultiServerMCPClient, prompt_name: str, arguments: Dict = None):
+    """Use a specific prompt from the MCP client."""
+    try:
+        if arguments is None:
+            arguments = {}
+        
+        # Get the prompt using the client
+        prompt_response = await client._send_request("prompts/get", {
+            "name": prompt_name,
+            "arguments": arguments
+        })
+        
+        if prompt_response and "messages" in prompt_response:
+            return prompt_response["messages"]
+        return None
+    except Exception as e:
+        print(f"Error using prompt {prompt_name}: {e}")
+        return None
+
 async def run_agent(agent, messages: Union[str, List[BaseMessage]]) -> Dict:
     """Run the agent with the provided message(s)."""
     if isinstance(messages, str):
@@ -122,11 +153,19 @@ def connect_to_mcp_servers():
     try:
         st.session_state.client = run_async(setup_mcp_client(prepared_servers))
         st.session_state.tools = run_async(get_tools_from_client(st.session_state.client))
+        
+        # Get prompts from MCP servers (for future use)
+        try:
+            st.session_state.prompts = run_async(get_prompts_from_client(st.session_state.client))
+        except:
+            st.session_state.prompts = []
+        
         st.session_state.agent = create_react_agent(llm, st.session_state.tools)
         
         # Log successful connections
         tool_count = len(st.session_state.tools)
-        st.success(f"Successfully connected to {len(prepared_servers)} MCP servers with {tool_count} tools")
+        prompt_count = len(st.session_state.prompts)
+        st.success(f"Successfully connected to {len(prepared_servers)} MCP servers with {tool_count} tools and {prompt_count} prompts")
         
         # Categorize tools for display
         google_tools = []
@@ -137,7 +176,8 @@ def connect_to_mcp_servers():
         for tool in st.session_state.tools:
             tool_name = tool.name.lower()
             if 'google' in tool_name or 'search' in tool_name or 'webpage' in tool_name:
-                google_tools.append(tool.name)
+                if 'perplexity' not in tool_name:
+                    google_tools.append(tool.name)
             elif 'perplexity' in tool_name:
                 perplexity_tools.append(tool.name)
             elif 'search_show_categories' in tool_name:
@@ -153,6 +193,11 @@ def connect_to_mcp_servers():
             st.info(f"Company Categorization tools: {', '.join(company_categorization_tools)}")
         if other_tools:
             st.info(f"Other tools: {', '.join(other_tools)}")
+        
+        # Display prompts info
+        if st.session_state.prompts:
+            prompt_names = [prompt.get('name', 'unnamed') for prompt in st.session_state.prompts]
+            st.info(f"Available prompts: {', '.join(prompt_names)}")
             
     except Exception as e:
         st.error(f"Failed to connect to MCP servers: {str(e)}")
@@ -175,6 +220,7 @@ def disconnect_from_mcp_servers():
     # Clean up session state
     st.session_state.client = None
     st.session_state.tools = []
+    st.session_state.prompts = []
     st.session_state.agent = None
 
 def test_stdio_server():

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Company Tagging MCP Server with stdio transport.
-Provides category taxonomy resources for company research and categorization.
+Provides category taxonomy resources and company tagging prompts for trade show exhibitor categorization.
 """
 
 import os
@@ -18,6 +18,8 @@ from mcp.server.stdio import stdio_server
 from mcp.types import (
     Resource,
     Tool,
+    Prompt,
+    PromptMessage,
     TextContent,
     LoggingLevel,
 )
@@ -216,32 +218,31 @@ async def handle_read_resource(uri: str) -> str:
         return format_categories_for_analysis()
     
     elif uri == "categories://system-prompt":
-        return """You are:
- a data analyst
-Tasked with:
-Tagging exhibitor companies with the most accurate tags from an industry and product taxonomy structure we have in our categories
-Based on:
- products and services that each company is most likely to sell in each trade show.
-What is important:
- Accuracy and consistency.
- 
-Instructions:
-The taxonomy is our categories and is a set of pairs industry and product connected with a code of shows that companies might be interested to exhibit at.
-The context is that companies might be interested in exhibiting at one or more technology shows: Big Data and AI World (BDAIW), DevOps Live (DOL), Data CenterWorld (DCW), Cloud and Cyber Security Expo (CSSE), and CAI (Cloud and AI Infrastructure).
-The task is to find out what products and services each of those companies offers and allocate pairs of industry and product from the categories file.
-A few important instructions to follow:
-•The context of which show is important as companies could play in many industries and offer many products, but only the ones more relevant to the topics of the shows included in File 1 must be selected.
-•Use any web sources available, including LinkedIn, as well as websites for each company.
-•Use first the "Domain" if it exists. Second use the Trading Name If the first is blank (and only if this is blank) then if the rest blank use the main "Company Name".
-•Donot add any new or different industries nor products from the taxonomy provided in our categories
-•A company can have multiple industries and multiple products within each industry, hence select up to 4 pairs of industry and product
-Process to follow:
--Choose what name to use (domain name, Trading Name if available, otherwise Account Name) and find relevant information in internet sources (use our google or perplexity tools) to identify what products and/or services they sell within the context of those shows.
--Understand the taxonomy categories (pairs of Industry and product for each show). retrieve all categories available
--Check what relevant shows(from all categories) they might be interested in exhibiting at (attribute "Event" provided in the input). Now, in the context of these shows only:
--Allocate up to 4 pairs of Industry and Product from File 2 matching those products and services you just identified. Use only pairs are they appear exactly, no changes at all. Check that there are no spaces and that the spelling and characters used are identical (for example, do not replace & with "and").
-Output:
-Generate tables with the Company Name, the alternative "Trading Name", and add 8 columns for Tech Industry 1, Tech Product 1, Tech Industry 2, Tech Product 2, Tech Industry 3, Tech Product 3, Tech Industry 4 and Tech Product 4."""
+        return """You are a data analyst tasked with tagging exhibitor companies with the most accurate tags from an industry and product taxonomy structure. Your goal is accuracy and consistency.
+
+TAXONOMY CONTEXT:
+The taxonomy consists of pairs of (Industry and Product) connected with show codes for companies that might exhibit at technology shows: Big Data and AI World (BDAIW), DevOps Live (DOL), Data Centre World (DCW), Cloud and Cyber Security Expo (CCSE), and CAI (Cloud and AI Infrastructure).
+
+IMPORTANT INSTRUCTIONS:
+1. Focus only on products/services relevant to the target shows
+2. Use web sources (Google and Perplexity tools) to research company offerings
+3. Name priority: Domain > Trading Name > Company Name
+4. Do NOT add new industries or products - use only existing taxonomy
+5. Select up to 4 pairs of (Industry and Product)
+6. Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
+
+PROCESS:
+1. Retrieve all available categories (once)
+2. Choose research name (Domain > Trading Name > Company Name)
+3. Research company using web tools to identify products/services
+4. Check relevant shows from Event attribute
+5. Match findings to existing taxonomy pairs
+6. Generate structured output table
+
+OUTPUT FORMAT:
+Markdown table with columns: Company Name, Trading Name, Tech Industry 1, Tech Product 1, Tech Industry 2, Tech Product 2, Tech Industry 3, Tech Product 3, Tech Industry 4, Tech Product 4.
+
+Do not provide additional information or context beyond the requested table."""
     
     elif uri.startswith("categories://shows/"):
         show_name = uri.split("/")[-1].upper().strip()
@@ -270,6 +271,99 @@ Generate tables with the Company Name, the alternative "Trading Name", and add 8
     
     else:
         raise ValueError(f"Unknown resource URI: {uri}")
+
+@server.list_prompts()
+async def handle_list_prompts() -> list[Prompt]:
+    """List available prompts."""
+    return [
+        Prompt(
+            name="tag_companies",
+            description="Professional data analyst prompt for systematic company categorization using taxonomy",
+            arguments=[
+                {
+                    "name": "company_data",
+                    "description": "Company information to analyze (Company Name, Trading Name, Domain, Event)",
+                    "required": True
+                },
+                {
+                    "name": "target_shows",
+                    "description": "Comma-separated show codes (e.g., 'CAI,BDAIW,DOL')",
+                    "required": False
+                }
+            ]
+        )
+    ]
+
+@server.get_prompt()
+async def handle_get_prompt(name: str, arguments: Optional[Dict[str, str]] = None) -> types.GetPromptResult:
+    """Handle prompt requests."""
+    if name != "tag_companies":
+        raise ValueError(f"Unknown prompt: {name}")
+    
+    if not arguments:
+        arguments = {}
+    
+    company_data = arguments.get("company_data", "")
+    target_shows = arguments.get("target_shows", "")
+    
+    # Get the taxonomy data
+    taxonomy_data = format_categories_for_analysis()
+    
+    # Create the comprehensive prompt
+    prompt_content = f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
+
+COMPANY DATA TO ANALYZE:
+{company_data}
+
+TARGET SHOWS: {target_shows if target_shows else "All relevant shows (CAI, DOL, CCSE, BDAIW, DCW)"}
+
+AVAILABLE TAXONOMY:
+{taxonomy_data}
+
+MANDATORY RESEARCH PROCESS:
+
+1. **Retrieve Complete Taxonomy** (ONCE ONLY):
+   - Use search_show_categories tool without any filters to get all available categories
+
+2. **For EACH Company - Research Phase:**
+   - Choose research name: Domain > Trading Name > Company Name
+   - Use google-search tool: "site:[domain] products services" 
+   - Use perplexity_search_web tool: "[company name] products services technology offerings"
+   - Identify what the company actually sells/offers
+
+3. **Analysis Phase:**
+   - Map company offerings to relevant shows (CAI, DOL, CCSE, BDAIW, DCW)
+   - Match findings to EXACT taxonomy pairs from step 1
+   - Select up to 4 (Industry | Product) pairs per company
+   - Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
+
+4. **Output Requirements:**
+   - Generate ONLY a markdown table with these columns:
+   | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
+   - Do NOT provide any additional text, explanations, or context
+   - Do NOT show research details or tool executions
+   - ONLY the markdown table
+
+CRITICAL RULES:
+- MUST use both google-search AND perplexity_search_web for each company
+- MUST use search_show_categories to get taxonomy before starting
+- Use taxonomy pairs EXACTLY as written
+- Output ONLY the markdown table, nothing else
+
+Begin the systematic analysis now."""
+
+    return types.GetPromptResult(
+        description="Company tagging analysis prompt with systematic research process",
+        messages=[
+            PromptMessage(
+                role="user",
+                content=TextContent(
+                    type="text",
+                    text=prompt_content
+                )
+            )
+        ]
+    )
 
 @server.list_tools()
 async def handle_list_tools() -> list[Tool]:
@@ -367,7 +461,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="company-tagging-mcp",
-                server_version="0.1.0",
+                server_version="0.2.0",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},

@@ -165,13 +165,6 @@ def create_simple_configuration_tab():
         PERPLEXITY_API_KEY=your_perplexity_api_key
         PERPLEXITY_MODEL=sonar
         ```
-        
-        **For Company Tagging (stdio MCP Server):**
-        ```
-        # Company Tagging uses same Perplexity credentials
-        PERPLEXITY_API_KEY=your_perplexity_api_key
-        PERPLEXITY_MODEL=sonar
-        ```
         """)
 
     # Upgrade notice
@@ -190,7 +183,7 @@ def categorize_tools(tools):
         tool_name_lower = tool.name.lower()
         tool_desc_lower = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
         
-        # Company categorization tool detection (only search_show_categories now)
+        # Company categorization tool detection
         if any(keyword in tool_name_lower for keyword in ['search_show_categories']):
             company_categorization_tools.append(tool)
         # Perplexity tool detection (check exact tool names)
@@ -203,6 +196,21 @@ def categorize_tools(tools):
             other_tools.append(tool)
     
     return google_search_tools, perplexity_tools, company_categorization_tools, other_tools
+
+
+def categorize_prompts(prompts):
+    """Categorize prompts by functionality."""
+    company_tagging_prompts = []
+    other_prompts = []
+    
+    for prompt in prompts:
+        prompt_name_lower = prompt.name.lower()
+        if 'tag' in prompt_name_lower or 'company' in prompt_name_lower or 'categoriz' in prompt_name_lower:
+            company_tagging_prompts.append(prompt)
+        else:
+            other_prompts.append(prompt)
+    
+    return company_tagging_prompts, other_prompts
 
 
 def create_connection_tab():
@@ -218,6 +226,11 @@ def create_connection_tab():
             st.success(f"🟢 Connected to {len(st.session_state.servers)} MCP servers")
             st.info(f"🔧 Found {len(st.session_state.tools)} available tools")
             
+            # Check for prompts
+            prompts_count = len(st.session_state.get('prompts', []))
+            if prompts_count > 0:
+                st.info(f"📝 Found {prompts_count} available prompts")
+            
             # Categorize tools using improved logic
             google_search_tools, perplexity_tools, company_categorization_tools, other_tools = categorize_tools(st.session_state.tools)
             
@@ -232,13 +245,16 @@ def create_connection_tab():
             with col4:
                 st.metric("Perplexity Tools", len(perplexity_tools))
             with col5:
-                st.metric("Company Category Tools", len(company_categorization_tools))
+                st.metric("Company Tagging Tools", len(company_categorization_tools))
             
-            # Additional row for other tools if any
-            if other_tools:
+            # Additional row for prompts and other tools
+            if prompts_count > 0 or other_tools:
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Other Tools", len(other_tools))
+                    st.metric("Available Prompts", prompts_count)
+                with col2:
+                    if other_tools:
+                        st.metric("Other Tools", len(other_tools))
                 
         else:
             st.warning("🟡 Not connected to MCP servers")
@@ -276,7 +292,7 @@ def create_connection_tab():
                         st.markdown("**Operations:** Web search with AI-powered responses, advanced search parameters")
                     elif name == "Company Tagging":
                         st.markdown("**Type:** Company Research & Categorization")
-                        st.markdown("**Operations:** Category taxonomy access, show categorization search")
+                        st.markdown("**Operations:** Category taxonomy access, company tagging prompts, show categorization search")
                 
                 with col2:
                     if st.button(f"🗑️ Remove", key=f"remove_{name}"):
@@ -333,152 +349,109 @@ def create_connection_tab():
             else:
                 st.info("No active connections")
 
-    # Server Health Check
-    with st.container(border=True):
-        st.subheader("🏥 Server Health Check")
-        
-        if st.button("🔍 Check Server Health", use_container_width=True):
-            for name, config in st.session_state.servers.items():
-                transport_type = config.get('transport', 'unknown')
-                
-                if transport_type == "sse":
-                    # Extract base URL for health check
-                    base_url = config['url'].replace('/sse', '/health')
-                    
-                    try:
-                        import requests
-                        response = requests.get(base_url, timeout=5)
-                        if response.status_code == 200:
-                            st.success(f"✅ {name}: Healthy (Status: {response.status_code})")
-                            
-                            # Show additional details for different servers
-                            try:
-                                health_data = response.json()
-                                if name == "Perplexity Search":
-                                    if "version" in health_data:
-                                        st.info(f"   📋 Version: {health_data.get('version', 'Unknown')}")
-                                    if "api_key_configured" in health_data:
-                                        api_status = "✅ Configured" if health_data["api_key_configured"] else "❌ Missing"
-                                        st.info(f"   🔑 API Key: {api_status}")
-                                elif name == "Google Search":
-                                    if "version" in health_data:
-                                        st.info(f"   📋 Version: {health_data.get('version', 'Unknown')}")
-                                    if "activeConnections" in health_data:
-                                        st.info(f"   🔗 Active Connections: {health_data['activeConnections']}")
-                            except:
-                                pass  # Ignore JSON parsing errors for health details
-                        else:
-                            st.warning(f"⚠️ {name}: Status {response.status_code}")
-                    except Exception as e:
-                        st.error(f"❌ {name}: Connection failed - {str(e)}")
-                        
-                elif transport_type == "stdio":
-                    # Test stdio server
-                    if name == "Company Tagging":
-                        success, message = test_stdio_server()
-                        if success:
-                            st.success(f"✅ {name}: {message}")
-                        else:
-                            st.error(f"❌ {name}: {message}")
-                    else:
-                        st.info(f"ℹ️ {name}: Stdio server (no health check available)")
-
-    # Troubleshooting Guide
-    with st.expander("🛠️ Troubleshooting Guide", expanded=False):
-        st.markdown("""
-        ### Common Connection Issues
-        
-        **🔴 Connection Failed:**
-        - Ensure MCP servers are running (Google Search on port 8002, Perplexity on port 8001)
-        - Check if ports are accessible and not blocked by firewall
-        - Verify server URLs in `servers_config.json`
-        
-        **🟡 Google Search Authentication Issues:**
-        - Check GOOGLE_API_KEY in .env file
-        - Verify GOOGLE_SEARCH_ENGINE_ID configuration
-        - Ensure API key has Custom Search API access
-        - Check Google Cloud Console API quotas
-        
-        **🟣 Perplexity Authentication Issues:**
-        - Check PERPLEXITY_API_KEY in .env file
-        - Verify API key is valid and active
-        - Check Perplexity API quota and billing
-        - Ensure PERPLEXITY_MODEL is set (default: 'sonar')
-        
-        **🟢 Company Categorization (stdio) Issues:**
-        - Verify CSV data file is present at mcp_servers/company_tagging/categories/classes.csv
-        - Test stdio server using the "Test Company Tagging Server" button above
-        - Check that category resources are accessible
-        
-        **🟠 Timeout Issues:**
-        - Increase timeout values in server configuration
-        - Check network connectivity
-        - Verify server performance and response times
-        
-        **🔵 Tool Loading Issues:**
-        - Restart MCP servers
-        - Check server logs for errors
-        - Verify server implementations are working
-        """)
-
 
 def create_tools_tab():
     """Create the Tools tab content."""
-    st.header("🧰 Available Tools")
-    st.markdown("Explore and understand the available Google Search, Perplexity, and Company Tagging MCP tools and their parameters.")
+    st.header("🧰 Available Tools & Prompts")
+    st.markdown("Explore available Google Search, Perplexity, Company Tagging tools and specialized prompts.")
     
-    if not st.session_state.tools:
-        st.warning("🔧 No tools available. Please connect to the MCP servers first.")
+    # Check if we have tools or prompts
+    has_tools = bool(st.session_state.get('tools'))
+    has_prompts = bool(st.session_state.get('prompts'))
+    
+    if not has_tools and not has_prompts:
+        st.warning("🔧 No tools or prompts available. Please connect to the MCP servers first.")
         st.info("👉 Go to the **Connections** tab to establish server connections.")
         return
     
-    # Categorize tools using improved logic
-    google_search_tools, perplexity_tools, company_categorization_tools, other_tools = categorize_tools(st.session_state.tools)
-    
-    # Tools Overview
-    with st.container(border=True):
-        st.subheader("📊 Tools Overview")
+    # Create sections for tools and prompts
+    if has_tools:
+        # Categorize tools using improved logic
+        google_search_tools, perplexity_tools, company_categorization_tools, other_tools = categorize_tools(st.session_state.tools)
         
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            st.metric("Total Tools", len(st.session_state.tools))
-        
-        with col2:
-            st.metric("Google Search Tools", len(google_search_tools))
+        # Tools Overview
+        with st.container(border=True):
+            st.subheader("🔧 Tools Overview")
             
-        with col3:
-            st.metric("Perplexity Tools", len(perplexity_tools))
+            col1, col2, col3, col4, col5 = st.columns(5)
             
-        with col4:
-            st.metric("Company Category Tools", len(company_categorization_tools))
+            with col1:
+                st.metric("Total Tools", len(st.session_state.tools))
             
-        with col5:
-            if other_tools:
-                st.metric("Other Tools", len(other_tools))
+            with col2:
+                st.metric("Google Search", len(google_search_tools))
+                
+            with col3:
+                st.metric("Perplexity AI", len(perplexity_tools))
+                
+            with col4:
+                st.metric("Company Tagging", len(company_categorization_tools))
+                
+            with col5:
+                if other_tools:
+                    st.metric("Other Tools", len(other_tools))
 
-    # Tool Categories
-    st.subheader("🗂️ Tools by Category")
+        # Tool Categories
+        st.subheader("🗂️ Tools by Category")
+        
+        # Create tabs for different tool categories
+        if google_search_tools or perplexity_tools or company_categorization_tools:
+            tool_tabs = st.tabs([
+                "🔍 Google Search", 
+                "🔮 Perplexity AI", 
+                "📊 Company Tagging",
+                "📋 All Tools"
+            ])
+            
+            with tool_tabs[0]:
+                display_tools_list(google_search_tools, "Google Search Operations", "google_search")
+            
+            with tool_tabs[1]:
+                display_tools_list(perplexity_tools, "Perplexity AI Search Operations", "perplexity_search")
+            
+            with tool_tabs[2]:
+                display_tools_list(company_categorization_tools, "Company Categorization & Taxonomy Operations", "company_categorization")
+            
+            with tool_tabs[3]:
+                display_all_tools()
     
-    # Create tabs for different tool categories
-    google_tab, perplexity_tab, company_tab, all_tab = st.tabs([
-        "🔍 Google Search Tools", 
-        "🔮 Perplexity Tools", 
-        "📊 Company Category Tools",
-        "📋 All Tools"
-    ])
-    
-    with google_tab:
-        display_tools_list(google_search_tools, "Google Search Operations", "google_search")
-    
-    with perplexity_tab:
-        display_tools_list(perplexity_tools, "Perplexity AI Search Operations", "perplexity_search")
-    
-    with company_tab:
-        display_tools_list(company_categorization_tools, "Company Categorization & Taxonomy Operations", "company_categorization")
-    
-    with all_tab:
-        display_all_tools()
+    if has_prompts:
+        # Prompts Overview
+        with st.container(border=True):
+            st.subheader("📝 Prompts Overview")
+            
+            prompts = st.session_state.get('prompts', [])
+            company_tagging_prompts, other_prompts = categorize_prompts(prompts)
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Total Prompts", len(prompts))
+            
+            with col2:
+                st.metric("Company Tagging", len(company_tagging_prompts))
+                
+            with col3:
+                st.metric("Other Prompts", len(other_prompts))
+
+        # Display prompts
+        st.subheader("📋 Available Prompts")
+        
+        for prompt in prompts:
+            with st.expander(f"📝 {prompt.name}", expanded=False):
+                st.markdown(f"**Description:** {prompt.description}")
+                
+                if hasattr(prompt, 'arguments') and prompt.arguments:
+                    st.markdown("**Arguments:**")
+                    for arg in prompt.arguments:
+                        required_text = " (required)" if arg.get('required', False) else " (optional)"
+                        st.markdown(f"- **{arg['name']}**{required_text}: {arg.get('description', 'No description')}")
+                
+                st.markdown("**Usage:** Use this prompt by asking the AI to perform the related task.")
+                
+                # Special note for company tagging prompt
+                if 'tag' in prompt.name.lower() or 'company' in prompt.name.lower():
+                    st.info("💡 **Company Tagging:** Ask the AI to 'tag companies' or 'categorize companies' to use this specialized workflow.")
 
 
 def display_tools_list(tools_list, category_title, category_key):

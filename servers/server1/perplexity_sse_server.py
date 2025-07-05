@@ -2,12 +2,10 @@ import os
 import json
 import logging
 import aiohttp
-import csv
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from dotenv import load_dotenv
-from pathlib import Path
 
-from mcp.types import TextContent, PromptMessage
+from mcp.types import TextContent
 from mcp.server.fastmcp import FastMCP
 from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
@@ -55,199 +53,6 @@ def validate_environment():
         logger.info(f" {marker} {model_name}: {description}")
     
     return api_key, model
-
-def load_csv_data() -> List[Dict[str, str]]:
-    """Load and parse the CSV file."""
-    csv_path = Path(__file__).parent / "src" / "perplexity_mcp" / "categories" / "classes.csv"
-    
-    if not csv_path.exists():
-        logger.warning(f"CSV file not found at {csv_path}")
-        return []
-    
-    try:
-        with open(csv_path, 'r', encoding='utf-8') as file:
-            csv_reader = csv.DictReader(file)
-            data = list(csv_reader)
-            logger.info(f"Loaded {len(data)} rows from CSV file")
-            return data
-    except Exception as e:
-        logger.error(f"Error loading CSV file: {str(e)}")
-        return []
-
-def get_show_categories() -> Dict[str, List[str]]:
-    """Get categories organized by show."""
-    csv_data = load_csv_data()
-    shows = {}
-    
-    for row in csv_data:
-        show = row.get('Show', '').strip()
-        industry = row.get('Industry', '').strip()
-        product = row.get('Product', '').strip()
-        
-        if show and industry and product:
-            if show not in shows:
-                shows[show] = []
-            shows[show].append({
-                'industry': industry,
-                'product': product
-            })
-    
-    return shows
-
-def get_industry_categories() -> Dict[str, List[str]]:
-    """Get categories organized by industry."""
-    csv_data = load_csv_data()
-    industries = {}
-    
-    for row in csv_data:
-        industry = row.get('Industry', '').strip()
-        product = row.get('Product', '').strip()
-        show = row.get('Show', '').strip()
-        
-        if industry and product:
-            if industry not in industries:
-                industries[industry] = []
-            industries[industry].append({
-                'product': product,
-                'show': show
-            })
-    
-    return industries
-
-@mcp.resource("categories://all")
-def get_all_categories() -> str:
-    """Get all categories from the CSV file as raw data."""
-    csv_data = load_csv_data()
-    
-    if not csv_data:
-        return "No category data available."
-    
-    # Return as formatted JSON for easy consumption
-    return json.dumps({
-        "total_categories": len(csv_data),
-        "categories": csv_data,
-        "description": "Complete list of show categories with industries and products"
-    }, indent=2)
-
-@mcp.resource("categories://shows")
-def get_shows_overview() -> str:
-    """Get categories organized by show."""
-    shows = get_show_categories()
-    
-    if not shows:
-        return "No show data available."
-    
-    # Create summary
-    summary = {
-        "total_shows": len(shows),
-        "shows": {}
-    }
-    
-    for show, categories in shows.items():
-        summary["shows"][show] = {
-            "total_categories": len(categories),
-            "industries": list(set(cat['industry'] for cat in categories)),
-            "categories": categories
-        }
-    
-    return json.dumps(summary, indent=2)
-
-@mcp.resource("categories://shows/{show_name}")
-def get_show_categories(show_name: str) -> str:
-    """Get categories for a specific show."""
-    shows = get_show_categories()
-    
-    # Normalize show name for matching
-    show_name_normalized = show_name.upper().strip()
-    
-    for show, categories in shows.items():
-        if show.upper().strip() == show_name_normalized:
-            return json.dumps({
-                "show": show,
-                "total_categories": len(categories),
-                "industries": list(set(cat['industry'] for cat in categories)),
-                "categories": categories
-            }, indent=2)
-    
-    available_shows = list(shows.keys())
-    return json.dumps({
-        "error": f"Show '{show_name}' not found",
-        "available_shows": available_shows
-    }, indent=2)
-
-@mcp.resource("categories://industries")
-def get_industries_overview() -> str:
-    """Get categories organized by industry."""
-    industries = get_industry_categories()
-    
-    if not industries:
-        return "No industry data available."
-    
-    # Create summary
-    summary = {
-        "total_industries": len(industries),
-        "industries": {}
-    }
-    
-    for industry, products in industries.items():
-        summary["industries"][industry] = {
-            "total_products": len(products),
-            "shows": list(set(prod['show'] for prod in products if prod['show'])),
-            "products": list(set(prod['product'] for prod in products))
-        }
-    
-    return json.dumps(summary, indent=2)
-
-@mcp.resource("categories://industries/{industry_name}")
-def get_industry_categories(industry_name: str) -> str:
-    """Get categories for a specific industry."""
-    industries = get_industry_categories()
-    
-    # Normalize industry name for matching
-    industry_name_normalized = industry_name.lower().strip()
-    
-    for industry, products in industries.items():
-        if industry.lower().strip() == industry_name_normalized:
-            return json.dumps({
-                "industry": industry,
-                "total_products": len(products),
-                "shows": list(set(prod['show'] for prod in products if prod['show'])),
-                "products": products
-            }, indent=2)
-    
-    available_industries = list(industries.keys())
-    return json.dumps({
-        "error": f"Industry '{industry_name}' not found",
-        "available_industries": available_industries
-    }, indent=2)
-
-@mcp.resource("categories://search/{query}")
-def search_categories(query: str) -> str:
-    """Search categories by query string."""
-    csv_data = load_csv_data()
-    
-    if not csv_data or not query:
-        return json.dumps({"error": "No data or empty query"}, indent=2)
-    
-    query_lower = query.lower().strip()
-    matches = []
-    
-    for row in csv_data:
-        # Search in all fields
-        show = row.get('Show', '').lower()
-        industry = row.get('Industry', '').lower()
-        product = row.get('Product', '').lower()
-        
-        if (query_lower in show or 
-            query_lower in industry or 
-            query_lower in product):
-            matches.append(row)
-    
-    return json.dumps({
-        "query": query,
-        "total_matches": len(matches),
-        "matches": matches
-    }, indent=2)
 
 async def call_perplexity_api(query: str, recency: str = "month") -> Dict[str, Any]:
     """Call the Perplexity API with the given query and recency filter."""
@@ -445,84 +250,16 @@ async def perplexity_advanced_search(
         logger.error(error_msg)
         return [TextContent(type="text", text=f"Error: {error_msg}")]
 
-@mcp.tool()
-async def search_show_categories(
-    show_name: Optional[str] = None,
-    industry_filter: Optional[str] = None,
-    product_filter: Optional[str] = None
-) -> list[TextContent]:
-    """Search and filter show categories from the CSV data.
-    
-    Args:
-        show_name: Filter by specific show (CAI, DOL, CCSE, BDAIW, DCW)
-        industry_filter: Filter by industry name (partial match)
-        product_filter: Filter by product name (partial match)
-    
-    Returns:
-        TextContent with filtered category results
-    """
-    csv_data = load_csv_data()
-    
-    if not csv_data:
-        return [TextContent(type="text", text="No category data available.")]
-    
-    filtered_data = csv_data.copy()
-    filters_applied = []
-    
-    # Apply show filter
-    if show_name:
-        show_name_upper = show_name.upper().strip()
-        filtered_data = [row for row in filtered_data 
-                        if row.get('Show', '').upper().strip() == show_name_upper]
-        filters_applied.append(f"Show: {show_name}")
-    
-    # Apply industry filter
-    if industry_filter:
-        industry_lower = industry_filter.lower().strip()
-        filtered_data = [row for row in filtered_data 
-                        if industry_lower in row.get('Industry', '').lower()]
-        filters_applied.append(f"Industry contains: {industry_filter}")
-    
-    # Apply product filter
-    if product_filter:
-        product_lower = product_filter.lower().strip()
-        filtered_data = [row for row in filtered_data 
-                        if product_lower in row.get('Product', '').lower()]
-        filters_applied.append(f"Product contains: {product_filter}")
-    
-    # Organize results
-    result = {
-        "filters_applied": filters_applied,
-        "total_matches": len(filtered_data),
-        "original_total": len(csv_data),
-        "matches": filtered_data
-    }
-    
-    if not filtered_data:
-        result["message"] = "No categories match the specified filters."
-        result["available_shows"] = list(set(row.get('Show', '') for row in csv_data if row.get('Show')))
-    
-    return [TextContent(type="text", text=json.dumps(result, indent=2))]
-
 async def health_check(request):
-    """Health check endpoint that validates Perplexity API connection and CSV data."""
+    """Health check endpoint that validates Perplexity API connection."""
     try:
         api_key = os.getenv("PERPLEXITY_API_KEY")
         model = os.getenv("PERPLEXITY_MODEL", "sonar")
         
-        # Check CSV data
-        csv_data = load_csv_data()
-        csv_status = {
-            "available": len(csv_data) > 0,
-            "total_records": len(csv_data),
-            "shows": list(set(row.get('Show', '') for row in csv_data if row.get('Show')))
-        }
-        
         if not api_key:
             return JSONResponse({
                 "status": "unhealthy",
-                "error": "PERPLEXITY_API_KEY not configured",
-                "csv_data": csv_status
+                "error": "PERPLEXITY_API_KEY not configured"
             })
         
         # Test API connection with a simple query
@@ -534,7 +271,6 @@ async def health_check(request):
             "model": model,
             "api_key_configured": bool(api_key),
             "test_query_successful": True,
-            "csv_data": csv_status,
             "available_models": [
                 "sonar-deep-research",
                 "sonar-reasoning-pro", 
@@ -543,36 +279,19 @@ async def health_check(request):
                 "sonar",
                 "r1-1776"
             ],
-            "available_resources": [
-                "categories://all",
-                "categories://shows",
-                "categories://shows/{show_name}",
-                "categories://industries",
-                "categories://industries/{industry_name}",
-                "categories://search/{query}"
-            ],
             "available_tools": [
                 "perplexity_search_web",
-                "perplexity_advanced_search",
-                "search_show_categories"
+                "perplexity_advanced_search"
             ]
         })
         
     except Exception as e:
-        csv_data = load_csv_data()
-        csv_status = {
-            "available": len(csv_data) > 0,
-            "total_records": len(csv_data),
-            "shows": list(set(row.get('Show', '') for row in csv_data if row.get('Show')))
-        }
-        
         return JSONResponse({
             "status": "unhealthy",
             "error": str(e),
             "version": __version__,
             "model": os.getenv("PERPLEXITY_MODEL", "sonar"),
-            "api_key_configured": bool(os.getenv("PERPLEXITY_API_KEY")),
-            "csv_data": csv_status
+            "api_key_configured": bool(os.getenv("PERPLEXITY_API_KEY"))
         })
 
 async def handle_sse(request):
@@ -600,30 +319,13 @@ if __name__ == "__main__":
         # Validate environment on startup
         validate_environment()
         
-        # Load and validate CSV data
-        csv_data = load_csv_data()
-        if csv_data:
-            logger.info(f"CSV data loaded successfully: {len(csv_data)} records")
-            shows = set(row.get('Show', '') for row in csv_data if row.get('Show'))
-            logger.info(f"Available shows: {', '.join(sorted(shows))}")
-        else:
-            logger.warning("No CSV data loaded - resources will return empty results")
-        
         logger.info(f"Starting Perplexity MCP Server v{__version__} with SSE transport...")
         logger.info("Perplexity MCP Server running on http://0.0.0.0:8001")
         logger.info("SSE endpoint: http://0.0.0.0:8001/sse")
         logger.info("Health check: http://0.0.0.0:8001/health")
-        logger.info("Available MCP resources:")
-        logger.info("  - categories://all")
-        logger.info("  - categories://shows")
-        logger.info("  - categories://shows/{show_name}")
-        logger.info("  - categories://industries")
-        logger.info("  - categories://industries/{industry_name}")
-        logger.info("  - categories://search/{query}")
         logger.info("Available MCP tools:")
         logger.info("  - perplexity_search_web")
         logger.info("  - perplexity_advanced_search")
-        logger.info("  - search_show_categories")
         
         uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")
         
