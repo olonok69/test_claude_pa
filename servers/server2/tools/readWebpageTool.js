@@ -40,7 +40,7 @@ const ToolDefinition = {
     },
 };
 
-class WebpageCache {
+class WebpageCacheClass {
     constructor(ttlHours = 2) {
         this.cache = new Map();
         this.ttl = ttlHours * 60 * 60 * 1000; // Convert to milliseconds
@@ -183,7 +183,7 @@ class WebpageCache {
 }
 
 // Global cache instance
-const webpageCache = new WebpageCache(2); // 2 hours cache
+const webpageCache = new WebpageCacheClass(2); // 2 hours cache
 
 // Clean expired entries every 30 minutes
 setInterval(() => {
@@ -367,5 +367,5 @@ export class ReadWebpageTool extends BaseTool {
 export const WebpageCache = {
     clear: () => ReadWebpageTool.clearCache(),
     getStats: () => ReadWebpageTool.getCacheStats(),
-    cleanExpired: () => ReadWebpageTool.cleanExpired()
+    cleanExpired: () => ReadWebpageTool.cleanExpiredCache()
 };

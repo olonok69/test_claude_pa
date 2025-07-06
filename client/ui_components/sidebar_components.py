@@ -1,3 +1,5 @@
+# Updated ui_components/sidebar_components.py
+
 import streamlit as st
 import os
 from services.chat_service import create_chat, delete_chat, switch_chat
@@ -35,25 +37,42 @@ def create_sidebar_header_with_icon():
 
 
 def categorize_tools_for_sidebar(tools):
-    """Categorize tools by server type for sidebar display."""
+    """Categorize tools by server type for sidebar display with improved detection."""
     google_search_tools = 0
     perplexity_tools = 0
+    company_tagging_tools = 0
     other_tools = 0
     
     for tool in tools:
-        tool_name_lower = tool.name.lower()
-        tool_desc_lower = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
+        tool_name = tool.name.lower()
+        tool_desc = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
         
-        # Perplexity tool detection (check exact tool names)
-        if any(keyword in tool_name_lower for keyword in ['perplexity_search_web', 'perplexity_advanced_search']) or 'perplexity' in tool_name_lower:
+        # Company Tagging tool detection - improved patterns
+        if any(keyword in tool_name for keyword in [
+            'search_show_categories', 'company_tagging', 'tag_companies', 
+            'categorize', 'taxonomy', 'show_categories'
+        ]) or any(keyword in tool_desc for keyword in [
+            'company', 'categoriz', 'taxonomy', 'tag', 'show', 'exhibitor'
+        ]):
+            company_tagging_tools += 1
+        
+        # Perplexity tool detection
+        elif any(keyword in tool_name for keyword in [
+            'perplexity_search_web', 'perplexity_advanced_search', 'perplexity'
+        ]) or 'perplexity' in tool_desc:
             perplexity_tools += 1
-        # Google Search tool detection  
-        elif any(keyword in tool_name_lower for keyword in ['google-search', 'read-webpage']) or ('google' in tool_name_lower and 'perplexity' not in tool_name_lower):
+        
+        # Google Search tool detection
+        elif any(keyword in tool_name for keyword in [
+            'google-search', 'read-webpage', 'google_search', 'webpage'
+        ]) or (('google' in tool_name or 'search' in tool_name or 'webpage' in tool_name) 
+               and 'perplexity' not in tool_name):
             google_search_tools += 1
+        
         else:
             other_tools += 1
     
-    return google_search_tools, perplexity_tools, other_tools
+    return google_search_tools, perplexity_tools, company_tagging_tools, other_tools
 
 
 def create_history_chat_container():
@@ -143,9 +162,9 @@ def create_sidebar_chat_buttons():
             current_messages = len(st.session_state.get("messages", []))
             st.metric("Messages", current_messages)
 
-    # Quick status indicators
+    # Enhanced status indicators
     st.markdown("---")
-    st.markdown("**🔌 Quick Status:**")
+    st.markdown("**🔌 Connection Status:**")
     
     # Connection status
     if st.session_state.get("agent"):
@@ -157,22 +176,88 @@ def create_sidebar_chat_buttons():
     provider = st.session_state.get('params', {}).get('model_id', 'Not Set')
     st.info(f"🤖 Provider: {provider}")
     
-    # Tools count with categorization
+    # Enhanced tools, prompts, and resources count
     tools_count = len(st.session_state.get('tools', []))
-    st.info(f"🧰 Total Tools: {tools_count}")
+    prompts_count = len(st.session_state.get('prompts', []))
+    resources_count = len(st.session_state.get('resources', []))
     
-    # Show tool breakdown if tools are available
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("🧰 Tools", tools_count)
+    with col2:
+        st.metric("📝 Prompts", prompts_count)
+    
+    if resources_count > 0:
+        st.metric("📁 Resources", resources_count)
+    
+    # Show detailed tool breakdown if tools are available
     if tools_count > 0:
-        google_search_count, perplexity_count, other_count = categorize_tools_for_sidebar(st.session_state.get('tools', []))
+        google_search_count, perplexity_count, company_tagging_count, other_count = categorize_tools_for_sidebar(st.session_state.get('tools', []))
         
         with st.container():
-            st.markdown("**Tool Breakdown:**")
+            st.markdown("**Tool Categories:**")
+            
+            # Create a compact display
+            categories = []
             if google_search_count > 0:
-                st.text(f"🔍 Google Search: {google_search_count}")
+                categories.append(f"🔍 Google: {google_search_count}")
             if perplexity_count > 0:
-                st.text(f"🔮 Perplexity: {perplexity_count}")
+                categories.append(f"🔮 Perplexity: {perplexity_count}")
+            if company_tagging_count > 0:
+                categories.append(f"📊 Company: {company_tagging_count}")
             if other_count > 0:
-                st.text(f"🔧 Other: {other_count}")
+                categories.append(f"🔧 Other: {other_count}")
+            
+            # Display categories in a compact format
+            for category in categories:
+                st.text(category)
+    
+    # Show prompts and resources breakdown if available
+    if prompts_count > 0 or resources_count > 0:
+        with st.container():
+            st.markdown("**Additional Items:**")
+            
+            # Categorize prompts
+            if prompts_count > 0:
+                prompts = st.session_state.get('prompts', [])
+                company_prompts = 0
+                general_prompts = 0
+                
+                for prompt in prompts:
+                    prompt_name = prompt.name.lower() if hasattr(prompt, 'name') else str(prompt).lower()
+                    prompt_desc = prompt.description.lower() if hasattr(prompt, 'description') and prompt.description else ""
+                    
+                    if any(keyword in prompt_name for keyword in ['tag', 'company', 'categoriz', 'taxonomy', 'exhibitor']) or \
+                       any(keyword in prompt_desc for keyword in ['company', 'categoriz', 'taxonomy', 'tag', 'exhibitor', 'trade show']):
+                        company_prompts += 1
+                    else:
+                        general_prompts += 1
+                
+                if company_prompts > 0:
+                    st.text(f"📝 Company Prompts: {company_prompts}")
+                if general_prompts > 0:
+                    st.text(f"📝 General Prompts: {general_prompts}")
+            
+            # Categorize resources
+            if resources_count > 0:
+                resources = st.session_state.get('resources', [])
+                company_resources = 0
+                general_resources = 0
+                
+                for resource in resources:
+                    resource_name = resource.name.lower() if hasattr(resource, 'name') else str(resource).lower()
+                    resource_desc = resource.description.lower() if hasattr(resource, 'description') and resource.description else ""
+                    
+                    if any(keyword in resource_name for keyword in ['categor', 'company', 'taxonomy', 'show', 'exhibitor', 'tag']) or \
+                       any(keyword in resource_desc for keyword in ['company', 'categoriz', 'taxonomy', 'show', 'exhibitor', 'trade']):
+                        company_resources += 1
+                    else:
+                        general_resources += 1
+                
+                if company_resources > 0:
+                    st.text(f"📁 Company Resources: {company_resources}")
+                if general_resources > 0:
+                    st.text(f"📁 General Resources: {general_resources}")
 
 
 def create_user_info_sidebar():

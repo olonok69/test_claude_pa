@@ -1,3 +1,5 @@
+# Updated services/mcp_service.py
+
 from typing import Dict, List, Union
 import streamlit as st
 import subprocess
@@ -32,6 +34,42 @@ async def get_prompts_from_client(client: MultiServerMCPClient) -> List:
     except Exception as e:
         print(f"Error getting prompts: {e}")
         return []
+
+async def get_resources_from_client(client: MultiServerMCPClient) -> List:
+    """Get resources from the MCP client."""
+    try:
+        # Get resources using the client's list_resources method
+        resources_response = await client._send_request("resources/list", {})
+        if resources_response and "resources" in resources_response:
+            return resources_response["resources"]
+        return []
+    except Exception as e:
+        print(f"Error getting resources: {e}")
+        return []
+
+async def read_resource_from_client(client: MultiServerMCPClient, uri: str) -> str:
+    """Read a specific resource from the MCP client."""
+    try:
+        # Read resource using the client
+        resource_response = await client._send_request("resources/read", {
+            "uri": uri
+        })
+        
+        if resource_response and "contents" in resource_response:
+            contents = resource_response["contents"]
+            if isinstance(contents, list) and len(contents) > 0:
+                # Return the first content item's text
+                first_content = contents[0]
+                if isinstance(first_content, dict) and "text" in first_content:
+                    return first_content["text"]
+                else:
+                    return str(first_content)
+            else:
+                return str(contents)
+        return ""
+    except Exception as e:
+        print(f"Error reading resource {uri}: {e}")
+        return ""
 
 async def use_prompt(client: MultiServerMCPClient, prompt_name: str, arguments: Dict = None):
     """Use a specific prompt from the MCP client."""
@@ -154,50 +192,78 @@ def connect_to_mcp_servers():
         st.session_state.client = run_async(setup_mcp_client(prepared_servers))
         st.session_state.tools = run_async(get_tools_from_client(st.session_state.client))
         
-        # Get prompts from MCP servers (for future use)
+        # Get prompts and resources from MCP servers
         try:
             st.session_state.prompts = run_async(get_prompts_from_client(st.session_state.client))
         except:
             st.session_state.prompts = []
+        
+        try:
+            st.session_state.resources = run_async(get_resources_from_client(st.session_state.client))
+        except:
+            st.session_state.resources = []
         
         st.session_state.agent = create_react_agent(llm, st.session_state.tools)
         
         # Log successful connections
         tool_count = len(st.session_state.tools)
         prompt_count = len(st.session_state.prompts)
-        st.success(f"Successfully connected to {len(prepared_servers)} MCP servers with {tool_count} tools and {prompt_count} prompts")
+        resource_count = len(st.session_state.resources)
+        st.success(f"Successfully connected to {len(prepared_servers)} MCP servers with {tool_count} tools, {prompt_count} prompts, and {resource_count} resources")
         
-        # Categorize tools for display
+        # Categorize tools for display with improved detection
         google_tools = []
         perplexity_tools = []
-        company_categorization_tools = []
+        company_tagging_tools = []
         other_tools = []
         
         for tool in st.session_state.tools:
             tool_name = tool.name.lower()
-            if 'google' in tool_name or 'search' in tool_name or 'webpage' in tool_name:
-                if 'perplexity' not in tool_name:
-                    google_tools.append(tool.name)
-            elif 'perplexity' in tool_name:
+            tool_desc = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
+            
+            # Company Tagging tool detection - improved patterns
+            if any(keyword in tool_name for keyword in [
+                'search_show_categories', 'company_tagging', 'tag_companies', 
+                'categorize', 'taxonomy', 'show_categories'
+            ]) or any(keyword in tool_desc for keyword in [
+                'company', 'categoriz', 'taxonomy', 'tag', 'show', 'exhibitor'
+            ]):
+                company_tagging_tools.append(tool.name)
+            
+            # Perplexity tool detection
+            elif any(keyword in tool_name for keyword in [
+                'perplexity_search_web', 'perplexity_advanced_search', 'perplexity'
+            ]) or 'perplexity' in tool_desc:
                 perplexity_tools.append(tool.name)
-            elif 'search_show_categories' in tool_name:
-                company_categorization_tools.append(tool.name)
+            
+            # Google Search tool detection
+            elif any(keyword in tool_name for keyword in [
+                'google-search', 'read-webpage', 'google_search', 'webpage'
+            ]) or (('google' in tool_name or 'search' in tool_name or 'webpage' in tool_name) 
+                   and 'perplexity' not in tool_name):
+                google_tools.append(tool.name)
+            
             else:
                 other_tools.append(tool.name)
         
         if google_tools:
-            st.info(f"Google Search tools: {', '.join(google_tools)}")
+            st.info(f"🔍 Google Search tools: {', '.join(google_tools)}")
         if perplexity_tools:
-            st.info(f"Perplexity tools: {', '.join(perplexity_tools)}")
-        if company_categorization_tools:
-            st.info(f"Company Categorization tools: {', '.join(company_categorization_tools)}")
+            st.info(f"🔮 Perplexity tools: {', '.join(perplexity_tools)}")
+        if company_tagging_tools:
+            st.info(f"📊 Company Tagging tools: {', '.join(company_tagging_tools)}")
         if other_tools:
-            st.info(f"Other tools: {', '.join(other_tools)}")
+            st.info(f"🔧 Other tools: {', '.join(other_tools)}")
         
         # Display prompts info
         if st.session_state.prompts:
             prompt_names = [prompt.get('name', 'unnamed') for prompt in st.session_state.prompts]
-            st.info(f"Available prompts: {', '.join(prompt_names)}")
+            st.info(f"📝 Available prompts: {', '.join(prompt_names)}")
+        
+        # Display resources info
+        if st.session_state.resources:
+            resource_names = [resource.get('name', 'unnamed') for resource in st.session_state.resources]
+            st.info(f"📁 Available resources: {', '.join(resource_names)}")
             
     except Exception as e:
         st.error(f"Failed to connect to MCP servers: {str(e)}")
@@ -221,6 +287,7 @@ def disconnect_from_mcp_servers():
     st.session_state.client = None
     st.session_state.tools = []
     st.session_state.prompts = []
+    st.session_state.resources = []
     st.session_state.agent = None
 
 def test_stdio_server():
