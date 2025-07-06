@@ -113,8 +113,8 @@ def show_authentication_required_message():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Add CSM logo in the welcome message if available
-        csm_logo_path = os.path.join('.', 'icons', 'CSM.png')
+        # Add  logo in the welcome message if available
+        csm_logo_path = os.path.join('.', 'icons', 'Logo.png')
         if os.path.exists(csm_logo_path):
             # Center the logo
             col_a, col_b, col_c = st.columns([1, 1, 1])
@@ -269,7 +269,7 @@ def main():
         # Register shutdown handler
         atexit.register(on_shutdown)
         
-        # Always show CSM logo at the top of sidebar first
+        # Always show  logo at the top of sidebar first
         with st.sidebar:
             from ui_components.sidebar_components import create_sidebar_header_with_icon
             create_sidebar_header_with_icon()

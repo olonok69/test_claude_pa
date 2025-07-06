@@ -18,10 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the source code
 COPY src/ /app/src/
 COPY perplexity_sse_server.py /app/
+COPY .env /app/
 
 # Environment variables
 ENV PERPLEXITY_API_KEY=YOUR_API_KEY_HERE
-ENV PERPLEXITY_MODEL=sonar
+ENV PERPLEXITY_MODEL=sonar-pro
 ENV PYTHONPATH=/app/src
 
 EXPOSE 8001

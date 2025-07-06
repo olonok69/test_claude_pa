@@ -14,6 +14,16 @@ This application consists of three integrated components working together to pro
 
 ![Architecture Diagram](docs/mcp_platform_architecture.svg)
 
+## 📋 Port Reference Table
+
+| Service | Port | Protocol | Purpose |
+|---------|------|----------|---------|
+| **Streamlit HTTP** | 8501 | HTTP | Main web interface |
+| **Streamlit HTTPS** | 8503 | HTTPS | Secure web interface (recommended) |
+| **Google Search MCP** | 8002 | HTTP/SSE | Web search server |
+| **Perplexity MCP** | 8001 | HTTP/SSE | AI search server |
+| **Company Tagging** | - | stdio | Embedded MCP server |
+
 ## 🔧 Core Technologies & Dependencies
 
 This platform is built using modern, robust technologies that enable scalable AI-powered search capabilities. Here's a comprehensive overview of the key technologies and their roles:
@@ -174,88 +184,6 @@ This platform is built using modern, robust technologies that enable scalable AI
 - **Features**: X.509 certificates, key generation, secure random
 - **Documentation**: [Cryptography Docs](https://cryptography.io/)
 
-### **📊 Data Processing**
-
-#### **[Pandas](https://pandas.pydata.org/)** - Data Analysis Library
-- **Purpose**: CSV data processing and manipulation
-- **Version**: 2.2+
-- **Why**: Powerful data structures and analysis tools
-- **Features**: DataFrame operations, CSV I/O, data cleaning
-- **Documentation**: [Pandas Docs](https://pandas.pydata.org/docs/)
-
-#### **[Python CSV](https://docs.python.org/3/library/csv.html)** - CSV File Processing
-- **Purpose**: Trade show category data management
-- **Why**: Built-in Python library, reliable CSV parsing
-- **Features**: DictReader, field validation, encoding support
-- **Documentation**: [CSV Module Docs](https://docs.python.org/3/library/csv.html)
-
-### **🎨 UI & Styling**
-
-#### **Custom CSS** - Interface Styling
-- **Purpose**: Modern, responsive user interface design
-- **Features**: Dark/light themes, animations, responsive layout
-- **Location**: `client/.streamlit/style.css`
-
-#### **Responsive Design** - Multi-device Support
-- **Purpose**: Optimal experience across desktop and mobile devices
-- **Features**: Flexible layouts, mobile-optimized components
-
-### **🔧 Validation & Schema**
-
-#### **[Zod](https://zod.dev/)** - TypeScript-first Schema Validation
-- **Purpose**: Input validation for Node.js MCP servers
-- **Version**: 3.25+
-- **Why**: Type-safe validation, excellent error messages
-- **Features**: Schema composition, custom validators, async validation
-- **Documentation**: [Zod Docs](https://zod.dev/)
-
-#### **[JSON Schema](https://json-schema.org/)** - Data Validation Standard
-- **Purpose**: MCP tool parameter validation and documentation
-- **Why**: Standard format for API validation and documentation
-- **Features**: Type validation, documentation generation, tooling support
-- **Documentation**: [JSON Schema Docs](https://json-schema.org/)
-
-### **📚 HTTP & API Libraries**
-
-#### **[aiohttp](https://docs.aiohttp.org/)** - Async HTTP Client/Server
-- **Purpose**: Asynchronous HTTP operations in Python MCP servers
-- **Version**: 3.8+
-- **Why**: High-performance async HTTP client with connection pooling
-- **Features**: Session management, timeout handling, SSL support
-- **Documentation**: [aiohttp Docs](https://docs.aiohttp.org/)
-
-#### **[axios](https://axios-http.com/)** - HTTP Client for Node.js
-- **Purpose**: HTTP requests in Google Search MCP server
-- **Version**: 1.7+
-- **Why**: Promise-based HTTP client with interceptors and error handling
-- **Features**: Request/response transformers, timeout handling, retries
-- **Documentation**: [Axios Docs](https://axios-http.com/docs/intro)
-
-### **🧪 Development & Testing**
-
-#### **[dotenv](https://github.com/theskumar/python-dotenv)** - Environment Configuration
-- **Purpose**: Environment variable management across all services
-- **Why**: Secure configuration management, development flexibility
-- **Features**: .env file loading, variable validation, environment isolation
-- **Documentation**: [python-dotenv Docs](https://saurabh-kumar.com/python-dotenv/)
-
-#### **Health Checks** - Service Monitoring
-- **Purpose**: Container and service health monitoring
-- **Features**: HTTP endpoints, Docker health checks, status reporting
-- **Implementation**: Custom health check endpoints in each service
-
-### **📦 Package Management**
-
-#### **[pip](https://pip.pypa.io/)** - Python Package Manager
-- **Purpose**: Python dependency management
-- **Features**: Requirements.txt, virtual environments, version pinning
-- **Documentation**: [pip Docs](https://pip.pypa.io/en/stable/)
-
-#### **[npm](https://www.npmjs.com/)** - Node.js Package Manager
-- **Purpose**: Node.js dependency management
-- **Features**: package.json, semantic versioning, lockfiles
-- **Documentation**: [npm Docs](https://docs.npmjs.com/)
-
 ## 🏗️ Technology Integration Architecture
 
 ```
@@ -286,34 +214,6 @@ This platform is built using modern, robust technologies that enable scalable AI
 │ • Zod Validation│    │ • Pydantic      │    │ • Embedded      │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
-
-## 🚀 Why These Technologies?
-
-### **Performance & Scalability**
-- **Async Architecture**: Python asyncio and Node.js enable high-concurrency operations
-- **Connection Pooling**: Efficient HTTP client management across all services
-- **Containerization**: Docker enables horizontal scaling and resource isolation
-- **Streaming**: SSE provides real-time communication with minimal overhead
-
-### **Security & Reliability**
-- **Industry Standards**: bcrypt, OpenSSL, and HTTPS ensure enterprise-grade security
-- **Input Validation**: Zod and Pydantic provide type-safe validation at all entry points
-- **Error Handling**: Comprehensive error management across all service boundaries
-- **Session Management**: Secure, stateful user experiences with proper isolation
-
-### **Developer Experience**
-- **Type Safety**: Strong typing with Pydantic, Zod, and TypeScript integration
-- **Documentation**: Auto-generated API docs with FastAPI and OpenAPI standards
-- **Debugging**: Comprehensive logging and health checks across all services
-- **Hot Reload**: Development modes with automatic code reloading
-
-### **Maintainability**
-- **Modular Design**: Clear separation of concerns with MCP protocol boundaries
-- **Standard Protocols**: Industry-standard APIs and communication patterns
-- **Version Pinning**: Explicit dependency management for reproducible builds
-- **Configuration Management**: Environment-based configuration with validation
-
-
 
 ## ⚡ Quick Start
 
@@ -401,7 +301,7 @@ docker-compose up hostclient    # Streamlit Client
 - **Perplexity Server**: http://localhost:8001/health
 
 #### Authentication
-Use the credentials generated in step 2 (default: admin/very_Secure_p@ssword_123!)
+Use the credentials generated in step 3 (default: admin/very_Secure_p@ssword_123!)
 
 ## 🎯 Key Features
 
@@ -539,29 +439,6 @@ Use the credentials generated in step 2 (default: admin/very_Secure_p@ssword_123
 ```
 *Uses both tool sets for comprehensive coverage and analysis*
 
-### **Advanced Search Parameters**
-
-#### **Perplexity Advanced Search**
-```
-"Search for climate change research with high detail and recent sources"
-# Uses perplexity_advanced_search with:
-# - recency: "month"
-# - max_tokens: 1500
-# - temperature: 0.2 (for factual accuracy)
-```
-
-#### **Google Search with Content Extraction**
-```
-"Find the latest React documentation and read the full getting started guide"
-# Uses google-search followed by read-webpage for detailed content
-```
-
-#### **Category-Based Research**
-```
-"Search for companies in Cloud and AI Infrastructure categories"
-# Uses search_show_categories with show filtering
-```
-
 ## 🔧 Component Documentation
 
 ### [🖥️ Streamlit Client Documentation](./client/Readme.md)
@@ -630,46 +507,6 @@ Ensure you have:
 - Monitor API usage and quotas for both services
 - Use proper error handling that doesn't expose sensitive data
 
-## 📊 Monitoring & Debugging
-
-### **Health Checks**
-- **Overall System**: Streamlit interface status indicators
-- **Google Search Server**: http://localhost:8002/health
-- **Perplexity Server**: http://localhost:8001/health
-- **Company Tagging**: Integrated stdio server testing
-
-### **Search Monitoring**
-- API usage tracking for both Google and Perplexity
-- Search query performance and response times
-- Error rates and failed requests
-- Content extraction success rates
-- Tool execution history with detailed logging
-
-### **Authentication Monitoring**
-- User session tracking and activity monitoring
-- Login success/failure rates
-- Security event logging
-
-## 🚀 Deployment Options
-
-### **Development Deployment**
-```bash
-# HTTP mode (default)
-docker-compose up --build
-
-# HTTPS mode
-echo "SSL_ENABLED=true" >> .env
-docker-compose up --build
-```
-
-### **Production Deployment**
-- Use environment-specific `.env` files
-- Configure proper SSL certificates
-- Implement proper secret management
-- Set up monitoring and alerting for all 3 services
-- Use connection pooling for high-traffic scenarios
-- Configure user authentication with production credentials
-
 ## 🐛 Troubleshooting
 
 ### **Common Issues**
@@ -699,6 +536,48 @@ docker-compose up --build
 - Check that Company Tagging tools appear in the Tools tab
 - Test stdio server connectivity using the "Test Company Tagging Server" button
 
+### **Port Conflict Resolution**
+If you encounter "port already in use" errors:
+```bash
+# Check what's using the ports
+sudo lsof -i :8501
+sudo lsof -i :8502
+sudo lsof -i :8503
+
+# Stop Docker services
+docker-compose down
+
+# Clean up containers
+docker system prune -f
+```
+
+### **SSL Certificate Issues**
+For HTTPS certificate problems:
+```bash
+# Regenerate SSL certificates
+cd client
+rm -rf ssl/
+./generate_ssl_certificate.sh
+
+# Or use Python script
+python generate_ssl_certificate.py
+```
+
+## 📈 Performance Metrics
+
+### **Current Performance Characteristics**
+- **Search Response Time**: Google Search ~1-3s, Perplexity ~2-5s
+- **Content Extraction**: ~2-8s depending on page size
+- **Authentication**: <1s login/logout operations
+- **Tool Discovery**: <2s for MCP server connection
+- **Company Tagging**: Integrated stdio performance
+
+### **Scalability Features**
+- Docker containerization for horizontal scaling
+- Async operations for concurrent request handling
+- Connection pooling for database and API connections
+- Content caching where appropriate
+
 ## 🤝 Contributing
 
 ### **Development Workflow**
@@ -715,21 +594,6 @@ docker-compose up --build
 - Test error handling and edge cases
 - Validate API quota management for both services
 - Test company categorization workflows
-
-## 📈 Performance Metrics
-
-### **Current Performance Characteristics**
-- **Search Response Time**: Google Search ~1-3s, Perplexity ~2-5s
-- **Content Extraction**: ~2-8s depending on page size
-- **Authentication**: <1s login/logout operations
-- **Tool Discovery**: <2s for MCP server connection
-- **Company Tagging**: Integrated stdio performance
-
-### **Scalability Features**
-- Docker containerization for horizontal scaling
-- Async operations for concurrent request handling
-- Connection pooling for database and API connections
-- Content caching where appropriate
 
 ---
 
