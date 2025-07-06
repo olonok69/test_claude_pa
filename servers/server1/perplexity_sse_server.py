@@ -2,6 +2,9 @@ import os
 import json
 import logging
 import aiohttp
+import hashlib
+import time
+import datetime
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 
@@ -23,9 +26,70 @@ logging.basicConfig(
 )
 logger = logging.getLogger("perplexity_mcp_sse_server")
 
+# Track server start time for uptime calculation
+start_time = time.time()
+
 # Create MCP server and transport
 mcp = FastMCP("Perplexity MCP Server", host="0.0.0.0", port=8001)
 transport = SseServerTransport("/messages/")
+
+# In-memory cache for API responses
+class APICache:
+    def __init__(self, ttl_seconds=3600):  # 1 hour default TTL
+        self.cache = {}
+        self.ttl = ttl_seconds
+    
+    def _generate_key(self, query: str, **kwargs) -> str:
+        """Generate a unique cache key based on query and parameters."""
+        # Create a consistent string from all parameters
+        params_str = json.dumps(kwargs, sort_keys=True)
+        cache_input = f"{query}:{params_str}"
+        return hashlib.md5(cache_input.encode()).hexdigest()
+    
+    def get(self, query: str, **kwargs) -> Optional[Dict[str, Any]]:
+        """Get cached response if available and not expired."""
+        key = self._generate_key(query, **kwargs)
+        
+        if key in self.cache:
+            cached_data, timestamp = self.cache[key]
+            if time.time() - timestamp < self.ttl:
+                logger.info(f"Cache hit for query: {query[:50]}...")
+                return cached_data
+            else:
+                # Remove expired entry
+                del self.cache[key]
+                logger.info(f"Cache expired for query: {query[:50]}...")
+        
+        return None
+    
+    def set(self, query: str, response: Dict[str, Any], **kwargs):
+        """Store response in cache."""
+        key = self._generate_key(query, **kwargs)
+        self.cache[key] = (response, time.time())
+        logger.info(f"Cached response for query: {query[:50]}...")
+    
+    def clear(self):
+        """Clear all cached entries."""
+        self.cache.clear()
+        logger.info("Cache cleared")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        current_time = time.time()
+        valid_entries = sum(1 for _, timestamp in self.cache.values() 
+                          if current_time - timestamp < self.ttl)
+        return {
+            "total_entries": len(self.cache),
+            "valid_entries": valid_entries,
+            "expired_entries": len(self.cache) - valid_entries,
+            "ttl_seconds": self.ttl
+        }
+
+# Global cache instance
+api_cache = APICache(ttl_seconds=1800)  # 30 minutes cache
+
+# Health check cache
+health_check_cache = {"last_check": 0, "result": None, "ttl": 300}  # 5 minutes
 
 def validate_environment():
     """Validate required environment variables."""
@@ -54,20 +118,33 @@ def validate_environment():
     
     return api_key, model
 
-async def call_perplexity_api(query: str, recency: str = "month") -> Dict[str, Any]:
-    """Call the Perplexity API with the given query and recency filter."""
+async def call_perplexity_api(query: str, recency: str = "month", **kwargs) -> Dict[str, Any]:
+    """Call the Perplexity API with caching support."""
+    
+    # Check cache first
+    cache_params = {"recency": recency, **kwargs}
+    cached_response = api_cache.get(query, **cache_params)
+    if cached_response:
+        return cached_response
+    
+    # If not in cache, make API call
     api_key, model = validate_environment()
     
     url = "https://api.perplexity.ai/chat/completions"
     
+    # Use provided model or default
+    api_model = kwargs.get('model', model)
+    max_tokens = kwargs.get('max_tokens', 512)
+    temperature = kwargs.get('temperature', 0.2)
+    
     payload = {
-        "model": model,
+        "model": api_model,
         "messages": [
             {"role": "system", "content": "Be precise and concise."},
             {"role": "user", "content": query},
         ],
-        "max_tokens": "512",
-        "temperature": 0.2,
+        "max_tokens": str(max_tokens),
+        "temperature": temperature,
         "top_p": 0.9,
         "return_images": False,
         "return_related_questions": False,
@@ -85,15 +162,21 @@ async def call_perplexity_api(query: str, recency: str = "month") -> Dict[str, A
         "Content-Type": "application/json",
     }
 
+    logger.info(f"Making API request to Perplexity for query: {query[:50]}...")
+    
     async with aiohttp.ClientSession() as session:
         async with session.post(url, json=payload, headers=headers) as response:
             response.raise_for_status()
             data = await response.json()
+            
+            # Cache the response
+            api_cache.set(query, data, **cache_params)
+            
             return data
 
 @mcp.tool()
 async def perplexity_search_web(query: str, recency: str = "month") -> list[TextContent]:
-    """Search the web using Perplexity AI with recency filtering.
+    """Search the web using Perplexity AI with recency filtering and caching.
     
     Args:
         query: The search query to find information about
@@ -115,6 +198,10 @@ async def perplexity_search_web(query: str, recency: str = "month") -> list[Text
         data = await call_perplexity_api(query, recency)
         content = data["choices"][0]["message"]["content"]
         
+        # Check if response came from cache
+        cache_params = {"recency": recency}
+        was_cached = api_cache.get(query, **cache_params) is not None
+        
         # Format response with metadata and citations
         result = {
             "query": query,
@@ -122,21 +209,24 @@ async def perplexity_search_web(query: str, recency: str = "month") -> list[Text
             "model": os.getenv("PERPLEXITY_MODEL", "sonar"),
             "content": content,
             "usage": data.get("usage", {}),
-            "citations": data.get("citations", [])
+            "citations": data.get("citations", []),
+            "cached": was_cached
         }
         
         # Create formatted response
         formatted_response = f"**Query:** {query}\n"
         formatted_response += f"**Recency Filter:** {recency}\n"
-        formatted_response += f"**Model:** {result['model']}\n\n"
-        formatted_response += f"**Response:**\n{content}\n"
+        formatted_response += f"**Model:** {result['model']}\n"
+        if was_cached:
+            formatted_response += f"**Source:** Cached response\n"
+        formatted_response += f"\n**Response:**\n{content}\n"
         
         if result["citations"]:
             formatted_response += "\n**Citations:**\n"
             for i, url in enumerate(result["citations"], 1):
                 formatted_response += f"[{i}] {url}\n"
         
-        if result["usage"]:
+        if result["usage"] and not was_cached:
             formatted_response += f"\n**Token Usage:** {json.dumps(result['usage'])}"
         
         return [TextContent(type="text", text=formatted_response)]
@@ -159,7 +249,7 @@ async def perplexity_advanced_search(
     max_tokens: int = 512,
     temperature: float = 0.2
 ) -> list[TextContent]:
-    """Advanced Perplexity search with custom parameters.
+    """Advanced Perplexity search with custom parameters and caching.
     
     Args:
         query: The search query to find information about
@@ -186,43 +276,24 @@ async def perplexity_advanced_search(
                 f"Recency: '{recency}', Max tokens: {max_tokens}, Temperature: {temperature}")
     
     try:
-        api_key = os.getenv("PERPLEXITY_API_KEY")
-        if not api_key:
-            raise ValueError("PERPLEXITY_API_KEY environment variable is required")
-        
-        url = "https://api.perplexity.ai/chat/completions"
-        
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "Be precise and concise."},
-                {"role": "user", "content": query},
-            ],
-            "max_tokens": str(max_tokens),
-            "temperature": temperature,
-            "top_p": 0.9,
-            "return_images": False,
-            "return_related_questions": False,
-            "search_recency_filter": recency,
-            "top_k": 0,
-            "stream": False,
-            "presence_penalty": 0,
-            "frequency_penalty": 1,
-            "return_citations": True,
-            "search_context_size": "low",
-        }
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as response:
-                response.raise_for_status()
-                data = await response.json()
+        # Call API with caching support
+        data = await call_perplexity_api(
+            query, recency, 
+            model=model, 
+            max_tokens=max_tokens, 
+            temperature=temperature
+        )
         
         content = data["choices"][0]["message"]["content"]
+        
+        # Check if response came from cache
+        cache_params = {
+            "recency": recency, 
+            "model": model, 
+            "max_tokens": max_tokens, 
+            "temperature": temperature
+        }
+        was_cached = api_cache.get(query, **cache_params) is not None
         
         # Create comprehensive result
         result = {
@@ -239,7 +310,8 @@ async def perplexity_advanced_search(
             "finish_reason": data["choices"][0].get("finish_reason"),
             "response_metadata": {
                 "timestamp": data.get("created"),
-                "model_version": data.get("model")
+                "model_version": data.get("model"),
+                "cached": was_cached
             }
         }
         
@@ -250,27 +322,145 @@ async def perplexity_advanced_search(
         logger.error(error_msg)
         return [TextContent(type="text", text=f"Error: {error_msg}")]
 
+@mcp.tool()
+async def search_show_categories(
+    show_name: Optional[str] = None,
+    industry_filter: Optional[str] = None,
+    product_filter: Optional[str] = None
+) -> list[TextContent]:
+    """Search and filter show categories from the CSV data.
+    
+    This tool uses local CSV data and doesn't make external API calls.
+    
+    Args:
+        show_name: Filter by specific show (CAI, DOL, CCSE, BDAIW, DCW)
+        industry_filter: Filter by industry name (partial match)
+        product_filter: Filter by product name (partial match)
+    
+    Returns:
+        TextContent with filtered category results
+    """
+    from .server import load_csv_data  # Import from main server module
+    
+    csv_data = load_csv_data()
+    
+    if not csv_data:
+        return [TextContent(type="text", text="No category data available.")]
+    
+    filtered_data = csv_data.copy()
+    filters_applied = []
+    
+    # Apply show filter
+    if show_name:
+        show_name_upper = show_name.upper().strip()
+        filtered_data = [row for row in filtered_data 
+                        if row.get('Show', '').upper().strip() == show_name_upper]
+        filters_applied.append(f"Show: {show_name}")
+    
+    # Apply industry filter
+    if industry_filter:
+        industry_lower = industry_filter.lower().strip()
+        filtered_data = [row for row in filtered_data 
+                        if industry_lower in row.get('Industry', '').lower()]
+        filters_applied.append(f"Industry contains: {industry_filter}")
+    
+    # Apply product filter
+    if product_filter:
+        product_lower = product_filter.lower().strip()
+        filtered_data = [row for row in filtered_data 
+                        if product_lower in row.get('Product', '').lower()]
+        filters_applied.append(f"Product contains: {product_filter}")
+    
+    # Organize results
+    result = {
+        "filters_applied": filters_applied,
+        "total_matches": len(filtered_data),
+        "original_total": len(csv_data),
+        "matches": filtered_data,
+        "data_source": "local_csv"  # Indicate this is local data
+    }
+    
+    if not filtered_data:
+        result["message"] = "No categories match the specified filters."
+        result["available_shows"] = list(set(row.get('Show', '') for row in csv_data if row.get('Show')))
+    
+    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+# Add cache management endpoints
+@mcp.tool()
+async def clear_api_cache() -> list[TextContent]:
+    """Clear the API response cache.
+    
+    Use this tool to clear cached responses when you need fresh data from the APIs.
+    """
+    cache_stats_before = api_cache.get_stats()
+    api_cache.clear()
+    
+    result = {
+        "message": "API cache cleared successfully",
+        "entries_cleared": cache_stats_before["total_entries"],
+        "cache_stats_before": cache_stats_before
+    }
+    
+    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+@mcp.tool()
+async def get_cache_stats() -> list[TextContent]:
+    """Get current API cache statistics.
+    
+    Returns information about cached responses and cache performance.
+    """
+    stats = api_cache.get_stats()
+    
+    result = {
+        "cache_statistics": stats,
+        "description": {
+            "total_entries": "Total number of cached responses",
+            "valid_entries": "Non-expired cached responses",
+            "expired_entries": "Expired cached responses (will be removed on next access)",
+            "ttl_seconds": "Time-to-live for cache entries in seconds"
+        }
+    }
+    
+    return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
 async def health_check(request):
-    """Health check endpoint that validates Perplexity API connection."""
+    """Health check endpoint WITHOUT external API calls - purely internal status."""
     try:
+        current_time = time.time()
+        
+        # Check if we have a recent health check result (still cache for performance)
+        if (health_check_cache["last_check"] > 0 and 
+            current_time - health_check_cache["last_check"] < health_check_cache["ttl"]):
+            logger.info("Using cached health check result")
+            return JSONResponse(health_check_cache["result"])
+        
         api_key = os.getenv("PERPLEXITY_API_KEY")
         model = os.getenv("PERPLEXITY_MODEL", "sonar")
         
+        # Get cache stats (no external calls)
+        cache_stats = api_cache.get_stats()
+        
+        # Determine status based on configuration only (NO API CALLS)
         if not api_key:
-            return JSONResponse({
-                "status": "unhealthy",
-                "error": "PERPLEXITY_API_KEY not configured"
-            })
+            status = "degraded"
+            status_message = "PERPLEXITY_API_KEY not configured - server operational but API unavailable"
+        else:
+            status = "healthy"
+            status_message = "Server operational - API key configured"
         
-        # Test API connection with a simple query
-        test_data = await call_perplexity_api("test connection", "day")
-        
-        return JSONResponse({
-            "status": "healthy",
+        result = {
+            "status": status,
+            "message": status_message,
             "version": __version__,
-            "model": model,
-            "api_key_configured": bool(api_key),
-            "test_query_successful": True,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "server_info": {
+                "model": model,
+                "api_key_configured": bool(api_key),
+                "api_test_disabled": "Health checks do not test external APIs to avoid unnecessary calls",
+                "uptime_seconds": int(current_time - start_time) if 'start_time' in globals() else 0
+            },
+            "cache_stats": cache_stats,
             "available_models": [
                 "sonar-deep-research",
                 "sonar-reasoning-pro", 
@@ -281,18 +471,38 @@ async def health_check(request):
             ],
             "available_tools": [
                 "perplexity_search_web",
-                "perplexity_advanced_search"
-            ]
-        })
+                "perplexity_advanced_search", 
+                "search_show_categories",
+                "clear_api_cache",
+                "get_cache_stats"
+            ],
+            "optimization_features": {
+                "api_caching": True,
+                "cache_ttl_seconds": api_cache.ttl,
+                "health_check_caching": True,
+                "external_api_calls_avoided": "Health checks do not call external APIs"
+            }
+        }
+        
+        # Cache the health check result
+        health_check_cache["last_check"] = current_time
+        health_check_cache["result"] = result
+        
+        return JSONResponse(result)
         
     except Exception as e:
-        return JSONResponse({
+        logger.error(f"Health check error: {str(e)}")
+        result = {
             "status": "unhealthy",
             "error": str(e),
             "version": __version__,
+            "timestamp": datetime.datetime.now().isoformat(),
             "model": os.getenv("PERPLEXITY_MODEL", "sonar"),
-            "api_key_configured": bool(os.getenv("PERPLEXITY_API_KEY"))
-        })
+            "api_key_configured": bool(os.getenv("PERPLEXITY_API_KEY")),
+            "cache_stats": api_cache.get_stats() if 'api_cache' in globals() else {},
+            "note": "Health check failed but no external API calls were made"
+        }
+        return JSONResponse(result)
 
 async def handle_sse(request):
     """Handle SSE connections for MCP."""
@@ -319,13 +529,17 @@ if __name__ == "__main__":
         # Validate environment on startup
         validate_environment()
         
-        logger.info(f"Starting Perplexity MCP Server v{__version__} with SSE transport...")
+        logger.info(f"Starting Perplexity MCP Server v{__version__} with SSE transport and caching...")
         logger.info("Perplexity MCP Server running on http://0.0.0.0:8001")
         logger.info("SSE endpoint: http://0.0.0.0:8001/sse")
         logger.info("Health check: http://0.0.0.0:8001/health")
         logger.info("Available MCP tools:")
-        logger.info("  - perplexity_search_web")
-        logger.info("  - perplexity_advanced_search")
+        logger.info("  - perplexity_search_web (cached)")
+        logger.info("  - perplexity_advanced_search (cached)")
+        logger.info("  - search_show_categories (local CSV)")
+        logger.info("  - clear_api_cache (cache management)")
+        logger.info("  - get_cache_stats (cache management)")
+        logger.info(f"API response cache TTL: {api_cache.ttl} seconds")
         
         uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")
         
