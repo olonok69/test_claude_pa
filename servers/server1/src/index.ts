@@ -1521,7 +1521,7 @@ async function runSSELocalServer() {
     }
     
     try {
-      await transport.handlePostMessage(req, res);
+      await transport.handlePostMessage(req, res,req.body);
     } catch (error) {
       console.error('Error handling post message:', error);
       res.status(500).json({ error: 'Internal server error' });
