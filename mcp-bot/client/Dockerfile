@@ -20,8 +20,7 @@ RUN mkdir -p keys ssl mcp_servers/company_tagging/categories
 # Copy the application code
 COPY . .
 
-# Copy the company tagging MCP server
-COPY mcp_servers/ /app/mcp_servers/
+
 
 # Copy SSL-related scripts and make them executable
 COPY generate_ssl_certificate.sh startup_ssl.sh ./
