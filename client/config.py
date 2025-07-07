@@ -8,7 +8,7 @@ env = os.getenv
 # Model mapping - only OpenAI and Azure OpenAI
 MODEL_OPTIONS = {
     "OpenAI": "gpt-4o",
-    "Azure OpenAI": "o3-mini",  # Using the deployment from .env
+    "Anthropic": "claude-sonnet-4-20250514",  # Using the deployment from .env
 }
 
 # Streamlit defaults

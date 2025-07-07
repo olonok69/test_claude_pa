@@ -45,6 +45,34 @@ services:
       retries: 3
       start_period: 40s
 
+  mcpserver3:
+    build: ./servers/server3
+    ports:
+      - "8003:8003"
+    environment:
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
+      # Cache configuration (optional overrides)
+      - CACHE_TTL_SECONDS=1800  # 30 minutes
+      - HEALTH_CHECK_TTL_SECONDS=300  # 5 minutes
+    volumes:
+      - ./servers/server3/.env:/app/.env
+    restart: unless-stopped
+    # Memory limits to prevent excessive cache usage
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    # IMPORTANT: Health check that does NOT call external APIs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   # MCP Client Application
   mcp-client:
     build:
@@ -54,7 +82,8 @@ services:
     environment:
       # OpenAI Configuration
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - MODEL_NAME=${MODEL_NAME:-claude-sonnet-4-20250514}
       # SSL Configuration
       - SSL_ENABLED=${SSL_ENABLED:-false}
       
