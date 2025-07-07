@@ -17,7 +17,7 @@ nest_asyncio.apply()
 page_icon_path = os.path.join(".", "icons", "playground.png")
 
 st.set_page_config(
-    page_title="Google Search MCP Client",
+    page_title="Firecrawl & Google Search MCP Client",
     page_icon=page_icon_path,
     layout="wide",
     initial_sidebar_state="expanded",
@@ -108,7 +108,7 @@ def handle_authentication():
 
 def show_authentication_required_message():
     """Show a message when user is not authenticated."""
-    st.title("🔍 Google Search MCP Client")
+    st.title("🔥 Firecrawl & Google Search MCP Client")
 
     col1, col2, col3 = st.columns([1, 2, 1])
 
@@ -124,10 +124,10 @@ def show_authentication_required_message():
 
         st.markdown(
             """
-        ### Welcome to Google Search MCP Client
+        ### Welcome to Firecrawl & Google Search MCP Client
         
-        This application provides web search and content extraction through 
-        Google Search integration via Model Context Protocol (MCP) servers.
+        This application provides advanced web scraping, content extraction, and search capabilities 
+        through Firecrawl and Google Search integration via Model Context Protocol (MCP) servers.
         
         **Please authenticate using the sidebar to access the application.**
         
@@ -136,27 +136,42 @@ def show_authentication_required_message():
         #### 🚀 Features Available After Login:
         
         - **💬 AI Chat Interface**: Interactive conversations with AI agents
+        - **🔥 Firecrawl Integration**: Advanced web scraping and content extraction
         - **🔍 Google Web Search**: Comprehensive search across the web using Google Custom Search API
         - **📄 Content Extraction**: Clean webpage content extraction and analysis
-        - **🔧 Tool Management**: Execute specialized search tools
-        - **📊 Research Workflows**: Search and content analysis capabilities
-        - **🌐 Real-time Results**: Current web information
+        - **🔧 Tool Management**: Execute specialized scraping and search tools
+        - **📊 Research Workflows**: Multi-step search and analysis capabilities
+        - **🌐 Real-time Results**: Current web information and data extraction
         
         ---
         
-        #### 🔍 Search Engine Capabilities:
+        #### 🔥 Firecrawl Capabilities:
+        
+        **Web Scraping Tools:**
+        - **firecrawl_scrape**: Extract content from single pages with advanced options
+        - **firecrawl_batch_scrape**: Process multiple URLs simultaneously
+        - **firecrawl_crawl**: Deep crawl websites with configurable depth
+        - **firecrawl_map**: Discover all URLs on a website
+        - **firecrawl_extract**: Extract structured data using LLM
+        - **firecrawl_deep_research**: Conduct comprehensive research on topics
+        - **firecrawl_generate_llmstxt**: Generate LLMs.txt files for websites
+        
+        **Features:**
+        - Advanced content extraction with multiple formats (Markdown, HTML, Screenshot)
+        - Intelligent crawling with depth control and URL filtering
+        - Batch operations for processing multiple pages
+        - LLM-powered structured data extraction
+        - Support for both cloud and self-hosted Firecrawl instances
+        
+        ---
+        
+        #### 🔍 Google Search Capabilities:
         
         **Google Search Tools:**
-        - **google-search**: Perform Google searches with customizable result counts (1-10 results)
-        - **read-webpage**: Extract and clean content from web pages with automatic formatting
+        - **google-search**: Perform Google searches with customizable result counts
+        - **read-webpage**: Extract and clean content from web pages
         - **Research workflows**: Multi-step search and analysis processes
-        - **Content filtering**: Clean, readable text extraction from web pages
-        
-        **Search Features:**
-        - Real-time web search using Google Custom Search API
-        - Configurable result counts and search parameters
-        - Content extraction with automatic cleanup (removes scripts, ads, navigation)
-        - Support for any publicly accessible web content
+        - **Content filtering**: Clean, readable text extraction
         
         ---
         
@@ -169,9 +184,7 @@ def show_authentication_required_message():
         )
 
         # Add visual elements
-        st.info(
-            "👈 Use the sidebar to authenticate and start using the search platform"
-        )
+        st.info("👈 Use the sidebar to authenticate and start using the platform")
 
         # Add quick stats about the platform
         with st.container():
@@ -180,17 +193,19 @@ def show_authentication_required_message():
 
             with col_a:
                 st.metric(
-                    label="🔍 Search Tools", value="2", help="Google Search tools"
+                    label="🔥 Firecrawl Tools",
+                    value="8+",
+                    help="Advanced scraping tools",
                 )
 
             with col_b:
                 st.metric(
-                    label="🌐 Search Engine", value="1", help="Google Custom Search"
+                    label="🔍 Search Tools", value="2+", help="Google Search tools"
                 )
 
             with col_c:
                 st.metric(
-                    label="🔌 MCP Server", value="1", help="Google Search MCP server"
+                    label="🔌 MCP Servers", value="2", help="Firecrawl & Google Search"
                 )
 
             with col_d:
@@ -202,20 +217,22 @@ def show_authentication_required_message():
         with st.expander("💡 Example Queries", expanded=False):
             st.markdown(
                 """
-            **Quick Information Search:**
-            - "What are the latest developments in artificial intelligence?"
-            - "Find recent news about climate change"
-            - "Search for Python programming tutorials"
+            **Firecrawl Web Scraping:**
+            - "Scrape the content from https://example.com"
+            - "Crawl the entire documentation site at docs.example.com"
+            - "Extract all product information from this e-commerce page"
+            - "Map all URLs on example.com website"
+            - "Do deep research on renewable energy trends"
             
-            **Comprehensive Research:**
-            - "Search for React documentation and read the official guide"
-            - "Find climate change reports and extract detailed content"
-            - "Search for machine learning papers and analyze the content"
+            **Google Search & Analysis:**
+            - "Search for the latest AI developments and extract key insights"
+            - "Find Python tutorials and summarize the best resources"
+            - "Search for climate change reports and analyze the findings"
             
-            **Content Extraction:**
-            - "Read the content from https://example.com/article"
-            - "Extract information from a specific webpage"
-            - "Analyze multiple web sources about a topic"
+            **Combined Workflows:**
+            - "Search for top AI companies, then scrape their websites for job openings"
+            - "Find documentation about React hooks, then extract code examples"
+            - "Research quantum computing companies and extract their product offerings"
             """
             )
 

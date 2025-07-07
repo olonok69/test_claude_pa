@@ -37,7 +37,7 @@ def main():
     check_authentication()
 
     # Initialize the title
-    st.title("🔍 Google Search MCP Client - Chat Interface")
+    st.title("🔥 Firecrawl & Google Search MCP Client - Chat Interface")
 
     # Add user welcome message
     if st.session_state.get("name"):
@@ -63,9 +63,17 @@ def main():
             return
 
         # Main chat interface
-        st.header("💬 Chat with Google Search Agent")
+        st.header("💬 Chat with Firecrawl & Google Search Agent")
 
         # Show available search engine status
+        firecrawl_tools = [
+            tool
+            for tool in st.session_state.get("tools", [])
+            if any(
+                keyword in tool.name.lower()
+                for keyword in ["firecrawl", "scrape", "crawl", "map", "extract"]
+            )
+        ]
         google_tools = [
             tool
             for tool in st.session_state.get("tools", [])
@@ -75,13 +83,22 @@ def main():
             )
             or ("google" in tool.name.lower())
         ]
-        if google_tools:
+
+        if firecrawl_tools and google_tools:
+            st.success(
+                f"🔥 Firecrawl: {len(firecrawl_tools)} tools | 🔍 Google Search: {len(google_tools)} tools available"
+            )
+        elif firecrawl_tools:
+            st.success(f"🔥 Firecrawl: {len(firecrawl_tools)} tools available")
+            st.warning("🔍 Google Search: Not connected")
+        elif google_tools:
+            st.warning("🔥 Firecrawl: Not connected")
             st.success(f"🔍 Google Search: {len(google_tools)} tools available")
         else:
-            st.warning("🔍 Google Search: Not connected")
+            st.warning("🔥 Firecrawl: Not connected | 🔍 Google Search: Not connected")
 
         st.markdown(
-            "Ask questions to search the web using Google Search tools for comprehensive research and analysis."
+            "Ask questions to search the web, scrape content, and analyze data using Firecrawl and Google Search tools."
         )
 
         messages_container = st.container(border=True, height=600)
@@ -99,7 +116,7 @@ def main():
                         st.markdown(m["content"])
 
         # Chat input
-        user_text = st.chat_input("Ask a question or search the web")
+        user_text = st.chat_input("Ask a question or request web scraping/search")
 
         # Handle chat logic
         if user_text is not None:  # something submitted

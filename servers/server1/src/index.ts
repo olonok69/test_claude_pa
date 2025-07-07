@@ -1590,7 +1590,7 @@ async function runSSECloudServer() {
     }
   );
 
-  const PORT = 3000;
+  const PORT = 8001;
   app.listen(PORT, () => {
     console.log(`MCP SSE Server listening on http://localhost:${PORT}`);
     console.log(`SSE endpoint: http://localhost:${PORT}/sse`);

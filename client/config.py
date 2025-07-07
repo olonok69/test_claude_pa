@@ -35,12 +35,21 @@ else:
     # Default server configuration if file doesn't exist
     SERVER_CONFIG = {
         "mcpServers": {
-            "Google Search": {
+            "Firecrawl": {
                 "transport": "sse",
-                "url": "http://mcpserver2:8002/sse",
+                "url": os.getenv("FIRECRAWL_SERVER_URL", "http://mcpserver1:8001/sse"),
                 "timeout": 600,
                 "headers": None,
                 "sse_read_timeout": 900,
-            }
+            },
+            "Google Search": {
+                "transport": "sse",
+                "url": os.getenv(
+                    "GOOGLE_SEARCH_SERVER_URL", "http://mcpserver2:8002/sse"
+                ),
+                "timeout": 600,
+                "headers": None,
+                "sse_read_timeout": 900,
+            },
         }
     }

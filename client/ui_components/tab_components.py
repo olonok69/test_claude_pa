@@ -1,4 +1,4 @@
-# Fixed ui_components/tab_components.py - Remove nested expanders
+# Fixed ui_components/tab_components.py - Updated with Firecrawl tools
 
 import streamlit as st
 from config import MODEL_OPTIONS
@@ -168,6 +168,13 @@ def create_simple_configuration_tab():
         AZURE_API_VERSION=2023-12-01-preview
         ```
         
+        **For Firecrawl MCP Server:**
+        ```
+        # Firecrawl Configuration
+        FIRECRAWL_API_KEY=your_firecrawl_api_key
+        FIRECRAWL_API_URL=https://api.firecrawl.dev  # Optional: for self-hosted instances
+        ```
+        
         **For Google Search MCP Server:**
         ```
         # Google Search Configuration
@@ -187,7 +194,7 @@ def create_simple_configuration_tab():
 def create_connection_tab():
     """Create the Connections tab content."""
     st.header("🔌 MCP Server Connections")
-    st.markdown("Manage connections to your Google Search MCP server.")
+    st.markdown("Manage connections to your Firecrawl and Google Search MCP servers.")
 
     # Current Connection Status
     with st.container(border=True):
@@ -197,7 +204,7 @@ def create_connection_tab():
             st.success(f"🟢 Connected to {len(st.session_state.servers)} MCP server(s)")
 
             # Categorize tools
-            google_search_tools, other_tools = categorize_tools(
+            firecrawl_tools, google_search_tools, other_tools = categorize_tools(
                 st.session_state.get("tools", [])
             )
 
@@ -217,6 +224,7 @@ def create_connection_tab():
                 st.metric("Available Resources", resources_count)
 
             # Tool breakdown
+            st.metric("🔥 Firecrawl Tools", len(firecrawl_tools))
             st.metric("🔍 Google Search Tools", len(google_search_tools))
             if other_tools:
                 st.metric("🔧 Other Tools", len(other_tools))
@@ -251,7 +259,12 @@ def create_connection_tab():
                         )
 
                     # Add server-specific info
-                    if name == "Google Search":
+                    if name == "Firecrawl":
+                        st.markdown("**Type:** Web Scraping & Content Extraction")
+                        st.markdown(
+                            "**Operations:** Web scraping, batch scraping, crawling, content extraction, map discovery"
+                        )
+                    elif name == "Google Search":
                         st.markdown("**Type:** Web Search Engine")
                         st.markdown(
                             "**Operations:** Web search, webpage content extraction"
@@ -318,7 +331,9 @@ def create_connection_tab():
 def create_tools_tab():
     """Create the Tools tab content with resources and prompts support."""
     st.header("🧰 Available Tools, Resources & Prompts")
-    st.markdown("Explore available Google Search tools, resources, and prompts.")
+    st.markdown(
+        "Explore available Firecrawl and Google Search tools, resources, and prompts."
+    )
 
     # Check if we have tools, prompts, or resources
     has_tools = bool(st.session_state.get("tools"))
@@ -327,7 +342,7 @@ def create_tools_tab():
 
     if not has_tools and not has_prompts and not has_resources:
         st.warning(
-            "🔧 No tools, resources, or prompts available. Please connect to the MCP server first."
+            "🔧 No tools, resources, or prompts available. Please connect to the MCP servers first."
         )
         st.info("👉 Go to the **Connections** tab to establish server connections.")
         return
@@ -358,11 +373,13 @@ def create_tools_tab():
 
     if has_tools:
         # Categorize tools
-        google_search_tools, other_tools = categorize_tools(
+        firecrawl_tools, google_search_tools, other_tools = categorize_tools(
             st.session_state.get("tools", [])
         )
 
         # Tool category tabs
+        if firecrawl_tools:
+            tab_names.append("🔥 Firecrawl")
         if google_search_tools:
             tab_names.append("🔍 Google Search")
         if other_tools:
@@ -384,9 +401,16 @@ def create_tools_tab():
 
         # Tool tabs
         if has_tools:
-            google_search_tools, other_tools = categorize_tools(
+            firecrawl_tools, google_search_tools, other_tools = categorize_tools(
                 st.session_state.get("tools", [])
             )
+
+            if firecrawl_tools:
+                with tabs[tab_index]:
+                    display_tools_list(
+                        firecrawl_tools, "Firecrawl Operations", "firecrawl"
+                    )
+                tab_index += 1
 
             if google_search_tools:
                 with tabs[tab_index]:
@@ -421,13 +445,32 @@ def create_tools_tab():
 
 def categorize_tools(tools):
     """Categorize tools by server type."""
+    firecrawl_tools = []
     google_search_tools = []
     other_tools = []
 
     for tool in tools:
         tool_name = tool.name.lower()
 
+        # Firecrawl tools
         if any(
+            keyword in tool_name
+            for keyword in [
+                "firecrawl",
+                "scrape",
+                "batch_scrape",
+                "crawl",
+                "map",
+                "extract",
+                "deep_research",
+                "llmstxt",
+                "check_crawl_status",
+                "check_batch_status",
+            ]
+        ):
+            firecrawl_tools.append(tool)
+        # Google Search tools
+        elif any(
             keyword in tool_name
             for keyword in ["google-search", "read-webpage", "google_search", "webpage"]
         ):
@@ -435,7 +478,7 @@ def categorize_tools(tools):
         else:
             other_tools.append(tool)
 
-    return google_search_tools, other_tools
+    return firecrawl_tools, google_search_tools, other_tools
 
 
 def display_tools_list(tools_list, category_title, category_key):
@@ -704,6 +747,20 @@ def display_tool_details(tool):
         tool_name_lower = tool.name.lower()
 
         if any(
+            keyword in tool_name_lower
+            for keyword in [
+                "firecrawl",
+                "scrape",
+                "batch_scrape",
+                "crawl",
+                "map",
+                "extract",
+                "deep_research",
+                "llmstxt",
+            ]
+        ):
+            st.success("🔥 Firecrawl Tool")
+        elif any(
             keyword in tool_name_lower
             for keyword in ["google-search", "read-webpage", "google_search", "webpage"]
         ):

@@ -44,6 +44,7 @@ def create_sidebar_header_with_icon():
 
 def categorize_tools_for_sidebar(tools):
     """Categorize tools by server type for sidebar display with improved detection."""
+    firecrawl_tools = 0
     google_search_tools = 0
     perplexity_tools = 0
     company_tagging_tools = 0
@@ -57,8 +58,27 @@ def categorize_tools_for_sidebar(tools):
             else ""
         )
 
-        # Company Tagging tool detection - improved patterns
+        # Firecrawl tool detection
         if any(
+            keyword in tool_name
+            for keyword in [
+                "firecrawl",
+                "scrape",
+                "batch_scrape",
+                "crawl",
+                "map",
+                "extract",
+                "deep_research",
+                "llmstxt",
+            ]
+        ) or any(
+            keyword in tool_desc
+            for keyword in ["firecrawl", "scraping", "crawling", "extraction"]
+        ):
+            firecrawl_tools += 1
+
+        # Company Tagging tool detection - improved patterns
+        elif any(
             keyword in tool_name
             for keyword in [
                 "search_show_categories",
@@ -102,13 +122,20 @@ def categorize_tools_for_sidebar(tools):
         ) or (
             ("google" in tool_name or "search" in tool_name or "webpage" in tool_name)
             and "perplexity" not in tool_name
+            and "firecrawl" not in tool_name
         ):
             google_search_tools += 1
 
         else:
             other_tools += 1
 
-    return google_search_tools, perplexity_tools, company_tagging_tools, other_tools
+    return (
+        firecrawl_tools,
+        google_search_tools,
+        perplexity_tools,
+        company_tagging_tools,
+        other_tools,
+    )
 
 
 def create_history_chat_container():
@@ -228,15 +255,21 @@ def create_sidebar_chat_buttons():
 
     # Show detailed tool breakdown if tools are available
     if tools_count > 0:
-        google_search_count, perplexity_count, company_tagging_count, other_count = (
-            categorize_tools_for_sidebar(st.session_state.get("tools", []))
-        )
+        (
+            firecrawl_count,
+            google_search_count,
+            perplexity_count,
+            company_tagging_count,
+            other_count,
+        ) = categorize_tools_for_sidebar(st.session_state.get("tools", []))
 
         with st.container():
             st.markdown("**Tool Categories:**")
 
             # Create a compact display
             categories = []
+            if firecrawl_count > 0:
+                categories.append(f"🔥 Firecrawl: {firecrawl_count}")
             if google_search_count > 0:
                 categories.append(f"🔍 Google: {google_search_count}")
             if perplexity_count > 0:

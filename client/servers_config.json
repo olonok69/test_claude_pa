@@ -1,5 +1,12 @@
 {
   "mcpServers": {
+    "Firecrawl": {
+      "transport": "sse",
+      "url": "http://mcpserver1:8001/sse",
+      "timeout": 600,
+      "headers": null,
+      "sse_read_timeout": 900
+    },
     "Google Search": {
       "transport": "sse",
       "url": "http://mcpserver2:8002/sse",
