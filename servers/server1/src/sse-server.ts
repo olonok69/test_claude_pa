@@ -22,6 +22,7 @@ if (!FIRECRAWL_API_KEY) {
 
 class FirecrawlMCPServer {
   private firecrawlApp: FirecrawlApp;
+  private transports: { [sessionId: string]: SSEServerTransport } = {};
 
   constructor() {
     this.firecrawlApp = new FirecrawlApp({
@@ -33,6 +34,9 @@ class FirecrawlMCPServer {
   async run() {
     const app = express();
     const httpServer = createServer(app);
+    
+    // Add JSON parsing middleware
+    app.use(express.json());
 
     // Health check endpoint
     app.get('/health', (req, res) => {
@@ -58,16 +62,42 @@ class FirecrawlMCPServer {
     // Error handling
     mcpServer.onerror = (error) => console.error("[MCP Error]", error);
 
-    // SSE endpoint
+    // SSE endpoint for establishing connection
     app.get('/sse', async (req, res) => {
       console.log('SSE connection established');
       const transport = new SSEServerTransport('/sse', res);
+      this.transports[transport.sessionId] = transport;
+      
       await mcpServer.connect(transport);
       
       // Handle client disconnect
       req.on('close', () => {
-        console.log('SSE connection closed');
+        console.log(`SSE connection closed: ${transport.sessionId}`);
+        delete this.transports[transport.sessionId];
       });
+    });
+
+    // Handle POST to /sse with sessionId
+    app.post('/sse', async (req, res) => {
+      const sessionId = req.query.sessionId as string;
+      
+      if (!sessionId) {
+        return res.status(400).json({ error: 'Missing sessionId' });
+      }
+      
+      const transport = this.transports[sessionId];
+      
+      if (!transport) {
+        console.error(`Transport not found for sessionId: ${sessionId}`);
+        return res.status(404).json({ error: 'Transport not found for sessionId' });
+      }
+      
+      try {
+        await transport.handlePostMessage(req, res);
+      } catch (error) {
+        console.error('Error handling post message:', error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
     });
 
     httpServer.listen(PORT, '0.0.0.0', () => {

@@ -702,28 +702,6 @@ interface GenerateLLMsTextParams {
   __experimental_stream?: boolean;
 }
 
-/**
- * Response interface for LLMs.txt generation operations.
- */
-// interface GenerateLLMsTextResponse {
-//   success: boolean;
-//   id: string;
-// }
-
-/**
- * Status response interface for LLMs.txt generation operations.
- */
-// interface GenerateLLMsTextStatusResponse {
-//   success: boolean;
-//   data: {
-//     llmstxt: string;
-//     llmsfulltxt?: string;
-//   };
-//   status: 'processing' | 'completed' | 'failed';
-//   error?: string;
-//   expiresAt: string;
-// }
-
 interface StatusCheckOptions {
   id: string;
 }
@@ -876,8 +854,6 @@ if (
   );
   process.exit(1);
 }
-
-// Initialize Firecrawl client with optional API URL
 
 // Configuration for retries and monitoring
 const CONFIG = {
@@ -1501,8 +1477,8 @@ async function runLocalServer() {
     process.exit(1);
   }
 }
-// Add this to the end of your existing index.ts file, replacing the current runSSELocalServer function:
 
+// FIXED SSE SERVER IMPLEMENTATION
 async function runSSELocalServer() {
   const transports: { [sessionId: string]: SSEServerTransport } = {};
   const app = express();
@@ -1515,10 +1491,10 @@ async function runSSELocalServer() {
     res.json({ status: 'ok', service: 'firecrawl-mcp-server' });
   });
 
-  // SSE endpoint
+  // SSE endpoint for establishing connection
   app.get('/sse', async (req, res) => {
     console.log('SSE connection established');
-    const transport = new SSEServerTransport('/messages', res);
+    const transport = new SSEServerTransport('/sse', res);
     transports[transport.sessionId] = transport;
     
     res.on('close', () => {
@@ -1529,7 +1505,7 @@ async function runSSELocalServer() {
     await server.connect(transport);
   });
 
-  // Handle POST to /sse with sessionId - this is what the MCP client actually sends
+  // Handle POST to /sse with sessionId - this is what the MCP client sends
   app.post('/sse', async (req, res) => {
     const sessionId = req.query.sessionId as string;
     
@@ -1544,25 +1520,12 @@ async function runSSELocalServer() {
       return res.status(404).json({ error: 'Transport not found for sessionId' });
     }
     
-    // Pass the request to the transport
-    await transport.handlePostMessage(req, res);
-  });
-
-  // Also handle POST to /messages for compatibility
-  app.post('/messages', async (req, res) => {
-    const sessionId = req.query.sessionId as string;
-    
-    if (!sessionId) {
-      return res.status(400).json({ error: 'Missing sessionId' });
+    try {
+      await transport.handlePostMessage(req, res);
+    } catch (error) {
+      console.error('Error handling post message:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
-    
-    const transport = transports[sessionId];
-    
-    if (!transport) {
-      return res.status(404).json({ error: 'Transport not found for sessionId' });
-    }
-    
-    await transport.handlePostMessage(req, res);
   });
 
   const PORT = process.env.PORT || 8001;
