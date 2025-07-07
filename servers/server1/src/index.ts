@@ -1501,37 +1501,76 @@ async function runLocalServer() {
     process.exit(1);
   }
 }
-async function runSSELocalServer() {
-  let transport: SSEServerTransport | null = null;
-  const app = express();
+// Add this to the end of your existing index.ts file, replacing the current runSSELocalServer function:
 
+async function runSSELocalServer() {
+  const transports: { [sessionId: string]: SSEServerTransport } = {};
+  const app = express();
+  
+  // Add JSON parsing middleware
+  app.use(express.json());
+
+  // Health check endpoint
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok', service: 'firecrawl-mcp-server' });
+  });
+
+  // SSE endpoint
   app.get('/sse', async (req, res) => {
-    transport = new SSEServerTransport(`/messages`, res);
+    console.log('SSE connection established');
+    const transport = new SSEServerTransport('/messages', res);
+    transports[transport.sessionId] = transport;
+    
     res.on('close', () => {
-      transport = null;
+      console.log(`SSE connection closed: ${transport.sessionId}`);
+      delete transports[transport.sessionId];
     });
+    
     await server.connect(transport);
   });
 
-  // Endpoint for the client to POST messages
-  // Remove express.json() middleware - let the transport handle the body
-  app.post('/messages', (req, res) => {
-    if (transport) {
-      transport.handlePostMessage(req, res);
+  // Handle POST to /sse with sessionId - this is what the MCP client actually sends
+  app.post('/sse', async (req, res) => {
+    const sessionId = req.query.sessionId as string;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Missing sessionId' });
     }
+    
+    const transport = transports[sessionId];
+    
+    if (!transport) {
+      console.error(`Transport not found for sessionId: ${sessionId}`);
+      return res.status(404).json({ error: 'Transport not found for sessionId' });
+    }
+    
+    // Pass the request to the transport
+    await transport.handlePostMessage(req, res);
   });
 
-  const PORT = process.env.PORT || 3000;
-  console.log('Starting server on port', PORT);
-  try {
-    app.listen(PORT, () => {
-      console.log(`MCP SSE Server listening on http://localhost:${PORT}`);
-      console.log(`SSE endpoint: http://localhost:${PORT}/sse`);
-      console.log(`Message endpoint: http://localhost:${PORT}/messages`);
-    });
-  } catch (error) {
-    console.error('Error starting server:', error);
-  }
+  // Also handle POST to /messages for compatibility
+  app.post('/messages', async (req, res) => {
+    const sessionId = req.query.sessionId as string;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Missing sessionId' });
+    }
+    
+    const transport = transports[sessionId];
+    
+    if (!transport) {
+      return res.status(404).json({ error: 'Transport not found for sessionId' });
+    }
+    
+    await transport.handlePostMessage(req, res);
+  });
+
+  const PORT = process.env.PORT || 8001;
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Firecrawl MCP Server running on http://0.0.0.0:${PORT}`);
+    console.log(`SSE endpoint available at http://0.0.0.0:${PORT}/sse`);
+    console.log(`Health check available at http://0.0.0.0:${PORT}/health`);
+  });
 }
 
 async function runSSECloudServer() {

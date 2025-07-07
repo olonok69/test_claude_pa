@@ -7,7 +7,6 @@ WORKDIR /app
 COPY package.json ./
 
 # Install all dependencies including dev dependencies for building
-# Use npm install instead of npm ci to handle lock file mismatches
 RUN npm install
 
 # Copy source files
@@ -25,7 +24,6 @@ WORKDIR /app
 COPY package.json ./
 
 # Install only production dependencies
-# Use npm install with --omit=dev instead of npm ci
 RUN npm install --omit=dev
 
 # Copy built files from builder stage
@@ -33,9 +31,10 @@ COPY --from=builder /app/dist ./dist
 
 # Set environment variables
 ENV PORT=8001
+ENV SSE_LOCAL=true
 
 # Expose the port
 EXPOSE 8001
 
-# Run the SSE server
+# Run the SSE server instead of the main index
 CMD ["node", "dist/sse-server.js"]

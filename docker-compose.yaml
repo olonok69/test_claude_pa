@@ -1,4 +1,3 @@
-
 services:
   # Firecrawl MCP Server (Server 1)
   mcpserver1:
@@ -9,7 +8,7 @@ services:
     environment:
       - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
       - FIRECRAWL_API_URL=${FIRECRAWL_API_URL:-https://api.firecrawl.dev}
-      - CLOUD_SERVICE=true
+      - SSE_LOCAL=true  # Enable SSE mode
       - PORT=8001
     ports:
       - "8001:8001"
