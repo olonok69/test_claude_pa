@@ -181,6 +181,13 @@ def create_simple_configuration_tab():
         GOOGLE_API_KEY=your_google_api_key
         GOOGLE_SEARCH_ENGINE_ID=your_custom_search_engine_id
         ```
+        
+        **For Perplexity MCP Server:**
+        ```
+        # Perplexity Configuration
+        PERPLEXITY_API_KEY=your_perplexity_api_key
+        PERPLEXITY_MODEL=sonar  # Optional: choose model
+        ```
         """
         )
 
@@ -194,7 +201,9 @@ def create_simple_configuration_tab():
 def create_connection_tab():
     """Create the Connections tab content."""
     st.header("🔌 MCP Server Connections")
-    st.markdown("Manage connections to your Firecrawl and Google Search MCP servers.")
+    st.markdown(
+        "Manage connections to your Firecrawl, Google Search, and Perplexity MCP servers."
+    )
 
     # Current Connection Status
     with st.container(border=True):
@@ -203,9 +212,9 @@ def create_connection_tab():
         if st.session_state.get("agent"):
             st.success(f"🟢 Connected to {len(st.session_state.servers)} MCP server(s)")
 
-            # Categorize tools
-            firecrawl_tools, google_search_tools, other_tools = categorize_tools(
-                st.session_state.get("tools", [])
+            # Categorize tools - FIXED: Now handling 4 return values
+            firecrawl_tools, google_search_tools, perplexity_tools, other_tools = (
+                categorize_tools(st.session_state.get("tools", []))
             )
 
             # Check for prompts and resources
@@ -223,9 +232,10 @@ def create_connection_tab():
             with col4:
                 st.metric("Available Resources", resources_count)
 
-            # Tool breakdown
+            # Tool breakdown - FIXED: Now showing all tool categories
             st.metric("🔥 Firecrawl Tools", len(firecrawl_tools))
             st.metric("🔍 Google Search Tools", len(google_search_tools))
+            st.metric("🔮 Perplexity Tools", len(perplexity_tools))
             if other_tools:
                 st.metric("🔧 Other Tools", len(other_tools))
 
@@ -268,6 +278,11 @@ def create_connection_tab():
                         st.markdown("**Type:** Web Search Engine")
                         st.markdown(
                             "**Operations:** Web search, webpage content extraction"
+                        )
+                    elif name == "Perplexity Search":
+                        st.markdown("**Type:** AI-Powered Search")
+                        st.markdown(
+                            "**Operations:** AI-powered web search with multiple models"
                         )
 
                 with col2:
@@ -332,7 +347,7 @@ def create_tools_tab():
     """Create the Tools tab content with resources and prompts support."""
     st.header("🧰 Available Tools, Resources & Prompts")
     st.markdown(
-        "Explore available Firecrawl and Google Search tools, resources, and prompts."
+        "Explore available Firecrawl, Google Search, and Perplexity tools, resources, and prompts."
     )
 
     # Check if we have tools, prompts, or resources
@@ -372,9 +387,9 @@ def create_tools_tab():
     tab_names = []
 
     if has_tools:
-        # Categorize tools
-        firecrawl_tools, google_search_tools, other_tools = categorize_tools(
-            st.session_state.get("tools", [])
+        # Categorize tools - FIXED: Now handling 4 return values
+        firecrawl_tools, google_search_tools, perplexity_tools, other_tools = (
+            categorize_tools(st.session_state.get("tools", []))
         )
 
         # Tool category tabs
@@ -382,6 +397,8 @@ def create_tools_tab():
             tab_names.append("🔥 Firecrawl")
         if google_search_tools:
             tab_names.append("🔍 Google Search")
+        if perplexity_tools:
+            tab_names.append("🔮 Perplexity")
         if other_tools:
             tab_names.append("🔧 Other Tools")
 
@@ -401,8 +418,8 @@ def create_tools_tab():
 
         # Tool tabs
         if has_tools:
-            firecrawl_tools, google_search_tools, other_tools = categorize_tools(
-                st.session_state.get("tools", [])
+            firecrawl_tools, google_search_tools, perplexity_tools, other_tools = (
+                categorize_tools(st.session_state.get("tools", []))
             )
 
             if firecrawl_tools:
@@ -416,6 +433,13 @@ def create_tools_tab():
                 with tabs[tab_index]:
                     display_tools_list(
                         google_search_tools, "Google Search Operations", "google_search"
+                    )
+                tab_index += 1
+
+            if perplexity_tools:
+                with tabs[tab_index]:
+                    display_tools_list(
+                        perplexity_tools, "Perplexity Operations", "perplexity"
                     )
                 tab_index += 1
 
@@ -785,6 +809,11 @@ def display_tool_details(tool):
             for keyword in ["google-search", "read-webpage", "google_search", "webpage"]
         ):
             st.success("🔍 Google Search Tool")
+        elif any(
+            keyword in tool_name_lower
+            for keyword in ["perplexity", "clear_api_cache", "get_cache_stats"]
+        ):
+            st.success("🔮 Perplexity Tool")
         else:
             st.warning("🔧 General Tool")
 

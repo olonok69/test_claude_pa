@@ -51,5 +51,12 @@ else:
                 "headers": None,
                 "sse_read_timeout": 900,
             },
+            "Perplexity Search": {
+                "transport": "sse",
+                "url": os.getenv("PERPLEXITY_SERVER_URL", "http://mcpserver3:8003/sse"),
+                "timeout": 600,
+                "headers": None,
+                "sse_read_timeout": 900,
+            },
         }
     }

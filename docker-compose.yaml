@@ -4,7 +4,7 @@ services:
     build:
       context: ./servers/server1
       dockerfile: Dockerfile
-    container_name: firecrawl-mcp-server
+    container_name: mcpserver1
     environment:
       - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
       - FIRECRAWL_API_URL=${FIRECRAWL_API_URL:-https://api.firecrawl.dev}
@@ -27,7 +27,7 @@ services:
     build:
       context: ./servers/server2
       dockerfile: Dockerfile
-    container_name: google-search-mcp-server
+    container_name: mcpserver2
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GOOGLE_SEARCH_ENGINE_ID=${GOOGLE_SEARCH_ENGINE_ID}
@@ -47,6 +47,7 @@ services:
 
   mcpserver3:
     build: ./servers/server3
+    container_name: mcpserver3
     ports:
       - "8003:8003"
     environment:
@@ -86,10 +87,15 @@ services:
       - MODEL_NAME=${MODEL_NAME:-claude-sonnet-4-20250514}
       # SSL Configuration
       - SSL_ENABLED=${SSL_ENABLED:-false}
-      
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
+      # Cache configuration (optional overrides)
+      - CACHE_TTL_SECONDS=1800  # 30 minutes
+      - HEALTH_CHECK_TTL_SECONDS=300  # 5 minutes     
       # MCP Server URLs (internal Docker network)
       - FIRECRAWL_SERVER_URL=http://mcpserver1:8001/sse
       - GOOGLE_SEARCH_SERVER_URL=http://mcpserver2:8002/sse
+      - PERPLEXITY_SERVER_URL=http://mcpserver3:8003/sse
     ports:
       - "8501:8501"  # HTTP
       - "8503:8503"  # HTTPS (if SSL enabled)
