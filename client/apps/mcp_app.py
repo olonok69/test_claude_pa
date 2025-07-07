@@ -37,7 +37,7 @@ def main():
     check_authentication()
 
     # Initialize the title
-    st.title("🔥 Firecrawl & Google Search MCP Client - Chat Interface")
+    st.title("🔥 Firecrawl, Google Search & Perplexity MCP Client - Chat Interface")
 
     # Add user welcome message
     if st.session_state.get("name"):
@@ -63,7 +63,7 @@ def main():
             return
 
         # Main chat interface
-        st.header("💬 Chat with Firecrawl & Google Search Agent")
+        st.header("💬 Chat with Firecrawl, Google Search & Perplexity Agent")
 
         # Show available search engine status
         firecrawl_tools = [
@@ -79,26 +79,41 @@ def main():
             for tool in st.session_state.get("tools", [])
             if any(
                 keyword in tool.name.lower()
-                for keyword in ["google-search", "read-webpage"]
+                for keyword in [
+                    "google-search",
+                    "read-webpage",
+                    "clear-cache",
+                    "cache-stats",
+                ]
             )
             or ("google" in tool.name.lower())
         ]
-
-        if firecrawl_tools and google_tools:
-            st.success(
-                f"🔥 Firecrawl: {len(firecrawl_tools)} tools | 🔍 Google Search: {len(google_tools)} tools available"
+        perplexity_tools = [
+            tool
+            for tool in st.session_state.get("tools", [])
+            if any(
+                keyword in tool.name.lower()
+                for keyword in ["perplexity", "clear_api_cache", "get_cache_stats"]
             )
-        elif firecrawl_tools:
-            st.success(f"🔥 Firecrawl: {len(firecrawl_tools)} tools available")
-            st.warning("🔍 Google Search: Not connected")
-        elif google_tools:
-            st.warning("🔥 Firecrawl: Not connected")
-            st.success(f"🔍 Google Search: {len(google_tools)} tools available")
+        ]
+
+        status_parts = []
+        if firecrawl_tools:
+            status_parts.append(f"🔥 Firecrawl: {len(firecrawl_tools)} tools")
+        if google_tools:
+            status_parts.append(f"🔍 Google Search: {len(google_tools)} tools")
+        if perplexity_tools:
+            status_parts.append(f"🔮 Perplexity: {len(perplexity_tools)} tools")
+
+        if status_parts:
+            st.success(" | ".join(status_parts) + " available")
         else:
-            st.warning("🔥 Firecrawl: Not connected | 🔍 Google Search: Not connected")
+            st.warning(
+                "🔥 Firecrawl: Not connected | 🔍 Google Search: Not connected | 🔮 Perplexity: Not connected"
+            )
 
         st.markdown(
-            "Ask questions to search the web, scrape content, and analyze data using Firecrawl and Google Search tools."
+            "Ask questions to search the web, scrape content, and analyze data using Firecrawl, Google Search, and Perplexity AI tools."
         )
 
         messages_container = st.container(border=True, height=600)

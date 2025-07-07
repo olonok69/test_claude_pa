@@ -108,7 +108,7 @@ def handle_authentication():
 
 def show_authentication_required_message():
     """Show a message when user is not authenticated."""
-    st.title("🔥 Firecrawl & Google Search MCP Client")
+    st.title("🔥 Firecrawl, Google Search & Perplexity MCP Client")
 
     col1, col2, col3 = st.columns([1, 2, 1])
 
@@ -124,10 +124,10 @@ def show_authentication_required_message():
 
         st.markdown(
             """
-        ### Welcome to Firecrawl & Google Search MCP Client
+        ### Welcome to Firecrawl, Google Search & Perplexity MCP Client
         
-        This application provides advanced web scraping, content extraction, and search capabilities 
-        through Firecrawl and Google Search integration via Model Context Protocol (MCP) servers.
+        This application provides advanced web scraping, content extraction, and AI-powered search capabilities 
+        through Firecrawl, Google Search, and Perplexity AI integration via Model Context Protocol (MCP) servers.
         
         **Please authenticate using the sidebar to access the application.**
         
@@ -138,10 +138,12 @@ def show_authentication_required_message():
         - **💬 AI Chat Interface**: Interactive conversations with AI agents
         - **🔥 Firecrawl Integration**: Advanced web scraping and content extraction
         - **🔍 Google Web Search**: Comprehensive search across the web using Google Custom Search API
+        - **🔮 Perplexity AI Search**: AI-powered intelligent web search with multiple models
         - **📄 Content Extraction**: Clean webpage content extraction and analysis
         - **🔧 Tool Management**: Execute specialized scraping and search tools
         - **📊 Research Workflows**: Multi-step search and analysis capabilities
         - **🌐 Real-time Results**: Current web information and data extraction
+        - **💾 Intelligent Caching**: Optimized performance with smart response caching
         
         ---
         
@@ -170,8 +172,27 @@ def show_authentication_required_message():
         **Google Search Tools:**
         - **google-search**: Perform Google searches with customizable result counts
         - **read-webpage**: Extract and clean content from web pages
+        - **clear-cache**: Manage search and webpage caches
+        - **cache-stats**: Monitor cache performance and efficiency
         - **Research workflows**: Multi-step search and analysis processes
         - **Content filtering**: Clean, readable text extraction
+        
+        ---
+        
+        #### 🔮 Perplexity AI Capabilities:
+        
+        **AI-Powered Search Tools:**
+        - **perplexity_search_web**: Standard AI-powered web search with recency filtering
+        - **perplexity_advanced_search**: Advanced search with custom parameters
+        - **clear_api_cache**: Clear cached Perplexity responses
+        - **get_cache_stats**: Monitor Perplexity cache performance
+        
+        **Features:**
+        - Multiple AI models: sonar, sonar-pro, sonar-reasoning, and more
+        - Recency filtering: day, week, month, year
+        - Temperature control for response creativity
+        - Citation support with source links
+        - Intelligent response caching for efficiency
         
         ---
         
@@ -200,17 +221,23 @@ def show_authentication_required_message():
 
             with col_b:
                 st.metric(
-                    label="🔍 Search Tools", value="2+", help="Google Search tools"
+                    label="🔍 Search Tools",
+                    value="4+",
+                    help="Google Search tools with caching",
                 )
 
             with col_c:
                 st.metric(
-                    label="🔌 MCP Servers", value="2", help="Firecrawl & Google Search"
+                    label="🔮 Perplexity Tools",
+                    value="4+",
+                    help="AI-powered search tools",
                 )
 
             with col_d:
                 st.metric(
-                    label="🤖 AI Models", value="2+", help="OpenAI and Azure OpenAI"
+                    label="🔌 MCP Servers",
+                    value="3",
+                    help="Firecrawl, Google Search & Perplexity",
                 )
 
         # Add usage examples
@@ -228,11 +255,18 @@ def show_authentication_required_message():
             - "Search for the latest AI developments and extract key insights"
             - "Find Python tutorials and summarize the best resources"
             - "Search for climate change reports and analyze the findings"
+            - "Clear the search cache to get fresh results"
+            
+            **Perplexity AI Search:**
+            - "Use Perplexity to find recent news about artificial intelligence"
+            - "Search for quantum computing breakthroughs with sonar-pro model"
+            - "Find last week's updates on renewable energy using recency filter"
+            - "Advanced search on machine learning with high temperature for creative responses"
             
             **Combined Workflows:**
-            - "Search for top AI companies, then scrape their websites for job openings"
-            - "Find documentation about React hooks, then extract code examples"
-            - "Research quantum computing companies and extract their product offerings"
+            - "Search for top AI companies with Google, then use Perplexity for deeper analysis"
+            - "Find documentation with Google Search, extract with Firecrawl, analyze with Perplexity"
+            - "Research quantum computing: Google for sources, Firecrawl for extraction, Perplexity for synthesis"
             """
             )
 

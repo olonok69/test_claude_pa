@@ -447,6 +447,7 @@ def categorize_tools(tools):
     """Categorize tools by server type."""
     firecrawl_tools = []
     google_search_tools = []
+    perplexity_tools = []
     other_tools = []
 
     for tool in tools:
@@ -469,16 +470,35 @@ def categorize_tools(tools):
             ]
         ):
             firecrawl_tools.append(tool)
+        # Perplexity tools - updated to include cache management
+        elif any(
+            keyword in tool_name
+            for keyword in [
+                "perplexity_search_web",
+                "perplexity_advanced_search",
+                "perplexity",
+                "clear_api_cache",
+                "get_cache_stats",
+            ]
+        ):
+            perplexity_tools.append(tool)
         # Google Search tools
         elif any(
             keyword in tool_name
-            for keyword in ["google-search", "read-webpage", "google_search", "webpage"]
+            for keyword in [
+                "google-search",
+                "read-webpage",
+                "google_search",
+                "webpage",
+                "clear-cache",
+                "cache-stats",
+            ]
         ):
             google_search_tools.append(tool)
         else:
             other_tools.append(tool)
 
-    return firecrawl_tools, google_search_tools, other_tools
+    return firecrawl_tools, google_search_tools, perplexity_tools, other_tools
 
 
 def display_tools_list(tools_list, category_title, category_key):

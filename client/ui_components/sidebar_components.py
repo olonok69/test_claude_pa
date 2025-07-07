@@ -101,7 +101,7 @@ def categorize_tools_for_sidebar(tools):
         ):
             company_tagging_tools += 1
 
-        # Perplexity tool detection
+        # Perplexity tool detection - updated to include cache tools
         elif (
             any(
                 keyword in tool_name
@@ -109,20 +109,35 @@ def categorize_tools_for_sidebar(tools):
                     "perplexity_search_web",
                     "perplexity_advanced_search",
                     "perplexity",
+                    "clear_api_cache",
+                    "get_cache_stats",
                 ]
             )
             or "perplexity" in tool_desc
         ):
             perplexity_tools += 1
 
-        # Google Search tool detection
+        # Google Search tool detection - exclude cache tools
         elif any(
             keyword in tool_name
-            for keyword in ["google-search", "read-webpage", "google_search", "webpage"]
+            for keyword in [
+                "google-search",
+                "read-webpage",
+                "google_search",
+                "webpage",
+                "clear-cache",
+                "cache-stats",
+            ]
         ) or (
-            ("google" in tool_name or "search" in tool_name or "webpage" in tool_name)
+            (
+                "google" in tool_name
+                or "search" in tool_name
+                or "webpage" in tool_name
+                or "cache" in tool_name
+            )
             and "perplexity" not in tool_name
             and "firecrawl" not in tool_name
+            and "api_cache" not in tool_name
         ):
             google_search_tools += 1
 
