@@ -12,16 +12,34 @@ import logging
 from services.chat_service import init_session, on_user_login, on_user_logout
 from utils.async_helpers import on_shutdown
 from apps import mcp_app
+from pathlib import Path
+from utils.logger_util import set_up_logging
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+LOGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+Path(LOGS_PATH).mkdir(parents=True, exist_ok=True)
+script_name = os.path.join(LOGS_PATH, "debug.log")
+# create loggers
+if not set_up_logging(
+    console_log_output="stdout",
+    console_log_level="info",
+    console_log_color=True,
+    logfile_file=script_name,
+    logfile_log_level="info",
+    logfile_log_color=True,
+    log_line_template="%(color_on)s[%(asctime)s] [%(threadName)s] [%(levelname)-8s] [%(filename)s:%(lineno)d:%(funcName)s] %(message)s%(color_off)s",
+):
+    print("Failed to set up logging, aborting.")
+    raise AttributeError("failed to create logging")
 
 # Enhanced security imports (with fallback)
 try:
     from utils.enhanced_security_config import StreamlitSecureAuth, SecurityConfig
     ENHANCED_SECURITY_AVAILABLE = True
-    print("✅ Enhanced security module loaded successfully")
+    logging.info("✅ Enhanced security module loaded successfully")
 except ImportError as e:
     ENHANCED_SECURITY_AVAILABLE = False
-    print(f"⚠️  Enhanced security module not available: {str(e)}")
-    print("📋 Using YAML authentication fallback")
+    logging.info(f"⚠️  Enhanced security module not available: {str(e)}")
+    logging.info("📋 Using YAML authentication fallback")
 
 # Apply nest_asyncio to allow nested asyncio event loops
 nest_asyncio.apply()
@@ -93,7 +111,7 @@ if os.path.exists(css_path):
             with open(css_path, 'r', encoding='latin1') as f:
                 st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
         except Exception as e:
-            print(f"Warning: Could not load CSS file: {str(e)}")
+            logging.warning(f"Warning: Could not load CSS file: {str(e)}")
 
 
 def load_config():
@@ -103,12 +121,12 @@ def load_config():
         use_sqlite = os.getenv('USE_SQLITE', 'false').lower() == 'true'
         
         if use_sqlite and ENHANCED_SECURITY_AVAILABLE:
-            print("🔒 Using SQLite authentication")
+            logging.info("🔒 Using SQLite authentication")
             # Use enhanced SQLite authentication
             secure_auth = StreamlitSecureAuth('sqlite')
             return secure_auth.get_config_for_streamlit_authenticator()
         else:
-            print("📋 Using YAML authentication")
+            logging.info("📋 Using YAML authentication")
             # Fallback to YAML configuration
             config_path = os.path.join('keys', 'config.yaml')
             if not os.path.exists(config_path):
@@ -239,7 +257,7 @@ def handle_authentication_state_change(prev_auth_status, current_auth_status,
     
     # User logged in
     if current_auth_status and current_username and not prev_auth_status:
-        print(f"🔐 User {current_username} logged in")
+        logging.info(f"🔐 User {current_username} logged in")
         on_user_login(current_username)
         
         # Set login time
@@ -250,7 +268,7 @@ def handle_authentication_state_change(prev_auth_status, current_auth_status,
     elif (current_auth_status and current_username and 
           prev_auth_status and prev_username and 
           current_username != prev_username):
-        print(f"🔄 User switched from {prev_username} to {current_username}")
+        logging.info(f"🔄 User switched from {prev_username} to {current_username}")
         
         # Logout previous user
         on_user_logout(prev_username)
@@ -267,7 +285,7 @@ def handle_authentication_state_change(prev_auth_status, current_auth_status,
     
     # User logged out
     elif not current_auth_status and prev_auth_status and prev_username:
-        print(f"🚪 User {prev_username} logged out")
+        logging.info(f"🚪 User {prev_username} logged out")
         on_user_logout(prev_username)
         
         # Clear login time

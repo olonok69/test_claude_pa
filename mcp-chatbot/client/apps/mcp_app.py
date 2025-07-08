@@ -8,15 +8,15 @@ import ui_components.sidebar_components as sd_components
 from utils.async_helpers import check_authentication
 from services.chat_service import ChatService, on_user_login, on_user_logout
 from ui_components.enhanced_chat_interface import create_enhanced_chat_interface
-
+import logging
 # Import user management with error handling
 try:
     from ui_components.user_management_tab import create_user_management_tab
     USER_MANAGEMENT_AVAILABLE = True
-    print("✅ User management module loaded successfully")
+    logging.info("✅ User management module loaded successfully")
 except ImportError as e:
     USER_MANAGEMENT_AVAILABLE = False
-    print(f"⚠️  User management module not available: {str(e)}")
+    logging.info(f"⚠️  User management module not available: {str(e)}")
 
 def main():
     """Main application function with enhanced authentication and user session management."""
@@ -144,7 +144,7 @@ def main():
             except Exception as e:
                 st.error(f"❌ Error loading User Management: {str(e)}")
                 st.info("Check the console for detailed error information")
-                print(f"User Management Error: {str(e)}")
+                logging.error(f"User Management Error: {str(e)}")
 
 
 def handle_authentication_changes():
@@ -168,7 +168,7 @@ def handle_authentication_changes():
         import datetime
         st.session_state["login_time"] = datetime.datetime.now()
         
-        print(f"User {current_user} logged in successfully")
+        logging.info(f"User {current_user} logged in successfully")
     
     # Handle user logout
     elif not authentication_status and previous_user:
@@ -180,7 +180,7 @@ def handle_authentication_changes():
         if "login_time" in st.session_state:
             del st.session_state["login_time"]
         
-        print(f"User {previous_user} logged out")
+        logging.info(f"User {previous_user} logged out")
 
 
 def show_debug_info():
