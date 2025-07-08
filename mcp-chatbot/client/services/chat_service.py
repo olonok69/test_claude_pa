@@ -2,6 +2,9 @@ import streamlit as st
 from config import SERVER_CONFIG
 import uuid
 from langchain_core.messages import HumanMessage, AIMessage
+from typing import Optional, List, Dict, Any
+import asyncio
+from utils.async_helpers import run_async
 
 # Session state initialization
 def init_session():
@@ -158,3 +161,90 @@ def get_clean_conversation_memory():
                 conversation_messages.append(AIMessage(content=msg["content"]))
     
     return conversation_messages
+
+
+class ChatService:
+    """Service class to handle chat interactions with the MCP agent."""
+    
+    def __init__(self):
+        """Initialize the chat service."""
+        self.agent = None
+        self.tools = []
+        
+    def process_message(self, user_input: str) -> str:
+        """
+        Process a user message and return the AI response.
+        
+        Args:
+            user_input: The user's input message
+            
+        Returns:
+            The AI agent's response
+        """
+        try:
+            # Get the agent from session state
+            if not st.session_state.get("agent"):
+                return "❌ No MCP agent available. Please connect to MCP servers first."
+            
+            # Get conversation history for context
+            conversation_messages = get_clean_conversation_memory()
+            
+            # Add the current user message
+            conversation_messages.append(HumanMessage(content=user_input))
+            
+            # Run the agent with conversation context
+            response = run_async(self._run_agent_async(conversation_messages))
+            
+            # Extract the response content
+            if hasattr(response, 'content'):
+                return response.content
+            elif isinstance(response, dict) and 'messages' in response:
+                # Extract the last message content
+                messages = response['messages']
+                if messages and hasattr(messages[-1], 'content'):
+                    return messages[-1].content
+                elif messages and isinstance(messages[-1], dict):
+                    return messages[-1].get('content', str(messages[-1]))
+            
+            return str(response)
+            
+        except Exception as e:
+            error_message = f"Error processing message: {str(e)}"
+            st.error(error_message)
+            return error_message
+    
+    async def _run_agent_async(self, messages: List) -> Any:
+        """
+        Run the agent asynchronously with the given messages.
+        
+        Args:
+            messages: List of conversation messages
+            
+        Returns:
+            Agent response
+        """
+        agent = st.session_state["agent"]
+        
+        # Invoke the agent with the messages
+        result = await agent.ainvoke({"messages": messages})
+        
+        return result
+    
+    def get_available_tools(self) -> List[str]:
+        """Get list of available tool names."""
+        tools = st.session_state.get("tools", [])
+        return [tool.name for tool in tools]
+    
+    def is_connected(self) -> bool:
+        """Check if the chat service is connected to MCP servers."""
+        return st.session_state.get("agent") is not None
+    
+    def get_connection_status(self) -> Dict[str, Any]:
+        """Get detailed connection status."""
+        return {
+            "connected": self.is_connected(),
+            "agent_available": st.session_state.get("agent") is not None,
+            "tools_count": len(st.session_state.get("tools", [])),
+            "servers_count": len(st.session_state.get("servers", {})),
+            "available_tools": self.get_available_tools()
+        }

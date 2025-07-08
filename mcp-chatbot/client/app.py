@@ -15,9 +15,11 @@ from apps import mcp_app
 try:
     from utils.enhanced_security_config import StreamlitSecureAuth, SecurityConfig
     ENHANCED_SECURITY_AVAILABLE = True
-except ImportError:
+    print("✅ Enhanced security module loaded successfully")
+except ImportError as e:
     ENHANCED_SECURITY_AVAILABLE = False
-    print("⚠️  Enhanced security module not available. Using YAML fallback.")
+    print(f"⚠️  Enhanced security module not available: {str(e)}")
+    print("📋 Using YAML authentication fallback")
 
 # Apply nest_asyncio to allow nested asyncio event loops
 nest_asyncio.apply()
@@ -31,7 +33,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# FIXED: Customize css with proper encoding
+# Load custom CSS
 css_path = os.path.join('.', '.streamlit', 'style.css')
 if os.path.exists(css_path):
     try:
@@ -63,18 +65,30 @@ def load_config():
             config_path = os.path.join('keys', 'config.yaml')
             if not os.path.exists(config_path):
                 st.error("❌ Configuration file not found at keys/config.yaml")
+                st.info("Please run: python simple_generate_password.py")
                 st.stop()
             
-            # FIXED: Read YAML with proper encoding
             with open(config_path, 'r', encoding='utf-8') as file:
                 return yaml.load(file, Loader=SafeLoader)
                 
     except FileNotFoundError:
         st.error("❌ Configuration not found. Please check your setup.")
+        st.info("Run the password generation script: python simple_generate_password.py")
         st.stop()
     except Exception as e:
         st.error(f"❌ Error loading configuration: {str(e)}")
-        st.stop()
+        if "enhanced_security_config" in str(e):
+            st.info("💡 Enhanced security features not available. Using YAML authentication.")
+            # Force YAML fallback
+            try:
+                config_path = os.path.join('keys', 'config.yaml')
+                with open(config_path, 'r', encoding='utf-8') as file:
+                    return yaml.load(file, Loader=SafeLoader)
+            except Exception as fallback_error:
+                st.error(f"❌ YAML fallback also failed: {str(fallback_error)}")
+                st.stop()
+        else:
+            st.stop()
 
 
 def initialize_authentication_state():
@@ -89,56 +103,62 @@ def initialize_authentication_state():
 
 def handle_authentication():
     """Handle user authentication in the sidebar."""
-    # Load configuration
-    config = load_config()
-    
-    # Initialize authentication state
-    initialize_authentication_state()
-    
-    # Create authenticator using the updated API
-    authenticator = stauth.Authenticate(
-        config["credentials"],
-        config["cookie"]["name"],
-        config["cookie"]["key"],
-        config["cookie"]["expiry_days"],
-    )
-    
-    # Create sidebar authentication section
-    with st.sidebar:
-        st.markdown("## 🔐 Authentication")
+    try:
+        # Load configuration
+        config = load_config()
         
-        # Show login form or logout button based on authentication status
-        if st.session_state["authentication_status"] is None:
-            # Show login form
-            try:
-                authenticator.login()
-            except Exception as e:
-                st.error(f"Authentication error: {str(e)}")
-                
-            if st.session_state["authentication_status"] is False:
-                st.error("❌ Username/password is incorrect")
-            elif st.session_state["authentication_status"] is None:
-                st.warning("⚠️ Please enter your username and password")
-                
-        elif st.session_state["authentication_status"]:
-            # User is authenticated - show user info and logout button
-            st.success(f"✅ Welcome, **{st.session_state['name']}**!")
-            st.info(f"👤 Username: {st.session_state['username']}")
+        # Initialize authentication state
+        initialize_authentication_state()
+        
+        # Create authenticator using the updated API
+        authenticator = stauth.Authenticate(
+            config["credentials"],
+            config["cookie"]["name"],
+            config["cookie"]["key"],
+            config["cookie"]["expiry_days"],
+        )
+        
+        # Create sidebar authentication section
+        with st.sidebar:
+            st.markdown("## 🔐 Authentication")
             
-            # Add logout button
-            authenticator.logout("Logout")
-            
-            # Add separator
-            st.markdown("---")
-    
-    # Log authentication status
-    logging.info(
-        f'Authentication Status: {st.session_state["authentication_status"]}, '
-        f'Name: {st.session_state["name"]}, '
-        f'Username: {st.session_state["username"]}'
-    )
-    
-    return st.session_state["authentication_status"]
+            # Show login form or logout button based on authentication status
+            if st.session_state["authentication_status"] is None:
+                # Show login form
+                try:
+                    authenticator.login()
+                except Exception as e:
+                    st.error(f"Authentication error: {str(e)}")
+                    
+                if st.session_state["authentication_status"] is False:
+                    st.error("❌ Username/password is incorrect")
+                elif st.session_state["authentication_status"] is None:
+                    st.warning("⚠️ Please enter your username and password")
+                    
+            elif st.session_state["authentication_status"]:
+                # User is authenticated - show user info and logout button
+                st.success(f"✅ Welcome, **{st.session_state['name']}**!")
+                st.info(f"👤 Username: {st.session_state['username']}")
+                
+                # Add logout button
+                authenticator.logout("Logout")
+                
+                # Add separator
+                st.markdown("---")
+        
+        # Log authentication status for debugging
+        logging.info(
+            f'Authentication Status: {st.session_state["authentication_status"]}, '
+            f'Name: {st.session_state["name"]}, '
+            f'Username: {st.session_state["username"]}'
+        )
+        
+        return st.session_state["authentication_status"]
+        
+    except Exception as e:
+        st.error(f"❌ Authentication system error: {str(e)}")
+        st.info("Please check your configuration and try again.")
+        return None
 
 
 def show_authentication_required_message():
@@ -254,6 +274,36 @@ def show_authentication_required_message():
             - "Analyze product performance across different regions"
             """)
 
+        # Configuration status
+        st.markdown("---")
+        st.markdown("#### ⚙️ System Status")
+        
+        config_status = []
+        
+        # Check authentication method
+        use_sqlite = os.getenv('USE_SQLITE', 'false').lower() == 'true'
+        if use_sqlite and ENHANCED_SECURITY_AVAILABLE:
+            config_status.append("🔒 **Auth**: SQLite (Enhanced Security)")
+        else:
+            config_status.append("📋 **Auth**: YAML (Standard)")
+        
+        # Check configuration files
+        yaml_exists = os.path.exists('keys/config.yaml')
+        sqlite_exists = os.path.exists('keys/users.db')
+        
+        if yaml_exists:
+            config_status.append("✅ **YAML Config**: Available")
+        else:
+            config_status.append("❌ **YAML Config**: Missing")
+            
+        if sqlite_exists:
+            config_status.append("✅ **SQLite DB**: Available")
+        else:
+            config_status.append("⚠️ **SQLite DB**: Not found")
+        
+        for status in config_status:
+            st.markdown(status)
+
 
 def main():
     """Main application function with authentication."""
@@ -292,6 +342,16 @@ def main():
     except Exception as e:
         st.error(f"❌ Application error: {str(e)}")
         logging.error(f"Application error: {str(e)}")
+        
+        # Show debugging information
+        st.markdown("---")
+        with st.expander("🐛 Debug Information", expanded=False):
+            st.code(f"Error: {str(e)}")
+            st.code(f"Enhanced Security Available: {ENHANCED_SECURITY_AVAILABLE}")
+            st.code(f"USE_SQLITE: {os.getenv('USE_SQLITE', 'not set')}")
+            st.code(f"YAML Config Exists: {os.path.exists('keys/config.yaml')}")
+            st.code(f"SQLite DB Exists: {os.path.exists('keys/users.db')}")
+        
         # Still show authentication if there's an error
         if st.session_state.get("authentication_status") is None:
             show_authentication_required_message()
