@@ -126,17 +126,8 @@ def create_configuration_tab():
         AZURE_API_VERSION=2023-12-01-preview
         ```
         
-        **For MCP Servers:**
+        **For MSSQL Server:**
         ```
-        # Neo4j Configuration
-        NEO4J_URI=bolt://localhost:7687
-        NEO4J_USERNAME=neo4j
-        NEO4J_PASSWORD=your_password
-        NEO4J_DATABASE=neo4j
-        
-        # HubSpot Configuration
-        PRIVATE_APP_ACCESS_TOKEN=your_hubspot_token
-        
         # MSSQL Configuration
         MSSQL_HOST=localhost
         MSSQL_USER=your_username
@@ -151,8 +142,6 @@ def create_configuration_tab():
 
 def categorize_tools(tools):
     """Categorize tools by server type with improved detection."""
-    neo4j_tools = []
-    hubspot_tools = []
     mssql_tools = []
     other_tools = []
     
@@ -160,20 +149,14 @@ def categorize_tools(tools):
         tool_name_lower = tool.name.lower()
         tool_desc_lower = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
         
-        # Neo4j tool detection
-        if any(keyword in tool_name_lower for keyword in ['neo4j', 'cypher', 'graph']):
-            neo4j_tools.append(tool)
-        # HubSpot tool detection
-        elif any(keyword in tool_name_lower for keyword in ['hubspot', 'crm']) or tool_name_lower.startswith('hubspot'):
-            hubspot_tools.append(tool)
         # MSSQL tool detection - improved logic
-        elif (any(keyword in tool_name_lower for keyword in ['sql', 'mssql', 'execute_sql', 'list_tables', 'describe_table', 'get_table_sample']) or
+        if (any(keyword in tool_name_lower for keyword in ['sql', 'mssql', 'execute_sql', 'list_tables', 'describe_table', 'get_table_sample']) or
               any(keyword in tool_desc_lower for keyword in ['sql', 'mssql', 'database', 'table', 'execute'])):
             mssql_tools.append(tool)
         else:
             other_tools.append(tool)
     
-    return neo4j_tools, hubspot_tools, mssql_tools, other_tools
+    return mssql_tools, other_tools
 
 
 def create_connection_tab():
@@ -190,7 +173,7 @@ def create_connection_tab():
             st.info(f"🔧 Found {len(st.session_state.tools)} available tools")
             
             # Categorize tools using improved logic
-            neo4j_tools, hubspot_tools, mssql_tools, other_tools = categorize_tools(st.session_state.tools)
+            mssql_tools, other_tools = categorize_tools(st.session_state.tools)
             
             # Connection details
             col1, col2, col3, col4 = st.columns(4)
@@ -199,18 +182,10 @@ def create_connection_tab():
             with col2:
                 st.metric("Total Tools", len(st.session_state.tools))
             with col3:
-                st.metric("Neo4j Tools", len(neo4j_tools))
+                st.metric("MSSQL Tools", len(mssql_tools))
             with col4:
-                st.metric("HubSpot Tools", len(hubspot_tools))
-            
-            # Additional row for MSSQL and other tools
-            if mssql_tools or other_tools:
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("MSSQL Tools", len(mssql_tools))
-                with col2:
-                    if other_tools:
-                        st.metric("Other Tools", len(other_tools))
+                if other_tools:
+                    st.metric("Other Tools", len(other_tools))
                 
         else:
             st.warning("🟡 Not connected to MCP servers")
@@ -232,13 +207,7 @@ def create_connection_tab():
                     st.markdown(f"**SSE Read Timeout:** {config['sse_read_timeout']}s")
                     
                     # Add server-specific info
-                    if name == "Neo4j":
-                        st.markdown("**Type:** Graph Database")
-                        st.markdown("**Operations:** Cypher queries, schema discovery")
-                    elif name == "HubSpot":
-                        st.markdown("**Type:** CRM System")
-                        st.markdown("**Operations:** Contacts, companies, deals, tickets")
-                    elif name == "MSSQL":
+                    if name == "MSSQL":
                         st.markdown("**Type:** SQL Database")
                         st.markdown("**Operations:** SQL queries, table operations")
                 
@@ -310,15 +279,13 @@ def create_connection_tab():
         ### Common Connection Issues
         
         **🔴 Connection Failed:**
-        - Ensure MCP servers are running
-        - Check if ports 8003 (Neo4j), 8004 (HubSpot), and 8008 (MSSQL) are accessible
+        - Ensure MSSQL MCP server is running
+        - Check if port 8008 is accessible
         - Verify server URLs in `servers_config.json`
         
         **🟡 Authentication Issues:**
-        - Check NEO4J_PASSWORD in .env file
-        - Verify PRIVATE_APP_ACCESS_TOKEN for HubSpot
         - Check MSSQL_USER and MSSQL_PASSWORD for MSSQL server
-        - Ensure tokens have required permissions
+        - Ensure database permissions are properly configured
         
         **🟠 Timeout Issues:**
         - Increase timeout values in server configuration
@@ -326,7 +293,7 @@ def create_connection_tab():
         - Verify server performance
         
         **🔵 Tool Loading Issues:**
-        - Restart MCP servers
+        - Restart MSSQL MCP server
         - Check server logs for errors
         - Verify server implementation
         
@@ -349,41 +316,30 @@ def create_tools_tab():
         return
     
     # Categorize tools using improved logic
-    neo4j_tools, hubspot_tools, mssql_tools, other_tools = categorize_tools(st.session_state.tools)
+    mssql_tools, other_tools = categorize_tools(st.session_state.tools)
     
     # Tools Overview
     with st.container(border=True):
         st.subheader("📊 Tools Overview")
         
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             st.metric("Total Tools", len(st.session_state.tools))
         
         with col2:
-            st.metric("Neo4j Tools", len(neo4j_tools))
-        
-        with col3:
-            st.metric("HubSpot Tools", len(hubspot_tools))
-            
-        with col4:
             st.metric("MSSQL Tools", len(mssql_tools))
-        
-        if other_tools:
-            st.metric("Other Tools", len(other_tools))
+            
+        with col3:
+            if other_tools:
+                st.metric("Other Tools", len(other_tools))
 
     # Tool Categories
     st.subheader("🗂️ Tools by Category")
     
     # Create tabs for different tool categories
-    neo4j_tab, hubspot_tab, mssql_tab, all_tab = st.tabs(["🗄️ Neo4j Tools", "🏢 HubSpot Tools", "🗃️ MSSQL Tools", "📋 All Tools"])
+    mssql_tab, all_tab = st.tabs(["🗃️ MSSQL Tools", "📋 All Tools"])
     
-    with neo4j_tab:
-        display_tools_list(neo4j_tools, "Neo4j Database Operations", "neo4j")
-    
-    with hubspot_tab:
-        display_tools_list(hubspot_tools, "HubSpot CRM Operations", "hubspot")
-        
     with mssql_tab:
         display_tools_list(mssql_tools, "MSSQL Database Operations", "mssql")
     
@@ -416,18 +372,6 @@ def display_tools_list(tools_list, category_title, category_key):
         
         if selected_tool:
             display_tool_details(selected_tool)
-
-
-def display_tools_category(category_filter, category_title):
-    """Display tools for a specific category (legacy function for compatibility)."""
-    filtered_tools = [tool for tool in st.session_state.tools if category_filter in tool.name.lower()]
-    display_tools_list(filtered_tools, category_title, category_filter)
-
-
-def display_tools_category_mssql(category_title):
-    """Display MSSQL tools specifically (legacy function for compatibility)."""
-    neo4j_tools, hubspot_tools, mssql_tools, other_tools = categorize_tools(st.session_state.tools)
-    display_tools_list(mssql_tools, category_title, "mssql")
 
 
 def display_all_tools():
@@ -508,11 +452,7 @@ def display_tool_details(tool):
         tool_name_lower = tool.name.lower()
         tool_desc_lower = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
         
-        if any(keyword in tool_name_lower for keyword in ['neo4j', 'cypher', 'graph']):
-            st.success("🗄️ Neo4j Database Tool")
-        elif any(keyword in tool_name_lower for keyword in ['hubspot', 'crm']) or tool_name_lower.startswith('hubspot'):
-            st.info("🏢 HubSpot CRM Tool")
-        elif (any(keyword in tool_name_lower for keyword in ['sql', 'mssql', 'execute_sql', 'list_tables', 'describe_table', 'get_table_sample']) or
+        if (any(keyword in tool_name_lower for keyword in ['sql', 'mssql', 'execute_sql', 'list_tables', 'describe_table', 'get_table_sample']) or
               any(keyword in tool_desc_lower for keyword in ['sql', 'mssql', 'database', 'table', 'execute'])):
             st.warning("🗃️ MSSQL Database Tool")
         else:

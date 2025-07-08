@@ -35,29 +35,15 @@ TAB_CONFIG = {
     }
 }
 
-# Load server configuration
+# Load server configuration - MSSQL only
 config_path = os.path.join('.', 'servers_config.json')
 if os.path.exists(config_path):
     with open(config_path, 'r') as f:
         SERVER_CONFIG = json.load(f)
 else:
-    # Default server configuration if file doesn't exist
+    # Default server configuration if file doesn't exist - MSSQL only
     SERVER_CONFIG = {
         "mcpServers": {
-            "Neo4j": {
-                "transport": "sse",
-                "url": "http://mcpserver4:8003/sse",
-                "timeout": 600,
-                "headers": None,
-                "sse_read_timeout": 900
-            },
-            "HubSpot": {
-                "transport": "sse",
-                "url": "http://mcpserver5:8004/sse", 
-                "timeout": 600,
-                "headers": None,
-                "sse_read_timeout": 900
-            },
             "MSSQL": {
                 "transport": "sse",
                 "url": "http://mcpserver3:8008/sse",
