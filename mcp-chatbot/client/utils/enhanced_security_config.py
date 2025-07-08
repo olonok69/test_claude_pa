@@ -11,6 +11,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import bcrypt
+import logging
 
 class SecureUserStore:
     """Enhanced security user management with multiple storage options."""
@@ -56,6 +57,7 @@ class SecureUserStore:
                 original_yaml_data TEXT
             )
         ''')
+        logging.info("✅ Users table created successfully")
         
         # Create sessions table
         cursor.execute('''
@@ -71,7 +73,7 @@ class SecureUserStore:
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
-        
+        logging.info("✅ User sessions table created successfully")
         # Create audit log table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS audit_log (
@@ -99,7 +101,7 @@ class SecureUserStore:
                 notes TEXT
             )
         ''')
-        
+        logging.info("✅ Migration log table created successfully")
         # FIXED: Only create default admin if NO admin users exist
         cursor.execute('SELECT COUNT(*) FROM users WHERE is_admin = TRUE')
         admin_count = cursor.fetchone()[0]
@@ -150,13 +152,13 @@ class SecureUserStore:
                 VALUES (?, ?, ?, ?, ?)
             ''', ('admin', password_hash, 'admin@company.com', 'System Administrator', True))
             
-            print("✅ Default admin user created successfully")
+            logging.info("✅ Default admin user created successfully")
             
         except sqlite3.IntegrityError as e:
-            print(f"ℹ️  Admin user already exists: {str(e)}")
+            logging.warn(f"ℹ️  Admin user already exists: {str(e)}")
             # This is fine - just means admin already exists
         except Exception as e:
-            print(f"⚠️  Error creating default admin: {str(e)}")
+            logging.warn(f"⚠️  Error creating default admin: {str(e)}")
     
     def hash_password(self, password: str) -> str:
         """Hash password using bcrypt."""
@@ -279,8 +281,9 @@ class SecureUserStore:
             user = cursor.fetchone()
             
             if not user:
+                logging.info(f"User {username} not found")
                 return None
-            
+            logging.info(f"User {username} found, proceeding with authentication")
             user_id, username, password_hash, email, full_name, is_admin, is_active, login_attempts, locked_until = user
             
             # Check if account is locked
