@@ -43,8 +43,8 @@ if [ "$SSL_ENABLED" = "true" ]; then
             --server.enableCORS=false \
             --server.enableXsrfProtection=false \
             --server.sslCertFile=ssl/cert.pem \
-            --server.sslKeyFile=ssl/private.key\
-            --server.logLevel=info
+            --server.sslKeyFile=ssl/private.key 
+
     fi
 fi
 

@@ -4,6 +4,8 @@ import sqlite3
 import hashlib
 import secrets
 import base64
+import re
+import string
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import yaml
@@ -28,14 +30,17 @@ class SecureUserStore:
             self.config_path = "keys/config.yaml"
     
     def init_sqlite_database(self):
-        """Initialize SQLite database for user storage."""
+        """Initialize SQLite database for user storage with migration-safe logic."""
         self.db_path = "keys/users.db"
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        
+        # Check if database file exists before connecting
+        db_exists = os.path.exists(self.db_path)
         
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Create users table
+        # Create users table if it doesn't exist
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,7 +64,7 @@ class SecureUserStore:
         ''')
         logging.info("✅ Users table created successfully")
         
-        # Create sessions table
+        # Create sessions table if it doesn't exist
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +79,8 @@ class SecureUserStore:
             )
         ''')
         logging.info("✅ User sessions table created successfully")
-        # Create audit log table
+        
+        # Create audit log table if it doesn't exist
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,7 +94,7 @@ class SecureUserStore:
             )
         ''')
         
-        # Create migration log table
+        # Create migration log table if it doesn't exist
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS migration_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,25 +108,54 @@ class SecureUserStore:
             )
         ''')
         logging.info("✅ Migration log table created successfully")
-        # FIXED: Only create default admin if NO admin users exist
-        cursor.execute('SELECT COUNT(*) FROM users WHERE is_admin = TRUE')
-        admin_count = cursor.fetchone()[0]
         
-        if admin_count == 0:
-            # Also check if ANY users exist at all
+        # Enhanced user creation logic with multiple safety checks
+        if db_exists:
+            logging.info("📂 Existing database found, checking user status...")
+            
+            # Check total users first
             cursor.execute('SELECT COUNT(*) FROM users')
             total_users = cursor.fetchone()[0]
             
-            if total_users == 0:
-                print("📝 Creating default admin user (no users found)")
-                self.create_default_admin(cursor)
+            if total_users > 0:
+                logging.info(f"👥 Found {total_users} existing users in database")
+                
+                # Check admin users
+                cursor.execute('SELECT COUNT(*) FROM users WHERE is_admin = TRUE')
+                admin_count = cursor.fetchone()[0]
+                
+                if admin_count > 0:
+                    logging.info(f"👑 Found {admin_count} admin user(s) - no action needed")
+                else:
+                    logging.warning(f"⚠️  Found {total_users} users but NO admin users!")
+                    logging.info("💡 Consider promoting an existing user to admin or manually creating one")
+                    
+                    # Check if there are migrated users
+                    cursor.execute('SELECT COUNT(*) FROM users WHERE migrated_from_yaml = TRUE')
+                    migrated_count = cursor.fetchone()[0]
+                    
+                    if migrated_count > 0:
+                        logging.info(f"🔄 Found {migrated_count} migrated users from YAML")
+                        logging.info("📋 Skipping default admin creation for migrated database")
+                    else:
+                        # Only create admin if explicitly requested or no migrated users
+                        create_admin = os.getenv('FORCE_CREATE_ADMIN', 'false').lower() == 'true'
+                        if create_admin:
+                            logging.info("🔧 FORCE_CREATE_ADMIN=true, creating default admin...")
+                            self.create_default_admin(cursor)
+                        else:
+                            logging.info("🛑 Use FORCE_CREATE_ADMIN=true to create default admin for existing database")
             else:
-                print(f"ℹ️  Found {total_users} users but no admin. Skipping default admin creation.")
+                logging.info("📝 Empty database found, creating default admin user")
+                self.create_default_admin(cursor)
         else:
-            print(f"ℹ️  Found {admin_count} admin user(s). Skipping default admin creation.")
+            logging.info("🆕 New database created, adding default admin user")
+            self.create_default_admin(cursor)
         
         conn.commit()
         conn.close()
+        
+        logging.info("✅ SQLite database initialization complete")
     
     def init_encryption(self):
         """Initialize encryption for JSON storage."""
@@ -143,22 +178,121 @@ class SecureUserStore:
         self.encrypted_file_path = "keys/users_encrypted.json"
     
     def create_default_admin(self, cursor):
-        """Create default admin user ONLY if no admin exists."""
+        """Create default admin user ONLY if specifically needed."""
         try:
-            password_hash = bcrypt.hashpw(b'admin_password_change_immediately', bcrypt.gensalt()).decode()
+            # Use environment variable for default password if available
+            default_password = os.getenv('ADMIN_DEFAULT_PASSWORD', 'admin_password_change_immediately')
+            password_hash = bcrypt.hashpw(default_password.encode(), bcrypt.gensalt()).decode()
             
             cursor.execute('''
                 INSERT INTO users (username, password_hash, email, full_name, is_admin)
                 VALUES (?, ?, ?, ?, ?)
             ''', ('admin', password_hash, 'admin@company.com', 'System Administrator', True))
             
+            # Log the admin creation in audit log
+            admin_id = cursor.lastrowid
+            cursor.execute('''
+                INSERT INTO audit_log (user_id, event_type, event_description)
+                VALUES (?, ?, ?)
+            ''', (admin_id, 'ADMIN_CREATED', 'Default admin user created during initialization'))
+            
             logging.info("✅ Default admin user created successfully")
+            logging.warning("🔐 IMPORTANT: Change the admin password immediately!")
             
         except sqlite3.IntegrityError as e:
-            logging.warn(f"ℹ️  Admin user already exists: {str(e)}")
-            # This is fine - just means admin already exists
+            if "UNIQUE constraint failed" in str(e):
+                logging.info("ℹ️  Admin user already exists (integrity constraint)")
+            else:
+                logging.error(f"❌ Error creating admin user: {str(e)}")
         except Exception as e:
-            logging.warn(f"⚠️  Error creating default admin: {str(e)}")
+            logging.error(f"❌ Unexpected error creating admin: {str(e)}")
+    
+    def check_database_status(self):
+        """Check and report database status for debugging."""
+        try:
+            if not os.path.exists(self.db_path):
+                return {
+                    "database_exists": False,
+                    "message": "Database file does not exist"
+                }
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Get user counts
+            cursor.execute('SELECT COUNT(*) FROM users')
+            total_users = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM users WHERE is_admin = TRUE')
+            admin_users = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM users WHERE migrated_from_yaml = TRUE')
+            migrated_users = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM users WHERE is_active = TRUE')
+            active_users = cursor.fetchone()[0]
+            
+            # Get recent activity
+            cursor.execute('SELECT COUNT(*) FROM audit_log WHERE timestamp > datetime("now", "-24 hours")')
+            recent_activity = cursor.fetchone()[0]
+            
+            conn.close()
+            
+            return {
+                "database_exists": True,
+                "total_users": total_users,
+                "admin_users": admin_users,
+                "migrated_users": migrated_users,
+                "active_users": active_users,
+                "recent_activity": recent_activity,
+                "message": f"Database healthy: {total_users} users ({admin_users} admin, {migrated_users} migrated)"
+            }
+            
+        except Exception as e:
+            return {
+                "database_exists": True,
+                "error": str(e),
+                "message": f"Database error: {str(e)}"
+            }
+    
+    def promote_user_to_admin(self, username: str) -> bool:
+        """Promote an existing user to admin status."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Check if user exists
+            cursor.execute('SELECT id, username, is_admin FROM users WHERE username = ?', (username,))
+            user = cursor.fetchone()
+            
+            if not user:
+                logging.error(f"❌ User '{username}' not found")
+                return False
+            
+            user_id, username, is_admin = user
+            
+            if is_admin:
+                logging.info(f"ℹ️  User '{username}' is already an admin")
+                return True
+            
+            # Promote to admin
+            cursor.execute('UPDATE users SET is_admin = TRUE WHERE username = ?', (username,))
+            
+            # Log the promotion
+            cursor.execute('''
+                INSERT INTO audit_log (user_id, event_type, event_description)
+                VALUES (?, ?, ?)
+            ''', (user_id, 'USER_PROMOTED', f'User {username} promoted to admin'))
+            
+            conn.commit()
+            conn.close()
+            
+            logging.info(f"✅ User '{username}' promoted to admin successfully")
+            return True
+            
+        except Exception as e:
+            logging.error(f"❌ Error promoting user to admin: {str(e)}")
+            return False
     
     def hash_password(self, password: str) -> str:
         """Hash password using bcrypt."""
@@ -167,6 +301,61 @@ class SecureUserStore:
     def verify_password(self, password: str, hashed: str) -> bool:
         """Verify password against hash."""
         return bcrypt.checkpw(password.encode(), hashed.encode())
+    
+    def validate_password_strength(self, password: str) -> Tuple[bool, List[str]]:
+        """Validate password strength."""
+        issues = []
+        
+        if len(password) < 8:
+            issues.append("Password must be at least 8 characters long")
+        
+        if not re.search(r'[a-z]', password):
+            issues.append("Password must contain at least one lowercase letter")
+        
+        if not re.search(r'[A-Z]', password):
+            issues.append("Password must contain at least one uppercase letter")
+        
+        if not re.search(r'\d', password):
+            issues.append("Password must contain at least one digit")
+        
+        if not re.search(r'[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]', password):
+            issues.append("Password must contain at least one special character")
+        
+        # Check for common patterns
+        if password.lower() in ['password', '12345678', 'qwerty', 'admin']:
+            issues.append("Password is too common")
+        
+        return len(issues) == 0, issues
+    
+    def generate_secure_password(self, length: int = 16) -> str:
+        """Generate a secure random password."""
+        # Character sets for password generation
+        lowercase = string.ascii_lowercase
+        uppercase = string.ascii_uppercase
+        digits = string.digits
+        special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+        
+        # Ensure at least one character from each category
+        password = [
+            secrets.choice(lowercase),
+            secrets.choice(uppercase),
+            secrets.choice(digits),
+            secrets.choice(special_chars)
+        ]
+        
+        # Fill the rest with random characters
+        all_chars = lowercase + uppercase + digits + special_chars
+        for _ in range(length - 4):
+            password.append(secrets.choice(all_chars))
+        
+        # Shuffle the password
+        secrets.SystemRandom().shuffle(password)
+        return ''.join(password)
+    
+    def validate_email(self, email: str) -> bool:
+        """Validate email format."""
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
     
     def create_user(self, username: str, password: str, email: str, full_name: str, is_admin: bool = False) -> bool:
         """Create a new user."""
@@ -203,7 +392,7 @@ class SecureUserStore:
             return True
             
         except sqlite3.IntegrityError as e:
-            print(f"⚠️  User creation failed: {str(e)}")
+            logging.warning(f"⚠️  User creation failed: {str(e)}")
             return False
     
     def _create_user_encrypted(self, username: str, password: str, email: str, full_name: str, is_admin: bool) -> bool:
@@ -283,6 +472,7 @@ class SecureUserStore:
             if not user:
                 logging.info(f"User {username} not found")
                 return None
+                
             logging.info(f"User {username} found, proceeding with authentication")
             user_id, username, password_hash, email, full_name, is_admin, is_active, login_attempts, locked_until = user
             
@@ -838,6 +1028,31 @@ class SecureUserStore:
             
         except Exception:
             return []
+    
+    def log_audit_event(self, event_type: str, username: str, details: str = ""):
+        """Log audit events."""
+        if self.storage_type != "sqlite":
+            return
+        
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Get user ID
+            cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
+            user = cursor.fetchone()
+            user_id = user[0] if user else None
+            
+            cursor.execute('''
+                INSERT INTO audit_log (user_id, event_type, event_description)
+                VALUES (?, ?, ?)
+            ''', (user_id, event_type, details))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            logging.error(f"❌ Error logging audit event: {str(e)}")
 
 # Integration with Streamlit authentication
 class StreamlitSecureAuth:
@@ -969,3 +1184,489 @@ class SecurityConfig:
             "9. Regular backup of user data",
             "10. Monitor failed login attempts"
         ]
+    
+    @staticmethod
+    def migrate_from_yaml(target_storage: str = "sqlite") -> bool:
+        """Migrate users from YAML to more secure storage."""
+        try:
+            # Load existing YAML config
+            yaml_store = SecureUserStore("yaml")
+            users = yaml_store._get_users_yaml()
+            
+            # Create new secure store
+            secure_store = SecureUserStore(target_storage)
+            
+            # Migrate users
+            migration_log = []
+            migrated_count = 0
+            
+            for user in users:
+                try:
+                    # Create user with a temporary password (they'll need to reset)
+                    temp_password = secure_store.generate_secure_password()
+                    success = secure_store.create_user(
+                        username=user['username'],
+                        password=temp_password,
+                        email=user['email'],
+                        full_name=user['name'],
+                        is_admin=user.get('is_admin', False)
+                    )
+                    
+                    if success:
+                        # Mark as migrated in SQLite
+                        if target_storage == "sqlite":
+                            conn = sqlite3.connect(secure_store.db_path)
+                            cursor = conn.cursor()
+                            cursor.execute('''
+                                UPDATE users 
+                                SET migrated_from_yaml = TRUE, 
+                                    migration_date = CURRENT_TIMESTAMP,
+                                    original_yaml_data = ?
+                                WHERE username = ?
+                            ''', (json.dumps(user), user['username']))
+                            conn.commit()
+                            conn.close()
+                        
+                        migration_log.append(f"✅ Migrated user: {user['username']} (temp password: {temp_password})")
+                        migrated_count += 1
+                    else:
+                        migration_log.append(f"❌ Failed to migrate user: {user['username']}")
+                        
+                except Exception as e:
+                    migration_log.append(f"❌ Error migrating {user['username']}: {str(e)}")
+            
+            # Log migration to database
+            if target_storage == "sqlite":
+                conn = sqlite3.connect(secure_store.db_path)
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO migration_log (migration_type, source_format, target_format, users_migrated, success, notes)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', ('YAML_TO_SQLITE', 'yaml', target_storage, migrated_count, True, f'Migrated {migrated_count} users'))
+                conn.commit()
+                conn.close()
+            
+            # Save migration log
+            os.makedirs('keys', exist_ok=True)
+            with open('keys/migration_log.txt', 'w') as f:
+                f.write('\n'.join(migration_log))
+            
+            logging.info(f"✅ Migration completed: {migrated_count} users migrated")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Migration failed: {str(e)}")
+            return False
+    
+    @staticmethod
+    def setup_environment_variables() -> str:
+        """Generate environment variables setup guide."""
+        return """
+# Add these to your .env file for enhanced security:
+
+# Database Configuration (choose one)
+USE_SQLITE=true
+# DATABASE_URL=postgresql://user:password@localhost/dbname
+
+# Admin user creation control
+FORCE_CREATE_ADMIN=false
+ADMIN_DEFAULT_PASSWORD=your_secure_password_here
+
+# Encryption Configuration
+USE_ENCRYPTION=true
+ENCRYPTION_PASSWORD=your_very_secure_encryption_password_here
+
+# Session Configuration
+SESSION_TIMEOUT_HOURS=24
+MAX_LOGIN_ATTEMPTS=5
+ACCOUNT_LOCKOUT_MINUTES=30
+
+# Security Headers
+SECURE_COOKIES=true
+CSRF_PROTECTION=true
+
+# Audit and Monitoring
+ENABLE_AUDIT_LOG=true
+LOG_FAILED_ATTEMPTS=true
+ALERT_ON_MULTIPLE_FAILURES=true
+
+# Backup Configuration
+AUTO_BACKUP_ENABLED=true
+BACKUP_ENCRYPTION_KEY=another_secure_key_for_backups
+BACKUP_RETENTION_DAYS=30
+"""
+
+# Migration utilities
+class MigrationManager:
+    """Handles migrations between different storage systems."""
+    
+    @staticmethod
+    def migrate_yaml_to_sqlite(yaml_path: str = "keys/config.yaml", sqlite_path: str = "keys/users.db") -> bool:
+        """Migrate from YAML to SQLite with full preservation."""
+        try:
+            logging.info("🔄 Starting YAML to SQLite migration...")
+            
+            # Load YAML data
+            with open(yaml_path, 'r') as f:
+                yaml_config = yaml.safe_load(f)
+            
+            users_data = yaml_config.get('credentials', {}).get('usernames', {})
+            
+            if not users_data:
+                logging.warning("⚠️  No users found in YAML file")
+                return False
+            
+            # Create SQLite store
+            sqlite_store = SecureUserStore('sqlite')
+            
+            # Track migration
+            migrated_count = 0
+            failed_count = 0
+            migration_details = []
+            
+            for username, user_data in users_data.items():
+                try:
+                    # Generate temporary password
+                    temp_password = sqlite_store.generate_secure_password(16)
+                    
+                    # Create user in SQLite
+                    success = sqlite_store.create_user(
+                        username=username,
+                        password=temp_password,
+                        email=user_data['email'],
+                        full_name=user_data['name'],
+                        is_admin=user_data.get('is_admin', False)
+                    )
+                    
+                    if success:
+                        # Mark as migrated
+                        conn = sqlite3.connect(sqlite_store.db_path)
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            UPDATE users 
+                            SET migrated_from_yaml = TRUE, 
+                                migration_date = CURRENT_TIMESTAMP,
+                                original_yaml_data = ?
+                            WHERE username = ?
+                        ''', (json.dumps(user_data), username))
+                        conn.commit()
+                        conn.close()
+                        
+                        migrated_count += 1
+                        migration_details.append({
+                            'username': username,
+                            'status': 'success',
+                            'temp_password': temp_password,
+                            'is_admin': user_data.get('is_admin', False)
+                        })
+                        logging.info(f"✅ Migrated user: {username}")
+                    else:
+                        failed_count += 1
+                        migration_details.append({
+                            'username': username,
+                            'status': 'failed',
+                            'error': 'User creation failed'
+                        })
+                        logging.error(f"❌ Failed to migrate user: {username}")
+                
+                except Exception as e:
+                    failed_count += 1
+                    migration_details.append({
+                        'username': username,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+                    logging.error(f"❌ Error migrating {username}: {str(e)}")
+            
+            # Log migration to database
+            conn = sqlite3.connect(sqlite_store.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO migration_log (migration_type, source_format, target_format, users_migrated, success, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', ('YAML_TO_SQLITE', 'yaml', 'sqlite', migrated_count, migrated_count > 0, 
+                  f'Migrated {migrated_count} users, {failed_count} failed'))
+            conn.commit()
+            conn.close()
+            
+            # Save detailed migration report
+            report = {
+                'migration_date': datetime.now().isoformat(),
+                'source': yaml_path,
+                'target': sqlite_path,
+                'total_users': len(users_data),
+                'migrated_count': migrated_count,
+                'failed_count': failed_count,
+                'details': migration_details
+            }
+            
+            os.makedirs('keys', exist_ok=True)
+            with open('keys/migration_report.json', 'w') as f:
+                json.dump(report, f, indent=2)
+            
+            logging.info(f"✅ Migration completed: {migrated_count}/{len(users_data)} users migrated")
+            
+            if migrated_count > 0:
+                logging.info("📋 Migration report saved to keys/migration_report.json")
+                logging.warning("🔐 Users will need to reset their passwords using the temporary passwords in the report")
+            
+            return migrated_count > 0
+            
+        except Exception as e:
+            logging.error(f"❌ Migration failed: {str(e)}")
+            return False
+    
+    @staticmethod
+    def create_password_reset_tokens(usernames: List[str] = None) -> Dict[str, str]:
+        """Create password reset tokens for migrated users."""
+        try:
+            sqlite_store = SecureUserStore('sqlite')
+            reset_tokens = {}
+            
+            conn = sqlite3.connect(sqlite_store.db_path)
+            cursor = conn.cursor()
+            
+            # Get users to reset (all migrated users if not specified)
+            if usernames:
+                placeholders = ','.join(['?' for _ in usernames])
+                cursor.execute(f'''
+                    SELECT username FROM users 
+                    WHERE username IN ({placeholders}) AND migrated_from_yaml = TRUE
+                ''', usernames)
+            else:
+                cursor.execute('SELECT username FROM users WHERE migrated_from_yaml = TRUE')
+            
+            users = cursor.fetchall()
+            
+            for (username,) in users:
+                # Generate reset token
+                reset_token = secrets.token_urlsafe(32)
+                reset_tokens[username] = reset_token
+                
+                # You would typically store this in a password_reset_tokens table
+                # For now, we'll just return the tokens
+            
+            conn.close()
+            
+            return reset_tokens
+            
+        except Exception as e:
+            logging.error(f"❌ Error creating reset tokens: {str(e)}")
+            return {}
+
+# Backup and recovery system
+class SecureBackupManager:
+    """Secure backup and recovery for user data."""
+    
+    def __init__(self, user_store: SecureUserStore):
+        self.user_store = user_store
+        self.backup_dir = "keys/backups"
+        os.makedirs(self.backup_dir, exist_ok=True)
+    
+    def create_encrypted_backup(self, encryption_password: str = None) -> str:
+        """Create encrypted backup of all user data."""
+        try:
+            # Collect all data
+            users = self.user_store.get_all_users()
+            audit_log = self.user_store.get_audit_log(1000)
+            
+            backup_data = {
+                'version': '2.0',
+                'timestamp': datetime.now().isoformat(),
+                'users': users,
+                'audit_log': audit_log,
+                'metadata': {
+                    'storage_type': self.user_store.storage_type,
+                    'total_users': len(users),
+                    'backup_method': 'encrypted'
+                }
+            }
+            
+            # Convert to JSON
+            json_data = json.dumps(backup_data, indent=2).encode()
+            
+            # Encrypt if password provided
+            if encryption_password:
+                key = self._derive_key_from_password(encryption_password)
+                cipher = Fernet(key)
+                encrypted_data = cipher.encrypt(json_data)
+                
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"users_backup_encrypted_{timestamp}.enc"
+                filepath = os.path.join(self.backup_dir, filename)
+                
+                with open(filepath, 'wb') as f:
+                    f.write(encrypted_data)
+            else:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"users_backup_{timestamp}.json"
+                filepath = os.path.join(self.backup_dir, filename)
+                
+                with open(filepath, 'wb') as f:
+                    f.write(json_data)
+            
+            return filepath
+            
+        except Exception as e:
+            raise Exception(f"Backup creation failed: {str(e)}")
+    
+    def _derive_key_from_password(self, password: str) -> bytes:
+        """Derive encryption key from password."""
+        password_bytes = password.encode()
+        salt = b'backup_salt_change_in_production'
+        
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        
+        key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
+        return key
+    
+    def schedule_automatic_backup(self, interval_hours: int = 24) -> bool:
+        """Schedule automatic backups (placeholder for cron/scheduler integration)."""
+        backup_config = {
+            'enabled': True,
+            'interval_hours': interval_hours,
+            'encryption_enabled': True,
+            'retention_days': int(os.getenv('BACKUP_RETENTION_DAYS', 30)),
+            'next_backup': (datetime.now() + timedelta(hours=interval_hours)).isoformat()
+        }
+        
+        with open(os.path.join(self.backup_dir, 'backup_config.json'), 'w') as f:
+            json.dump(backup_config, f, indent=2)
+        
+        return True
+    
+    def cleanup_old_backups(self, retention_days: int = 30):
+        """Clean up old backup files."""
+        try:
+            cutoff_date = datetime.now() - timedelta(days=retention_days)
+            
+            for filename in os.listdir(self.backup_dir):
+                if filename.startswith('users_backup_'):
+                    filepath = os.path.join(self.backup_dir, filename)
+                    file_mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
+                    
+                    if file_mtime < cutoff_date:
+                        os.remove(filepath)
+                        logging.info(f"Removed old backup: {filename}")
+                        
+        except Exception as e:
+            logging.error(f"Cleanup failed: {str(e)}")
+
+# Example usage and setup functions
+def setup_enhanced_security() -> Dict:
+    """Setup enhanced security system."""
+    return {
+        'storage_options': {
+            'sqlite': 'SQLite database (recommended for development and production)',
+            'encrypted_json': 'Encrypted JSON files (good balance)',
+            'postgresql': 'PostgreSQL database (best for large scale production)',
+            'yaml': 'YAML files (legacy, not recommended for production)'
+        },
+        'security_features': [
+            'Password hashing with bcrypt',
+            'Session management with secure tokens',
+            'Account lockout after failed attempts',
+            'Audit logging for compliance',
+            'Encrypted data storage options',
+            'Secure backup and recovery',
+            'Password complexity validation',
+            'Rate limiting protection',
+            'Migration-safe database initialization',
+            'User session isolation'
+        ],
+        'migration_features': [
+            'YAML to SQLite migration with data preservation',
+            'Migration tracking and audit logs',
+            'Temporary password generation for migrated users',
+            'Database status checking and reporting',
+            'Safe admin user promotion'
+        ]
+    }
+
+def check_system_status() -> Dict:
+    """Check the current system status."""
+    try:
+        # Determine current storage type
+        storage_type = SecurityConfig.get_recommended_storage()
+        
+        # Check database status if using SQLite
+        if storage_type == 'sqlite':
+            store = SecureUserStore('sqlite')
+            db_status = store.check_database_status()
+        else:
+            db_status = {"message": f"Using {storage_type} storage"}
+        
+        # Check environment variables
+        env_status = {
+            'USE_SQLITE': os.getenv('USE_SQLITE', 'not set'),
+            'FORCE_CREATE_ADMIN': os.getenv('FORCE_CREATE_ADMIN', 'not set'),
+            'ADMIN_DEFAULT_PASSWORD': 'set' if os.getenv('ADMIN_DEFAULT_PASSWORD') else 'not set',
+            'ENCRYPTION_PASSWORD': 'set' if os.getenv('ENCRYPTION_PASSWORD') else 'not set'
+        }
+        
+        return {
+            'storage_type': storage_type,
+            'database_status': db_status,
+            'environment_variables': env_status,
+            'recommendations': SecurityConfig.get_security_recommendations()
+        }
+        
+    except Exception as e:
+        return {
+            'error': str(e),
+            'message': 'Failed to check system status'
+        }
+
+# CLI utilities for administration
+def admin_cli():
+    """Command line interface for administration tasks."""
+    import sys
+    
+    if len(sys.argv) < 2:
+        print("Usage: python enhanced_security_config.py <command>")
+        print("Commands:")
+        print("  status - Check system status")
+        print("  migrate - Migrate from YAML to SQLite")
+        print("  promote <username> - Promote user to admin")
+        print("  backup - Create encrypted backup")
+        return
+    
+    command = sys.argv[1]
+    
+    if command == 'status':
+        status = check_system_status()
+        print(json.dumps(status, indent=2))
+    
+    elif command == 'migrate':
+        print("🔄 Starting migration from YAML to SQLite...")
+        success = MigrationManager.migrate_yaml_to_sqlite()
+        if success:
+            print("✅ Migration completed successfully")
+        else:
+            print("❌ Migration failed")
+    
+    elif command == 'promote' and len(sys.argv) > 2:
+        username = sys.argv[2]
+        store = SecureUserStore('sqlite')
+        success = store.promote_user_to_admin(username)
+        if success:
+            print(f"✅ User {username} promoted to admin")
+        else:
+            print(f"❌ Failed to promote user {username}")
+    
+    elif command == 'backup':
+        store = SecureUserStore('sqlite')
+        backup_manager = SecureBackupManager(store)
+        backup_path = backup_manager.create_encrypted_backup()
+        print(f"✅ Backup created: {backup_path}")
+    
+    else:
+        print(f"Unknown command: {command}")
+
+if __name__ == "__main__":
+    admin_cli()

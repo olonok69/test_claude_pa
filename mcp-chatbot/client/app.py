@@ -41,6 +41,12 @@ except ImportError as e:
     logging.info(f"⚠️  Enhanced security module not available: {str(e)}")
     logging.info("📋 Using YAML authentication fallback")
 
+
+# Configure logging early
+logging.getLogger('watchdog.observers.inotify_buffer').setLevel(logging.WARNING)
+logging.getLogger('PIL.PngImagePlugin').setLevel(logging.WARNING)
+logging.getLogger('asyncio').setLevel(logging.WARNING)
+
 # Apply nest_asyncio to allow nested asyncio event loops
 nest_asyncio.apply()
 
