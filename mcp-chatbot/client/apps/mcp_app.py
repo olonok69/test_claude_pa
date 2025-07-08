@@ -1,25 +1,21 @@
-import os
-import datetime
 import streamlit as st
-from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
-from services.ai_service import get_response_stream
-from services.mcp_service import run_agent
-from services.chat_service import get_current_chat, _append_message_to_session, get_clean_conversation_memory
-from utils.async_helpers import run_async
-from utils.ai_prompts import make_system_prompt, make_main_prompt
+from ui_components.tab_components import (
+    create_configuration_tab, 
+    create_connection_tab, 
+    create_tools_tab
+)
 import ui_components.sidebar_components as sd_compents
-from ui_components.main_components import display_tool_executions
-from ui_components.tab_components import create_configuration_tab, create_connection_tab, create_tools_tab
-from config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
-import traceback
+from utils.async_helpers import check_authentication
+from services.chat_service import ChatService
 
-
-def check_authentication():
-    """Check if user is authenticated and redirect if not."""
-    if not st.session_state.get("authentication_status"):
-        st.error("🔐 Authentication required. Please log in to access this application.")
-        st.stop()
-
+# Import user management with error handling
+try:
+    from ui_components.user_management_tab import create_user_management_tab
+    USER_MANAGEMENT_AVAILABLE = True
+    print("✅ User management module loaded successfully")
+except ImportError as e:
+    USER_MANAGEMENT_AVAILABLE = False
+    print(f"⚠️  User management module not available: {str(e)}")
 
 def main():
     """Main application function with authentication check."""
@@ -33,8 +29,39 @@ def main():
     if st.session_state.get("name"):
         st.success(f"Welcome back, **{st.session_state['name']}**! 👋")
     
-    # Create the main tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "⚙️ Configuration", "🔌 Connections", "🧰 Tools"])
+    # Check if current user is admin
+    current_user = st.session_state.get('username')
+    is_admin = current_user == 'admin'
+    
+    # Debug: Show current user info
+    if st.session_state.get('authentication_status'):
+        st.info(f"🔍 Debug: Current user: {current_user}, Admin: {is_admin}, User Management Available: {USER_MANAGEMENT_AVAILABLE}")
+    
+    # Create tabs based on permissions
+    if is_admin and USER_MANAGEMENT_AVAILABLE:
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "💬 Chat", 
+            "⚙️ Configuration", 
+            "🔌 Connections", 
+            "🧰 Tools",
+            "👥 User Management"
+        ])
+        user_management_tab = tab5
+    else:
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "💬 Chat", 
+            "⚙️ Configuration", 
+            "🔌 Connections", 
+            "🧰 Tools"
+        ])
+        user_management_tab = None
+        
+        # Show why User Management tab is not available
+        if current_user:
+            if not is_admin:
+                st.sidebar.warning("👥 User Management: Admin access required")
+            elif not USER_MANAGEMENT_AVAILABLE:
+                st.sidebar.error("👥 User Management: Module not available")
     
     # Sidebar with chat history and user info
     with st.sidebar:
@@ -47,195 +74,155 @@ def main():
 
     # Chat Tab - Main conversation interface
     with tab1:
-        # Check authentication again for this tab
-        if not st.session_state.get("authentication_status"):
-            st.warning("🔐 Please authenticate to access the chat interface.")
-            return
-        
-        # Main chat interface
-        st.header("💬 Chat with AI Agent")
-        st.markdown("Ask questions about your Neo4j database or HubSpot CRM system.")
-        
-        messages_container = st.container(border=True, height=600)
-        
-        # Re-render previous messages
-        if st.session_state.get('current_chat_id'):
-            st.session_state["messages"] = get_current_chat(st.session_state['current_chat_id'])
-            for m in st.session_state["messages"]:
-                with messages_container.chat_message(m["role"]):
-                    if "tool" in m and m["tool"]:
-                        st.code(m["tool"], language='yaml')
-                    if "content" in m and m["content"]:
-                        st.markdown(m["content"])
-
-        # Chat input
-        user_text = st.chat_input("Ask a question or explore available MCP tools")
-
-        # Handle chat logic
-        if user_text is not None:  # something submitted
-            params = st.session_state.get('params')
+        # Show authentication status
+        if st.session_state.get("authentication_status"):
+            # Initialize chat service
+            if "chat_service" not in st.session_state:
+                st.session_state.chat_service = ChatService()
             
-            # Check if we have proper credentials loaded from environment
-            selected_provider = params.get('model_id')
-            credentials_valid = False
-            
-            if selected_provider == "OpenAI":
-                credentials_valid = bool(os.getenv("OPENAI_API_KEY"))
-            elif selected_provider == "Azure OpenAI":
-                azure_keys = [
-                    os.getenv("AZURE_API_KEY"),
-                    os.getenv("AZURE_ENDPOINT"),
-                    os.getenv("AZURE_DEPLOYMENT"),
-                    os.getenv("AZURE_API_VERSION")
-                ]
-                credentials_valid = all(azure_keys)
-            
-            if not credentials_valid:
-                err_mesg = f"❌ Missing credentials for {selected_provider}. Please check your .env file and configure in the Configuration tab."
-                _append_message_to_session({"role": "assistant", "content": err_mesg})
-                with messages_container.chat_message("assistant"):
-                    st.markdown(err_mesg)
-                st.rerun()
-
-            # Handle question (if any text)
-            if user_text:
-                user_text_dct = {"role": "user", "content": user_text}
-                _append_message_to_session(user_text_dct)
-                with messages_container.chat_message("user"):
-                    st.markdown(user_text)
-
-                with st.spinner("Thinking…", show_time=True):
-                    system_prompt = make_system_prompt()
-                    main_prompt = make_main_prompt(user_text)
-                    try:
-                        # If agent is available, use it
-                        if st.session_state.agent:
-                            # Create conversation memory for the agent (clean version without tool messages)
-                            conversation_memory = get_clean_conversation_memory()
-                            
-                            # Add the current user message to the conversation
-                            conversation_memory.append(HumanMessage(content=user_text))
-                            
-                            try:
-                                # Run the agent with full conversation context
-                                response = run_async(run_agent(st.session_state.agent, conversation_memory))
-                                
-                                tool_output = None
-                                # Extract tool executions if available
-                                if "messages" in response:
-                                    for msg in response["messages"]:
-                                        # Look for AIMessage with tool calls
-                                        if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                                            for tool_call in msg.tool_calls:
-                                                # Find corresponding ToolMessage
-                                                tool_output = next(
-                                                    (m.content for m in response["messages"] 
-                                                        if isinstance(m, ToolMessage) and 
-                                                        hasattr(m, 'tool_call_id') and
-                                                        m.tool_call_id == tool_call['id']),
-                                                    None
-                                                )
-                                                if tool_output:
-                                                    st.session_state.tool_executions.append({
-                                                        "tool_name": tool_call['name'],
-                                                        "input": tool_call['args'],
-                                                        "output": tool_output,
-                                                        "timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                                        "user": st.session_state.get('username', 'Unknown')
-                                                    })
-                                
-                                # Extract and display the response
-                                output = ""
-                                tool_count = 0
-                                assistant_response = None
-                                
-                                if "messages" in response:
-                                    # Handle case where response contains error message
-                                    if len(response["messages"]) == 1 and isinstance(response["messages"][0], dict):
-                                        # This is likely our custom error response
-                                        assistant_response = response["messages"][0].get("content", "")
-                                        with messages_container.chat_message("assistant"):
-                                            st.markdown(assistant_response)
-                                    else:
-                                        # Skip messages that were part of the input conversation
-                                        new_messages = response["messages"][len(conversation_memory):]
-                                        
-                                        for msg in new_messages:
-                                            if isinstance(msg, HumanMessage):
-                                                continue  # Skip human messages
-                                            elif isinstance(msg, ToolMessage):
-                                                tool_count += 1
-                                                with messages_container.chat_message("assistant"):
-                                                    tool_message = f"**ToolMessage - {tool_count} ({getattr(msg, 'name', 'Unknown')}):** \n" + str(msg.content)
-                                                    st.code(tool_message, language='yaml')
-                                                    # Store tool message separately - don't include in main conversation flow
-                                                    _append_message_to_session({'role': 'assistant', 'tool': tool_message})
-                                            elif isinstance(msg, AIMessage):
-                                                if hasattr(msg, "content") and msg.content:
-                                                    assistant_response = str(msg.content)
-                                                    output = assistant_response
-                                                    with messages_container.chat_message("assistant"):
-                                                        st.markdown(output)
-                                
-                                # Only add the final AI response to conversation memory
-                                if assistant_response:
-                                    response_dct = {"role": "assistant", "content": assistant_response}
-                                    _append_message_to_session(response_dct)
-                                    
-                            except Exception as agent_error:
-                                # Handle agent-specific errors
-                                error_message = f"⚠️ Agent execution error: {str(agent_error)}"
-                                if "recursion limit" in str(agent_error).lower():
-                                    error_message = """⚠️ The agent encountered a complex task that couldn't be completed in the available steps. 
-
-    **Possible solutions:**
-    1. **Break down your request** into smaller, more specific questions
-    2. **Be more specific** about what you want to achieve
-    3. **Check MCP server connections** - try disconnecting and reconnecting in the Connections tab
-    4. **Simplify the query** - avoid very complex multi-step requests
-
-    **What happened:** The agent tried too many steps without reaching a conclusion, which usually means it got stuck in a loop or encountered tool execution issues."""
-                                
-                                with messages_container.chat_message("assistant"):
-                                    st.markdown(error_message)
-                                _append_message_to_session({"role": "assistant", "content": error_message})
-                                
-                        # Fall back to regular stream response if agent not available
-                        else:
-                            st.warning("⚠️ You are not connected to MCP servers! Please connect in the Connections tab.")
-                            response_stream = get_response_stream(
-                                main_prompt,
-                                llm_provider=st.session_state['params']['model_id'],
-                                system=system_prompt,
-                                temperature=st.session_state['params'].get('temperature', DEFAULT_TEMPERATURE),
-                                max_tokens=st.session_state['params'].get('max_tokens', DEFAULT_MAX_TOKENS), 
-                            )         
-                            with messages_container.chat_message("assistant"):
-                                response = st.write_stream(response_stream)
-                                response_dct = {"role": "assistant", "content": response}
-                                _append_message_to_session(response_dct)
-                                
-                    except Exception as e:
-                        response = f"⚠️ Something went wrong: {str(e)}"
-                        st.error(response)
-                        st.code(traceback.format_exc(), language="python")
-                        _append_message_to_session({"role": "assistant", "content": response})
-                        st.stop()
-        
-        # Display tool executions in the chat tab
-        display_tool_executions()
-
+            # Main chat interface
+            create_chat_interface()
+        else:
+            st.warning("🔐 Please authenticate to access the chat interface")
+            st.info("👈 Use the sidebar to log in")
+    
     # Configuration Tab
     with tab2:
-        check_authentication()  # Additional check for sensitive configurations
+        check_authentication()
         create_configuration_tab()
 
     # Connections Tab  
     with tab3:
-        check_authentication()  # Additional check for connections
+        check_authentication()
         create_connection_tab()
 
     # Tools Tab
     with tab4:
-        check_authentication()  # Additional check for tools
+        check_authentication()
         create_tools_tab()
+    
+    # User Management Tab (admin only)
+    if user_management_tab is not None:
+        with user_management_tab:
+            check_authentication()
+            try:
+                if USER_MANAGEMENT_AVAILABLE:
+                    create_user_management_tab()
+                else:
+                    st.error("❌ User Management module not available")
+                    st.info("Please ensure ui_components/user_management_tab.py is installed")
+                    
+                    # Show installation instructions
+                    with st.expander("📋 Installation Instructions"):
+                        st.markdown("""
+                        **To enable User Management:**
+                        
+                        1. Ensure the user management files are in place:
+                           ```
+                           ui_components/user_management_tab.py
+                           utils/enhanced_security_config.py
+                           ```
+                        
+                        2. Restart the application
+                        
+                        3. Login as 'admin' user
+                        
+                        **Current Status:**
+                        - Current user: {current_user}
+                        - Is admin: {is_admin}
+                        - Module available: {USER_MANAGEMENT_AVAILABLE}
+                        """.format(
+                            current_user=current_user,
+                            is_admin=is_admin,
+                            USER_MANAGEMENT_AVAILABLE=USER_MANAGEMENT_AVAILABLE
+                        ))
+                        
+            except Exception as e:
+                st.error(f"❌ Error loading User Management: {str(e)}")
+                st.info("Check the console for detailed error information")
+                print(f"User Management Error: {str(e)}")
+
+def create_chat_interface():
+    """Create the main chat interface."""
+    # Check if we have active connections
+    if not st.session_state.get("agent"):
+        st.warning("🔌 No MCP server connections found")
+        st.info("👉 Go to the **Connections** tab to establish server connections")
+        return
+    
+    # Check if we have tools available
+    if not st.session_state.get("tools"):
+        st.warning("🧰 No tools available")
+        st.info("Tools are loaded automatically when MCP servers are connected")
+        return
+    
+    # Chat interface
+    st.markdown("### 💬 AI Chat Interface")
+    st.markdown("Chat with AI agents that can execute database operations and specialized tools.")
+    
+    # Show available tools summary
+    with st.expander("🧰 Available Tools", expanded=False):
+        tools = st.session_state.get("tools", [])
+        if tools:
+            st.write(f"**{len(tools)} tools available:**")
+            for tool in tools[:5]:  # Show first 5 tools
+                st.write(f"• **{tool.name}**: {tool.description[:100]}...")
+            if len(tools) > 5:
+                st.write(f"... and {len(tools) - 5} more tools")
+        else:
+            st.write("No tools available")
+    
+    # Chat input
+    user_input = st.chat_input("Type your message here...")
+    
+    if user_input:
+        # Add user message to chat history
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+        
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        
+        # Process the message with ChatService
+        try:
+            chat_service = st.session_state.chat_service
+            
+            with st.spinner("🤖 AI is thinking..."):
+                response = chat_service.process_message(user_input)
+            
+            # Add assistant response
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            
+        except Exception as e:
+            st.error(f"❌ Error processing message: {str(e)}")
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": f"I encountered an error: {str(e)}"
+            })
+    
+    # Display chat history
+    if "messages" in st.session_state:
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
+
+def show_debug_info():
+    """Show debug information for troubleshooting."""
+    if st.checkbox("🐛 Show Debug Info"):
+        st.markdown("### Debug Information")
+        
+        debug_info = {
+            "Authentication Status": st.session_state.get("authentication_status"),
+            "Username": st.session_state.get("username"),
+            "Name": st.session_state.get("name"),
+            "Is Admin": st.session_state.get("username") == 'admin',
+            "User Management Available": USER_MANAGEMENT_AVAILABLE,
+            "MCP Agent": st.session_state.get("agent") is not None,
+            "Tools Available": len(st.session_state.get("tools", [])),
+            "Servers Connected": len(st.session_state.get("servers", {}))
+        }
+        
+        for key, value in debug_info.items():
+            st.write(f"**{key}:** {value}")
+
+if __name__ == "__main__":
+    main()

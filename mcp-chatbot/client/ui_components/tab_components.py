@@ -1,4 +1,4 @@
-# Fixed ui_components/tab_components.py with unique keys
+# Updated ui_components/tab_components.py with User Management Tab
 
 import streamlit as st
 from config import MODEL_OPTIONS
@@ -8,6 +8,41 @@ from services.mcp_service import connect_to_mcp_servers
 from utils.tool_schema_parser import extract_tool_parameters
 from utils.async_helpers import reset_connection_state
 
+# Import the user management components
+try:
+    from ui_components.user_management_tab import create_user_management_tab
+    USER_MANAGEMENT_AVAILABLE = True
+except ImportError:
+    USER_MANAGEMENT_AVAILABLE = False
+
+def create_main_tabs():
+    """Create the main application tabs including User Management."""
+    # Check if current user is admin for conditional tab display
+    current_user = st.session_state.get('username')
+    is_admin = current_user == 'admin'  # Simple admin check, can be enhanced
+    
+    # Create tabs based on user permissions
+    if is_admin and USER_MANAGEMENT_AVAILABLE:
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "💬 Chat", 
+            "⚙️ Configuration", 
+            "🔌 Connections", 
+            "🧰 Tools",
+            "👥 User Management"
+        ])
+    else:
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "💬 Chat", 
+            "⚙️ Configuration", 
+            "🔌 Connections", 
+            "🧰 Tools"
+        ])
+    
+    # Return tabs for use in main app
+    if is_admin and USER_MANAGEMENT_AVAILABLE:
+        return tab1, tab2, tab3, tab4, tab5
+    else:
+        return tab1, tab2, tab3, tab4, None
 
 def create_configuration_tab():
     """Create the Configuration tab content."""
@@ -513,3 +548,126 @@ def display_tool_details(tool, prefix="tools"):
             st.warning("🗃️ MSSQL Database Tool")
         else:
             st.info("🔧 General Tool")
+
+
+def create_user_management_tab_wrapper():
+    """Wrapper function to create user management tab with error handling."""
+    if not USER_MANAGEMENT_AVAILABLE:
+        st.error("❌ User Management module not available")
+        st.info("Please ensure the user_management_tab.py file is properly installed")
+        return
+    
+    # Check admin permissions
+    current_user = st.session_state.get('username')
+    if current_user != 'admin':
+        st.warning("⚠️ Admin privileges required to access User Management")
+        st.info("Contact your administrator for access to user management features")
+        return
+    
+    try:
+        create_user_management_tab()
+    except Exception as e:
+        st.error(f"❌ Error loading User Management: {str(e)}")
+        st.info("Please check the user management module installation")
+
+
+# Security recommendations for deployment
+def show_security_recommendations():
+    """Show security recommendations for production deployment."""
+    with st.container(border=True):
+        st.subheader("🔒 Security Recommendations")
+        
+        recommendations = [
+            "**Authentication Security:**",
+            "• Use SQLite or PostgreSQL instead of YAML for user storage",
+            "• Enable encrypted storage for sensitive data",
+            "• Implement session timeout and secure cookies",
+            "• Use environment variables for encryption keys",
+            "",
+            "**Application Security:**",
+            "• Deploy with HTTPS in production",
+            "• Enable CSRF protection",
+            "• Implement rate limiting for login attempts",
+            "• Regular security audits and updates",
+            "",
+            "**Data Security:**",
+            "• Regular encrypted backups",
+            "• Audit log monitoring",
+            "• Strong password policies",
+            "• Multi-factor authentication (future enhancement)"
+        ]
+        
+        for rec in recommendations:
+            if rec.startswith("**"):
+                st.markdown(rec)
+            elif rec == "":
+                st.write("")
+            else:
+                st.markdown(rec)
+        
+        # Security setup button
+        if st.button("🛠️ Setup Enhanced Security", key="setup_enhanced_security"):
+            st.info("Enhanced security setup would include:")
+            st.code("""
+# 1. Install additional dependencies
+pip install cryptography
+
+# 2. Set environment variables
+USE_SQLITE=true
+ENCRYPTION_PASSWORD=your_secure_password_here
+SESSION_TIMEOUT_HOURS=24
+
+# 3. Run migration script
+python -c "from enhanced_security_config import SecurityConfig; SecurityConfig.migrate_from_yaml('sqlite')"
+
+# 4. Update app.py to use SecureUserStore
+            """)
+
+
+# Enhanced tab management for better UX
+def get_tab_configuration():
+    """Get tab configuration based on user permissions."""
+    current_user = st.session_state.get('username')
+    is_admin = current_user == 'admin'
+    
+    base_tabs = [
+        {"title": "💬 Chat", "key": "chat", "accessible": True},
+        {"title": "⚙️ Configuration", "key": "config", "accessible": True},
+        {"title": "🔌 Connections", "key": "connections", "accessible": True},
+        {"title": "🧰 Tools", "key": "tools", "accessible": True}
+    ]
+    
+    if is_admin and USER_MANAGEMENT_AVAILABLE:
+        base_tabs.append({
+            "title": "👥 User Management", 
+            "key": "users", 
+            "accessible": True
+        })
+    
+    return base_tabs
+
+
+def create_dynamic_tabs():
+    """Create tabs dynamically based on user permissions."""
+    tab_config = get_tab_configuration()
+    accessible_tabs = [tab for tab in tab_config if tab["accessible"]]
+    tab_titles = [tab["title"] for tab in accessible_tabs]
+    
+    # Create tabs
+    created_tabs = st.tabs(tab_titles)
+    
+    # Map tabs to their handlers
+    tab_handlers = {
+        "chat": None,  # Handled in main app
+        "config": create_configuration_tab,
+        "connections": create_connection_tab,
+        "tools": create_tools_tab,
+        "users": create_user_management_tab_wrapper
+    }
+    
+    # Return tabs with their keys for use in main app
+    result = {}
+    for i, tab in enumerate(accessible_tabs):
+        result[tab["key"]] = created_tabs[i]
+    
+    return result, tab_handlers

@@ -11,31 +11,66 @@ from services.chat_service import init_session
 from utils.async_helpers import on_shutdown
 from apps import mcp_app
 
-# Apply nest_asyncio to allow nested asyncio event loops (needed for Streamlit's execution model)
+# Enhanced security imports (with fallback)
+try:
+    from utils.enhanced_security_config import StreamlitSecureAuth, SecurityConfig
+    ENHANCED_SECURITY_AVAILABLE = True
+except ImportError:
+    ENHANCED_SECURITY_AVAILABLE = False
+    print("⚠️  Enhanced security module not available. Using YAML fallback.")
+
+# Apply nest_asyncio to allow nested asyncio event loops
 nest_asyncio.apply()
 
 page_icon_path = os.path.join('.', 'icons', 'playground.png')
 
 st.set_page_config(
-    page_title="The Machine Learning Engineer - MCP Client",
+    page_title="The CloserStill Media - MCP Client",
     page_icon=page_icon_path,
     layout='wide',
     initial_sidebar_state="expanded"
 )
 
-# Customize css
-with open(os.path.join('.', '.streamlit', 'style.css')) as f:
-    st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+# FIXED: Customize css with proper encoding
+css_path = os.path.join('.', '.streamlit', 'style.css')
+if os.path.exists(css_path):
+    try:
+        with open(css_path, 'r', encoding='utf-8') as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except UnicodeDecodeError:
+        # Fallback for encoding issues
+        try:
+            with open(css_path, 'r', encoding='latin1') as f:
+                st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+        except Exception as e:
+            print(f"Warning: Could not load CSS file: {str(e)}")
 
 
 def load_config():
-    """Load authentication configuration from YAML file."""
-    config_path = os.path.join('keys', 'config.yaml')
+    """Load authentication configuration from secure storage or YAML fallback."""
     try:
-        with open(config_path, 'r') as file:
-            return yaml.load(file, Loader=SafeLoader)
+        # Check if SQLite is enabled and available
+        use_sqlite = os.getenv('USE_SQLITE', 'false').lower() == 'true'
+        
+        if use_sqlite and ENHANCED_SECURITY_AVAILABLE:
+            print("🔒 Using SQLite authentication")
+            # Use enhanced SQLite authentication
+            secure_auth = StreamlitSecureAuth('sqlite')
+            return secure_auth.get_config_for_streamlit_authenticator()
+        else:
+            print("📋 Using YAML authentication")
+            # Fallback to YAML configuration
+            config_path = os.path.join('keys', 'config.yaml')
+            if not os.path.exists(config_path):
+                st.error("❌ Configuration file not found at keys/config.yaml")
+                st.stop()
+            
+            # FIXED: Read YAML with proper encoding
+            with open(config_path, 'r', encoding='utf-8') as file:
+                return yaml.load(file, Loader=SafeLoader)
+                
     except FileNotFoundError:
-        st.error("❌ Configuration file not found at keys/config.yaml")
+        st.error("❌ Configuration not found. Please check your setup.")
         st.stop()
     except Exception as e:
         st.error(f"❌ Error loading configuration: {str(e)}")
@@ -146,7 +181,7 @@ def show_authentication_required_message():
         
         **MSSQL Database:**
         - Table exploration and schema analysis
-        - SQL query execution with proper syntax
+        - SQL query execution with proper SQL Server syntax
         - Sample data retrieval and analysis
         - Data modification and management operations
         - Comprehensive database operations through MCP tools
