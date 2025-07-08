@@ -1,4 +1,4 @@
-# Updated ui_components/sidebar_components.py with CSM logo support
+# Updated ui_components/sidebar_components.py with user session isolation
 
 import streamlit as st
 import os
@@ -56,27 +56,39 @@ def categorize_tools_for_sidebar(tools):
 
 
 def create_history_chat_container():
-    """Create the chat history container in the sidebar."""
+    """Create the chat history container in the sidebar with user session isolation."""
     # Only show chat history if user is authenticated
-    if not st.session_state.get("authentication_status"):
+    current_user = st.session_state.get('username')
+    if not current_user or not st.session_state.get("authentication_status"):
         return
     
     st.subheader("💬 Chat History")
     
+    # Get user-specific chat history
+    user_history_key = f"user_{current_user}_history_chats"
+    user_chats = st.session_state.get(user_history_key, [])
+    
     history_container = st.container(height=300, border=True)
     with history_container:
+        if not user_chats:
+            st.info("No chat history yet")
+            return
+        
         chat_history_menu = [
-                f"{chat['chat_name']}_::_{chat['chat_id']}"
-                for chat in st.session_state["history_chats"]
-            ]
-        chat_history_menu = chat_history_menu[:50][::-1]
+            f"{chat['chat_name']}_::_{chat['chat_id']}"
+            for chat in user_chats
+            if chat.get('created_by') == current_user  # Only show chats created by current user
+        ]
+        chat_history_menu = chat_history_menu[:50][::-1]  # Limit and reverse order
         
         if chat_history_menu:
             # Get current selection index
+            current_chat_id = st.session_state.get("current_chat_id")
             current_selection = None
+            
             for i, chat_option in enumerate(chat_history_menu):
                 chat_id = chat_option.split("_::_")[1]
-                if chat_id == st.session_state.get("current_chat_id"):
+                if chat_id == current_chat_id:
                     current_selection = i
                     break
             
@@ -89,21 +101,24 @@ def create_history_chat_container():
                 options=chat_history_menu,
                 label_visibility="collapsed",
                 index=current_selection,
-                key="chat_selector"
+                key=f"chat_selector_{current_user}"  # User-specific key
             )
             
             if selected_chat:
                 selected_chat_id = selected_chat.split("_::_")[1]
                 # Only switch if it's a different chat
-                if selected_chat_id != st.session_state.get("current_chat_id"):
+                if selected_chat_id != current_chat_id:
                     switch_chat(selected_chat_id)
                     st.rerun()
+        else:
+            st.info("No chats for current user")
 
 
 def create_sidebar_chat_buttons():
-    """Create chat management buttons in the sidebar."""
+    """Create chat management buttons in the sidebar with user session isolation."""
     # Only show chat buttons if user is authenticated
-    if not st.session_state.get("authentication_status"):
+    current_user = st.session_state.get('username')
+    if not current_user or not st.session_state.get("authentication_status"):
         return
     
     st.markdown("---")
@@ -114,7 +129,7 @@ def create_sidebar_chat_buttons():
         create_chat_button = st.button(
             "🆕 New Chat", 
             use_container_width=True, 
-            key="create_chat_button",
+            key=f"create_chat_button_{current_user}",  # User-specific key
             help="Start a new conversation"
         )
         if create_chat_button:
@@ -122,25 +137,36 @@ def create_sidebar_chat_buttons():
             st.rerun()
 
     with col2:
+        current_chat_id = st.session_state.get('current_chat_id')
         delete_chat_button = st.button(
             "🗑️ Delete", 
             use_container_width=True, 
-            key="delete_chat_button",
+            key=f"delete_chat_button_{current_user}",  # User-specific key
             help="Delete current conversation"
         )
-        if delete_chat_button and st.session_state.get('current_chat_id'):
-            delete_chat(st.session_state['current_chat_id'])
+        if delete_chat_button and current_chat_id:
+            delete_chat(current_chat_id)
             st.rerun()
 
-    # Quick stats
+    # Quick stats for current user
     st.markdown("---")
     with st.container():
         col1, col2 = st.columns(2)
+        
+        # Get user-specific statistics
+        user_history_key = f"user_{current_user}_history_chats"
+        user_messages_key = f"user_{current_user}_messages"
+        
+        user_chats = st.session_state.get(user_history_key, [])
+        user_messages = st.session_state.get(user_messages_key, [])
+        
+        # Filter chats to only include those created by current user
+        user_owned_chats = [chat for chat in user_chats if chat.get('created_by') == current_user]
+        
         with col1:
-            st.metric("Total Chats", len(st.session_state.get("history_chats", [])))
+            st.metric("Your Chats", len(user_owned_chats))
         with col2:
-            current_messages = len(st.session_state.get("messages", []))
-            st.metric("Messages", current_messages)
+            st.metric("Messages", len(user_messages))
 
     # Enhanced status indicators
     st.markdown("---")
@@ -180,40 +206,226 @@ def create_sidebar_chat_buttons():
 
 
 def create_user_info_sidebar():
-    """Create user information section in sidebar for authenticated users."""
-    if st.session_state.get("authentication_status"):
-        st.markdown("### 👤 User Information")
+    """Create user information section in sidebar for authenticated users with session isolation."""
+    current_user = st.session_state.get('username')
+    if not current_user or not st.session_state.get("authentication_status"):
+        return
+    
+    st.markdown("### 👤 User Information")
+    
+    with st.container(border=True):
+        st.markdown(f"**Name:** {st.session_state.get('name', 'N/A')}")
+        st.markdown(f"**Username:** {current_user}")
         
-        with st.container(border=True):
-            st.markdown(f"**Name:** {st.session_state.get('name', 'N/A')}")
-            st.markdown(f"**Username:** {st.session_state.get('username', 'N/A')}")
-            
-            # Add session info
-            import datetime
-            if "login_time" not in st.session_state:
-                st.session_state["login_time"] = datetime.datetime.now()
-            
-            session_time = datetime.datetime.now() - st.session_state["login_time"]
-            hours, remainder = divmod(int(session_time.total_seconds()), 3600)
-            minutes, _ = divmod(remainder, 60)
-            
-            st.markdown(f"**Session Time:** {hours:02d}:{minutes:02d}")
+        # Add session info
+        import datetime
+        if "login_time" not in st.session_state:
+            st.session_state["login_time"] = datetime.datetime.now()
         
-        st.markdown("---")
+        session_time = datetime.datetime.now() - st.session_state["login_time"]
+        hours, remainder = divmod(int(session_time.total_seconds()), 3600)
+        minutes, _ = divmod(remainder, 60)
+        
+        st.markdown(f"**Session Time:** {hours:02d}:{minutes:02d}")
+        
+        # User role information
+        is_admin = current_user == 'admin'
+        role_text = "👑 Administrator" if is_admin else "👤 User"
+        st.markdown(f"**Role:** {role_text}")
+    
+    st.markdown("---")
+
+
+def create_user_session_controls():
+    """Create user session control buttons in sidebar."""
+    current_user = st.session_state.get('username')
+    if not current_user or not st.session_state.get("authentication_status"):
+        return
+    
+    st.markdown("### 🔧 Session Controls")
+    
+    with st.container(border=True):
+        # Export user data
+        if st.button("📤 Export My Data", use_container_width=True, key=f"export_data_{current_user}"):
+            export_user_chat_data(current_user)
+        
+        # Clear user data with confirmation
+        if st.button("🗑️ Clear My Data", use_container_width=True, key=f"clear_data_{current_user}"):
+            st.session_state[f"confirm_clear_{current_user}"] = True
+        
+        # Confirmation for data clearing
+        if st.session_state.get(f"confirm_clear_{current_user}", False):
+            st.warning("⚠️ This will delete ALL your chat history!")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("✅ Confirm", key=f"confirm_clear_yes_{current_user}"):
+                    clear_user_data(current_user)
+                    st.session_state[f"confirm_clear_{current_user}"] = False
+                    st.success("Data cleared!")
+                    st.rerun()
+            
+            with col2:
+                if st.button("❌ Cancel", key=f"confirm_clear_no_{current_user}"):
+                    st.session_state[f"confirm_clear_{current_user}"] = False
+                    st.rerun()
+
+
+def export_user_chat_data(username: str):
+    """Export user's chat data as JSON."""
+    import json
+    from datetime import datetime
+    
+    # Get user-specific data
+    user_history_key = f"user_{username}_history_chats"
+    user_chats = st.session_state.get(user_history_key, [])
+    
+    # Filter to only include chats created by this user
+    user_owned_chats = [chat for chat in user_chats if chat.get('created_by') == username]
+    
+    export_data = {
+        "user_chat_export": {
+            "username": username,
+            "exported_at": datetime.now().isoformat(),
+            "total_chats": len(user_owned_chats),
+            "chats": user_owned_chats
+        }
+    }
+    
+    json_str = json.dumps(export_data, indent=2)
+    
+    st.download_button(
+        label="💾 Download Chat History",
+        data=json_str,
+        file_name=f"chat_history_{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+        mime="application/json",
+        key=f"download_chats_{username}"
+    )
+
+
+def clear_user_data(username: str):
+    """Clear all data for a specific user."""
+    # Clear user-specific session keys
+    keys_to_clear = [key for key in st.session_state.keys() if key.startswith(f"user_{username}_")]
+    
+    for key in keys_to_clear:
+        del st.session_state[key]
+    
+    # Clear global references if they belong to this user
+    current_user = st.session_state.get('username')
+    if current_user == username:
+        global_keys = ["params", "current_chat_id", "current_chat_index", 
+                      "history_chats", "messages", "conversation_memory"]
+        for key in global_keys:
+            if key in st.session_state:
+                del st.session_state[key]
+
+
+def show_user_activity_summary():
+    """Show a summary of user activity."""
+    current_user = st.session_state.get('username')
+    if not current_user or not st.session_state.get("authentication_status"):
+        return
+    
+    st.markdown("### 📊 Activity Summary")
+    
+    # Get user statistics
+    user_history_key = f"user_{current_user}_history_chats"
+    user_chats = st.session_state.get(user_history_key, [])
+    
+    # Filter to user's own chats
+    user_owned_chats = [chat for chat in user_chats if chat.get('created_by') == current_user]
+    
+    # Calculate statistics
+    total_chats = len(user_owned_chats)
+    total_messages = sum(len(chat.get('messages', [])) for chat in user_owned_chats)
+    
+    # Recent activity (chats created today)
+    from datetime import datetime, timedelta
+    today = datetime.now().date()
+    recent_chats = 0
+    
+    for chat in user_owned_chats:
+        try:
+            created_at = chat.get('created_at', '')
+            if created_at:
+                chat_date = datetime.fromisoformat(created_at).date()
+                if chat_date == today:
+                    recent_chats += 1
+        except:
+            pass
+    
+    # Display metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total Chats", total_chats)
+    
+    with col2:
+        st.metric("Total Messages", total_messages)
+    
+    with col3:
+        st.metric("Today's Chats", recent_chats)
+    
+    # Average messages per chat
+    if total_chats > 0:
+        avg_messages = total_messages / total_chats
+        st.info(f"📈 Average messages per chat: {avg_messages:.1f}")
 
 
 def create_complete_sidebar():
-    """Create the complete sidebar with all components including logo."""
+    """Create the complete sidebar with all components including user session management."""
+    current_user = st.session_state.get('username')
+    
     # Add the logo header at the top
     create_sidebar_header_with_icon()
     
     # Show user info if authenticated
-    create_user_info_sidebar()
-    
-    # Show chat history and controls if authenticated
-    if st.session_state.get("authentication_status"):
+    if current_user and st.session_state.get("authentication_status"):
+        create_user_info_sidebar()
+        
+        # Show chat history and controls
         create_history_chat_container()
         create_sidebar_chat_buttons()
+        
+        # Add user session controls
+        create_user_session_controls()
+        
+        # Show activity summary
+        with st.expander("📊 Activity Summary", expanded=False):
+            show_user_activity_summary()
+    
+    else:
+        st.info("👈 Please log in to access chat features")
+
+
+def create_enhanced_user_info():
+    """Create enhanced user information with session isolation indicators."""
+    current_user = st.session_state.get('username')
+    if not current_user or not st.session_state.get("authentication_status"):
+        return
+    
+    with st.expander("👤 Detailed User Info", expanded=False):
+        # User details
+        st.markdown(f"**Username:** `{current_user}`")
+        st.markdown(f"**Full Name:** {st.session_state.get('name', 'N/A')}")
+        st.markdown(f"**Email:** {st.session_state.get('email', 'N/A')}")
+        
+        # Session isolation info
+        st.markdown("---")
+        st.markdown("**🔒 Session Isolation Status:**")
+        
+        # Count user-specific session keys
+        user_keys = [key for key in st.session_state.keys() if key.startswith(f"user_{current_user}_")]
+        st.markdown(f"• Session keys: {len(user_keys)}")
+        
+        # Show if user has isolated data
+        user_chats = st.session_state.get(f"user_{current_user}_history_chats", [])
+        user_owned_chats = [chat for chat in user_chats if chat.get('created_by') == current_user]
+        st.markdown(f"• Isolated chats: {len(user_owned_chats)}")
+        
+        # Session security indicator
+        st.success("✅ Your data is isolated from other users")
 
 
 # Legacy functions maintained for backward compatibility but not used in new tab layout
@@ -232,3 +444,42 @@ def create_mcp_connection_widget():
 def create_mcp_tools_widget():
     """Legacy function - moved to tab_components.py"""
     pass
+
+
+# User switching detection
+def detect_user_switch():
+    """Detect if user has switched and handle appropriately."""
+    current_user = st.session_state.get('username')
+    previous_user = st.session_state.get('_sidebar_previous_user')
+    
+    if current_user != previous_user:
+        # User has switched
+        if previous_user:
+            st.info(f"👋 Switched from {previous_user} to {current_user}")
+        
+        # Update tracking
+        st.session_state['_sidebar_previous_user'] = current_user
+        
+        # Clear any user-specific UI state
+        keys_to_clear = [key for key in st.session_state.keys() 
+                        if key.startswith('confirm_clear_') and previous_user in key]
+        for key in keys_to_clear:
+            del st.session_state[key]
+        
+        return True
+    
+    return False
+
+
+# Enhanced sidebar with user switch detection
+def create_smart_sidebar():
+    """Create sidebar with smart user switch detection."""
+    # Detect user switches
+    user_switched = detect_user_switch()
+    
+    if user_switched:
+        st.sidebar.success("🔄 User session updated!")
+    
+    # Create complete sidebar
+    with st.sidebar:
+        create_complete_sidebar()

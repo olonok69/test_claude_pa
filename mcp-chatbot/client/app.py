@@ -1,3 +1,5 @@
+# Updated app.py with enhanced authentication and user session isolation
+
 import streamlit as st
 import asyncio
 import os
@@ -7,7 +9,7 @@ import yaml
 import streamlit_authenticator as stauth
 from yaml.loader import SafeLoader
 import logging
-from services.chat_service import init_session
+from services.chat_service import init_session, on_user_login, on_user_logout
 from utils.async_helpers import on_shutdown
 from apps import mcp_app
 
@@ -33,12 +35,58 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Load custom CSS
+# Load custom CSS with enhanced chat styles
 css_path = os.path.join('.', '.streamlit', 'style.css')
 if os.path.exists(css_path):
     try:
         with open(css_path, 'r', encoding='utf-8') as f:
-            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+            css_content = f.read()
+        
+        # Add enhanced chat styles
+        enhanced_chat_css = """
+        /* Enhanced Chat Interface Styles */
+        .chat-message-user {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            padding: 12px 16px;
+            border-radius: 12px 12px 4px 12px;
+            margin: 8px 0 12px 15%;
+            border-left: 4px solid #2196f3;
+            box-shadow: 0 2px 4px rgba(33, 150, 243, 0.1);
+            word-wrap: break-word;
+            animation: slideInRight 0.3s ease-out;
+        }
+
+        .chat-message-assistant {
+            background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
+            padding: 12px 16px;
+            border-radius: 12px 12px 12px 4px;
+            margin: 8px 15% 12px 0;
+            border-left: 4px solid #9c27b0;
+            box-shadow: 0 2px 4px rgba(156, 39, 176, 0.1);
+            word-wrap: break-word;
+            animation: slideInLeft 0.3s ease-out;
+        }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .stContainer[data-testid="metric-container"] {
+            background: linear-gradient(135deg, rgba(47, 46, 120, 0.05) 0%, rgba(76, 75, 154, 0.05) 100%);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid rgba(47, 46, 120, 0.1);
+        }
+        """
+        
+        combined_css = css_content + enhanced_chat_css
+        st.markdown(f'<style>{combined_css}</style>', unsafe_allow_html=True)
     except UnicodeDecodeError:
         # Fallback for encoding issues
         try:
@@ -102,7 +150,7 @@ def initialize_authentication_state():
 
 
 def handle_authentication():
-    """Handle user authentication in the sidebar."""
+    """Handle user authentication in the sidebar with enhanced user session management."""
     try:
         # Load configuration
         config = load_config()
@@ -117,6 +165,10 @@ def handle_authentication():
             config["cookie"]["key"],
             config["cookie"]["expiry_days"],
         )
+        
+        # Track previous authentication state for user switching detection
+        prev_auth_status = st.session_state.get("_prev_auth_status")
+        prev_username = st.session_state.get("_prev_username")
         
         # Create sidebar authentication section
         with st.sidebar:
@@ -137,14 +189,34 @@ def handle_authentication():
                     
             elif st.session_state["authentication_status"]:
                 # User is authenticated - show user info and logout button
+                current_user = st.session_state['username']
                 st.success(f"✅ Welcome, **{st.session_state['name']}**!")
-                st.info(f"👤 Username: {st.session_state['username']}")
+                st.info(f"👤 Username: {current_user}")
+                
+                # Show session isolation indicator
+                user_chats = st.session_state.get(f"user_{current_user}_history_chats", [])
+                user_owned_chats = [chat for chat in user_chats if chat.get('created_by') == current_user]
+                if user_owned_chats:
+                    st.success(f"🔒 {len(user_owned_chats)} isolated chats")
                 
                 # Add logout button
                 authenticator.logout("Logout")
                 
                 # Add separator
                 st.markdown("---")
+        
+        # Handle authentication state changes
+        current_auth_status = st.session_state["authentication_status"]
+        current_username = st.session_state.get("username")
+        
+        # Detect authentication state changes
+        if current_auth_status != prev_auth_status or current_username != prev_username:
+            handle_authentication_state_change(prev_auth_status, current_auth_status, 
+                                              prev_username, current_username)
+        
+        # Update tracking variables
+        st.session_state["_prev_auth_status"] = current_auth_status
+        st.session_state["_prev_username"] = current_username
         
         # Log authentication status for debugging
         logging.info(
@@ -159,6 +231,48 @@ def handle_authentication():
         st.error(f"❌ Authentication system error: {str(e)}")
         st.info("Please check your configuration and try again.")
         return None
+
+
+def handle_authentication_state_change(prev_auth_status, current_auth_status, 
+                                     prev_username, current_username):
+    """Handle authentication state changes and user switching."""
+    
+    # User logged in
+    if current_auth_status and current_username and not prev_auth_status:
+        print(f"🔐 User {current_username} logged in")
+        on_user_login(current_username)
+        
+        # Set login time
+        import datetime
+        st.session_state["login_time"] = datetime.datetime.now()
+    
+    # User switched (logged out and logged in as different user)
+    elif (current_auth_status and current_username and 
+          prev_auth_status and prev_username and 
+          current_username != prev_username):
+        print(f"🔄 User switched from {prev_username} to {current_username}")
+        
+        # Logout previous user
+        on_user_logout(prev_username)
+        
+        # Login new user
+        on_user_login(current_username)
+        
+        # Set new login time
+        import datetime
+        st.session_state["login_time"] = datetime.datetime.now()
+        
+        # Show switch notification
+        st.sidebar.info(f"🔄 Switched to {current_username}")
+    
+    # User logged out
+    elif not current_auth_status and prev_auth_status and prev_username:
+        print(f"🚪 User {prev_username} logged out")
+        on_user_logout(prev_username)
+        
+        # Clear login time
+        if "login_time" in st.session_state:
+            del st.session_state["login_time"]
 
 
 def show_authentication_required_message():
@@ -189,40 +303,40 @@ def show_authentication_required_message():
         
         #### 🚀 Features Available After Login:
         
-        - **💬 AI Chat Interface**: Interactive conversations with AI agents
+        - **💬 Enhanced AI Chat Interface**: Interactive conversations with improved UI
         - **🗃️ MSSQL Database Operations**: Execute SQL queries, explore tables, and manage data
         - **🔧 Tool Management**: Execute specialized MCP tools for database operations
         - **📊 Real-time Analytics**: Monitor and analyze your data
         - **🔄 Database Integration**: Comprehensive SQL Server connectivity and management
+        - **🔒 User Session Isolation**: Your conversations are kept separate from other users
         
         ---
         
-        #### 🗃️ Database Capabilities:
+        #### 🆕 Enhanced Features:
         
-        **MSSQL Database:**
-        - Table exploration and schema analysis
-        - SQL query execution with proper SQL Server syntax
-        - Sample data retrieval and analysis
-        - Data modification and management operations
-        - Comprehensive database operations through MCP tools
+        **Improved Chat Interface:**
+        - Scrollable conversation area with better message styling
+        - Copy functionality for messages
+        - Tools information panel at the bottom
+        - Better visual distinction between user and assistant messages
         
-        **Available Tools:**
-        - **execute_sql**: Run SQL queries with proper SQL Server syntax
-        - **list_tables**: Explore database structure and available tables
-        - **describe_table**: Get detailed information about table schemas
-        - **get_table_sample**: Retrieve sample data from tables
+        **User Session Management:**
+        - Complete isolation between different users
+        - Personal chat history that doesn't mix with other users
+        - Secure session handling with automatic cleanup
         
         ---
         
         #### 🔑 Authentication
         
         Use the **Authentication** section in the sidebar to log in with your credentials.
+        Your chat history and data will be completely isolated from other users.
         
         If you don't have access credentials, please contact your administrator.
         """)
         
         # Add visual elements with updated info
-        st.info("👈 Use the sidebar to authenticate and start using the database platform")
+        st.info("👈 Use the sidebar to authenticate and start using the enhanced database platform")
         
         # Add quick stats about the platform
         with st.container():
@@ -245,68 +359,14 @@ def show_authentication_required_message():
             
             with col_c:
                 st.metric(
-                    label="🔌 MCP Servers",
-                    value="1",
-                    help="MSSQL specialized protocol server"
+                    label="👥 User Isolation",
+                    value="✅ Secure",
+                    help="Complete session isolation between users"
                 )
-        
-        # Add usage examples
-        with st.expander("💡 Example Queries", expanded=False):
-            st.markdown("""
-            **Database Exploration:**
-            - "Show me all tables in the database"
-            - "Describe the structure of the users table"
-            - "Give me 5 sample records from the products table"
-            
-            **Data Analysis:**
-            - "Count all records in the orders table"
-            - "Find all customers from New York"
-            - "Show me the top 10 products by sales"
-            
-            **SQL Operations:**
-            - "Execute: SELECT TOP 5 * FROM employees ORDER BY hire_date DESC"
-            - "Get all orders from the last 30 days"
-            - "Find the average price of products in each category"
-            
-            **Advanced Queries:**
-            - "Show me sales trends by month"
-            - "Find customers who haven't placed orders recently"
-            - "Analyze product performance across different regions"
-            """)
-
-        # Configuration status
-        st.markdown("---")
-        st.markdown("#### ⚙️ System Status")
-        
-        config_status = []
-        
-        # Check authentication method
-        use_sqlite = os.getenv('USE_SQLITE', 'false').lower() == 'true'
-        if use_sqlite and ENHANCED_SECURITY_AVAILABLE:
-            config_status.append("🔒 **Auth**: SQLite (Enhanced Security)")
-        else:
-            config_status.append("📋 **Auth**: YAML (Standard)")
-        
-        # Check configuration files
-        yaml_exists = os.path.exists('keys/config.yaml')
-        sqlite_exists = os.path.exists('keys/users.db')
-        
-        if yaml_exists:
-            config_status.append("✅ **YAML Config**: Available")
-        else:
-            config_status.append("❌ **YAML Config**: Missing")
-            
-        if sqlite_exists:
-            config_status.append("✅ **SQLite DB**: Available")
-        else:
-            config_status.append("⚠️ **SQLite DB**: Not found")
-        
-        for status in config_status:
-            st.markdown(status)
 
 
 def main():
-    """Main application function with authentication."""
+    """Main application function with enhanced authentication and user session management."""
     try:
         # Initialize session state for event loop
         if "loop" not in st.session_state:
@@ -359,3 +419,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

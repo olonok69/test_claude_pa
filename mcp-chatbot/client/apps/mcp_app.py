@@ -4,9 +4,10 @@ from ui_components.tab_components import (
     create_connection_tab, 
     create_tools_tab
 )
-import ui_components.sidebar_components as sd_compents
+import ui_components.sidebar_components as sd_components
 from utils.async_helpers import check_authentication
-from services.chat_service import ChatService
+from services.chat_service import ChatService, on_user_login, on_user_logout
+from ui_components.enhanced_chat_interface import create_enhanced_chat_interface
 
 # Import user management with error handling
 try:
@@ -18,9 +19,17 @@ except ImportError as e:
     print(f"⚠️  User management module not available: {str(e)}")
 
 def main():
-    """Main application function with authentication check."""
+    """Main application function with enhanced authentication and user session management."""
     # Check authentication before proceeding
-    check_authentication()
+    current_user = st.session_state.get('username')
+    authentication_status = st.session_state.get("authentication_status")
+    
+    # Handle authentication state changes
+    handle_authentication_changes()
+    
+    if not authentication_status:
+        check_authentication()
+        return
     
     # Initialize the title
     st.title("🤖 CSM MCP Servers - AI Chat Interface")
@@ -30,12 +39,7 @@ def main():
         st.success(f"Welcome back, **{st.session_state['name']}**! 👋")
     
     # Check if current user is admin
-    current_user = st.session_state.get('username')
     is_admin = current_user == 'admin'
-    
-    # Debug: Show current user info
-    if st.session_state.get('authentication_status'):
-        st.info(f"🔍 Debug: Current user: {current_user}, Admin: {is_admin}, User Management Available: {USER_MANAGEMENT_AVAILABLE}")
     
     # Create tabs based on permissions
     if is_admin and USER_MANAGEMENT_AVAILABLE:
@@ -66,22 +70,22 @@ def main():
     # Sidebar with chat history and user info
     with st.sidebar:
         # Show user info at the top
-        sd_compents.create_user_info_sidebar()
+        sd_components.create_user_info_sidebar()
         
         # Chat history (only shown if authenticated)
-        sd_compents.create_history_chat_container()
-        sd_compents.create_sidebar_chat_buttons()
+        sd_components.create_history_chat_container()
+        sd_components.create_sidebar_chat_buttons()
 
-    # Chat Tab - Main conversation interface
+    # Chat Tab - Enhanced conversation interface
     with tab1:
-        # Show authentication status
+        # Show authentication status and enhanced chat interface
         if st.session_state.get("authentication_status"):
             # Initialize chat service
             if "chat_service" not in st.session_state:
                 st.session_state.chat_service = ChatService()
             
-            # Main chat interface
-            create_chat_interface()
+            # Enhanced chat interface with better UI
+            create_enhanced_chat_interface()
         else:
             st.warning("🔐 Please authenticate to access the chat interface")
             st.info("👈 Use the sidebar to log in")
@@ -142,87 +146,200 @@ def main():
                 st.info("Check the console for detailed error information")
                 print(f"User Management Error: {str(e)}")
 
-def create_chat_interface():
-    """Create the main chat interface."""
-    # Check if we have active connections
-    if not st.session_state.get("agent"):
-        st.warning("🔌 No MCP server connections found")
-        st.info("👉 Go to the **Connections** tab to establish server connections")
-        return
+
+def handle_authentication_changes():
+    """Handle authentication state changes and user switching."""
+    current_user = st.session_state.get('username')
+    previous_user = st.session_state.get('_previous_user')
+    authentication_status = st.session_state.get("authentication_status")
     
-    # Check if we have tools available
-    if not st.session_state.get("tools"):
-        st.warning("🧰 No tools available")
-        st.info("Tools are loaded automatically when MCP servers are connected")
-        return
-    
-    # Chat interface
-    st.markdown("### 💬 AI Chat Interface")
-    st.markdown("Chat with AI agents that can execute database operations and specialized tools.")
-    
-    # Show available tools summary
-    with st.expander("🧰 Available Tools", expanded=False):
-        tools = st.session_state.get("tools", [])
-        if tools:
-            st.write(f"**{len(tools)} tools available:**")
-            for tool in tools[:5]:  # Show first 5 tools
-                st.write(f"• **{tool.name}**: {tool.description[:100]}...")
-            if len(tools) > 5:
-                st.write(f"... and {len(tools) - 5} more tools")
-        else:
-            st.write("No tools available")
-    
-    # Chat input
-    user_input = st.chat_input("Type your message here...")
-    
-    if user_input:
-        # Add user message to chat history
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
+    # Handle user login
+    if authentication_status and current_user and current_user != previous_user:
+        # User has logged in or switched
+        if previous_user:
+            # User switched - logout previous user
+            on_user_logout(previous_user)
         
-        st.session_state.messages.append({"role": "user", "content": user_input})
+        # Login new user
+        on_user_login(current_user)
+        st.session_state['_previous_user'] = current_user
         
-        # Process the message with ChatService
-        try:
-            chat_service = st.session_state.chat_service
-            
-            with st.spinner("🤖 AI is thinking..."):
-                response = chat_service.process_message(user_input)
-            
-            # Add assistant response
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            
-        except Exception as e:
-            st.error(f"❌ Error processing message: {str(e)}")
-            st.session_state.messages.append({
-                "role": "assistant", 
-                "content": f"I encountered an error: {str(e)}"
-            })
+        # Set login time
+        import datetime
+        st.session_state["login_time"] = datetime.datetime.now()
+        
+        print(f"User {current_user} logged in successfully")
     
-    # Display chat history
-    if "messages" in st.session_state:
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.write(message["content"])
+    # Handle user logout
+    elif not authentication_status and previous_user:
+        # User has logged out
+        on_user_logout(previous_user)
+        st.session_state['_previous_user'] = None
+        
+        # Clear login time
+        if "login_time" in st.session_state:
+            del st.session_state["login_time"]
+        
+        print(f"User {previous_user} logged out")
+
 
 def show_debug_info():
     """Show debug information for troubleshooting."""
     if st.checkbox("🐛 Show Debug Info"):
         st.markdown("### Debug Information")
         
+        current_user = st.session_state.get('username')
+        previous_user = st.session_state.get('_previous_user')
+        
         debug_info = {
             "Authentication Status": st.session_state.get("authentication_status"),
-            "Username": st.session_state.get("username"),
+            "Current Username": current_user,
+            "Previous Username": previous_user,
             "Name": st.session_state.get("name"),
-            "Is Admin": st.session_state.get("username") == 'admin',
+            "Is Admin": current_user == 'admin' if current_user else False,
             "User Management Available": USER_MANAGEMENT_AVAILABLE,
             "MCP Agent": st.session_state.get("agent") is not None,
             "Tools Available": len(st.session_state.get("tools", [])),
             "Servers Connected": len(st.session_state.get("servers", {}))
         }
         
+        # User-specific debug info
+        if current_user:
+            user_keys = [key for key in st.session_state.keys() if key.startswith(f"user_{current_user}_")]
+            debug_info["User-specific Keys"] = len(user_keys)
+            debug_info["User Chat History"] = len(st.session_state.get(f"user_{current_user}_history_chats", []))
+            debug_info["User Messages"] = len(st.session_state.get(f"user_{current_user}_messages", []))
+        
         for key, value in debug_info.items():
             st.write(f"**{key}:** {value}")
+        
+        # Show user-specific session keys
+        if st.checkbox("Show User Session Keys") and current_user:
+            st.markdown("### User-Specific Session Keys")
+            user_keys = {k: type(v).__name__ for k, v in st.session_state.items() 
+                        if k.startswith(f"user_{current_user}_")}
+            for key, value_type in user_keys.items():
+                st.write(f"**{key}:** {value_type}")
+
+
+def create_user_session_info():
+    """Create a detailed user session information panel."""
+    current_user = st.session_state.get('username')
+    if not current_user:
+        return
+    
+    with st.expander("👤 User Session Details", expanded=False):
+        from services.chat_service import get_user_chat_stats
+        
+        # Get user statistics
+        stats = get_user_chat_stats(current_user)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Your Chats", stats["total_chats"])
+        
+        with col2:
+            st.metric("Your Messages", stats["total_messages"])
+        
+        with col3:
+            # Session duration
+            import datetime
+            if "login_time" in st.session_state:
+                session_time = datetime.datetime.now() - st.session_state["login_time"]
+                hours, remainder = divmod(int(session_time.total_seconds()), 3600)
+                minutes, _ = divmod(remainder, 60)
+                st.metric("Session Time", f"{hours:02d}:{minutes:02d}")
+        
+        # User session controls
+        st.markdown("**Session Controls:**")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 Clear My Data", help="Clear all your chat data"):
+                clear_user_data_confirmation()
+        
+        with col2:
+            if st.button("📊 Export My Data", help="Export all your chat data"):
+                export_user_data()
+
+
+def clear_user_data_confirmation():
+    """Show confirmation dialog for clearing user data."""
+    current_user = st.session_state.get('username')
+    if not current_user:
+        return
+    
+    st.warning(f"⚠️ This will delete ALL chat history for user: **{current_user}**")
+    
+    if st.button("❌ Confirm Clear All My Data"):
+        from services.chat_service import clear_user_session_data
+        clear_user_session_data(current_user)
+        st.success("✅ All your data has been cleared!")
+        st.rerun()
+
+
+def export_user_data():
+    """Export all user data as JSON."""
+    current_user = st.session_state.get('username')
+    if not current_user:
+        return
+    
+    import json
+    from datetime import datetime
+    
+    # Collect all user data
+    user_data = {}
+    for key, value in st.session_state.items():
+        if key.startswith(f"user_{current_user}_"):
+            # Remove the user prefix for cleaner export
+            clean_key = key.replace(f"user_{current_user}_", "")
+            try:
+                # Try to serialize the value
+                json.dumps(value)
+                user_data[clean_key] = value
+            except (TypeError, ValueError):
+                # If not serializable, convert to string
+                user_data[clean_key] = str(value)
+    
+    export_data = {
+        "user_data_export": {
+            "username": current_user,
+            "exported_at": datetime.now().isoformat(),
+            "data": user_data
+        }
+    }
+    
+    json_str = json.dumps(export_data, indent=2)
+    
+    st.download_button(
+        label="💾 Download My Data",
+        data=json_str,
+        file_name=f"user_data_{current_user}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+        mime="application/json"
+    )
+
+
+# Additional sidebar components for user session management
+def enhanced_sidebar():
+    """Enhanced sidebar with user session management."""
+    with st.sidebar:
+        # Standard sidebar components
+        sd_components.create_user_info_sidebar()
+        sd_components.create_history_chat_container()
+        sd_components.create_sidebar_chat_buttons()
+        
+        # Additional user session info
+        create_user_session_info()
+        
+        # Debug information (for development)
+        if st.checkbox("🔧 Debug Mode"):
+            show_debug_info()
+
 
 if __name__ == "__main__":
+    # Add enhanced sidebar
+    with st.sidebar:
+        enhanced_sidebar()
+    
     main()

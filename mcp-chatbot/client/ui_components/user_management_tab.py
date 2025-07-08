@@ -411,47 +411,128 @@ def create_users_tab(user_manager: UserManager, users: Dict, is_admin: bool):
                              datetime.fromisoformat(user['created_at']) > datetime.now() - timedelta(days=30))
             st.metric("New (30 days)", recent_count)
     
-    # Add new user (admin only)
+    # Add new user (admin only) - FIXED VERSION
     if is_admin:
         with st.container(border=True):
             st.subheader("➕ Add New User")
             
-            with st.form("add_user_form"):
-                col1, col2 = st.columns(2)
+            # Initialize session state for form data
+            if 'add_user_form_data' not in st.session_state:
+                st.session_state.add_user_form_data = {
+                    'username': '',
+                    'name': '',
+                    'email': '',
+                    'password_option': 'Generate Secure Password',
+                    'manual_password': '',
+                    'is_admin': False,
+                    'generated_password': None
+                }
+            
+            # Form inputs
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                new_username = st.text_input(
+                    "Username", 
+                    value=st.session_state.add_user_form_data['username'],
+                    placeholder="Enter username",
+                    key="new_username_input"
+                )
+                new_name = st.text_input(
+                    "Full Name", 
+                    value=st.session_state.add_user_form_data['name'],
+                    placeholder="Enter full name",
+                    key="new_name_input"
+                )
+                new_email = st.text_input(
+                    "Email", 
+                    value=st.session_state.add_user_form_data['email'],
+                    placeholder="Enter email address",
+                    key="new_email_input"
+                )
+            
+            with col2:
+                # Password options
+                password_option = st.radio(
+                    "Password Setup", 
+                    ["Generate Secure Password", "Manual Password"],
+                    index=0 if st.session_state.add_user_form_data['password_option'] == 'Generate Secure Password' else 1,
+                    key="password_option_radio"
+                )
                 
-                with col1:
-                    new_username = st.text_input("Username", placeholder="Enter username")
-                    new_name = st.text_input("Full Name", placeholder="Enter full name")
-                    new_email = st.text_input("Email", placeholder="Enter email address")
+                new_password = ""
                 
-                with col2:
-                    # Password options
-                    password_option = st.radio("Password Setup", ["Generate Secure Password", "Manual Password"])
-                    
-                    if password_option == "Generate Secure Password":
-                        if st.button("🎲 Generate Password", key="generate_password"):
-                            generated_password = user_manager.generate_secure_password()
-                            st.session_state['generated_password'] = generated_password
-                        
-                        if 'generated_password' in st.session_state:
-                            st.success(f"Generated Password: `{st.session_state['generated_password']}`")
-                            st.warning("⚠️ Copy this password now - it won't be shown again!")
-                            new_password = st.session_state['generated_password']
-                        else:
-                            new_password = ""
-                    else:
-                        new_password = st.text_input("Password", type="password", placeholder="Enter password")
-                    
-                    new_is_admin = st.checkbox("Admin User", help="Grant administrative privileges")
-                
-                submitted = st.form_submit_button("➕ Add User", type="primary")
-                
-                if submitted:
-                    if user_manager.add_user(new_username, new_name, new_email, new_password, new_is_admin):
-                        st.success(f"✅ User '{new_username}' added successfully!")
-                        if 'generated_password' in st.session_state:
-                            del st.session_state['generated_password']
+                if password_option == "Generate Secure Password":
+                    if st.button("🎲 Generate Password", key="generate_password_btn"):
+                        generated_password = user_manager.generate_secure_password()
+                        st.session_state.add_user_form_data['generated_password'] = generated_password
                         st.rerun()
+                    
+                    if st.session_state.add_user_form_data['generated_password']:
+                        st.success(f"Generated Password: `{st.session_state.add_user_form_data['generated_password']}`")
+                        st.warning("⚠️ Copy this password now - it won't be shown again!")
+                        new_password = st.session_state.add_user_form_data['generated_password']
+                else:
+                    new_password = st.text_input(
+                        "Password", 
+                        type="password", 
+                        placeholder="Enter password",
+                        value=st.session_state.add_user_form_data['manual_password'],
+                        key="manual_password_input"
+                    )
+                
+                new_is_admin = st.checkbox(
+                    "Admin User", 
+                    value=st.session_state.add_user_form_data['is_admin'],
+                    help="Grant administrative privileges",
+                    key="is_admin_checkbox"
+                )
+            
+            # Add user button (outside of form)
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                if st.button("➕ Add User", type="primary", key="add_user_submit_btn"):
+                    # Validate inputs
+                    if not all([new_username, new_name, new_email, new_password]):
+                        st.error("❌ All fields are required")
+                    else:
+                        # Update session state
+                        st.session_state.add_user_form_data.update({
+                            'username': new_username,
+                            'name': new_name,
+                            'email': new_email,
+                            'password_option': password_option,
+                            'manual_password': new_password if password_option == "Manual Password" else '',
+                            'is_admin': new_is_admin
+                        })
+                        
+                        # Try to add user
+                        if user_manager.add_user(new_username, new_name, new_email, new_password, new_is_admin):
+                            st.success(f"✅ User '{new_username}' added successfully!")
+                            # Clear form data
+                            st.session_state.add_user_form_data = {
+                                'username': '',
+                                'name': '',
+                                'email': '',
+                                'password_option': 'Generate Secure Password',
+                                'manual_password': '',
+                                'is_admin': False,
+                                'generated_password': None
+                            }
+                            st.rerun()
+            
+            with col2:
+                if st.button("🔄 Clear Form", key="clear_form_btn"):
+                    st.session_state.add_user_form_data = {
+                        'username': '',
+                        'name': '',
+                        'email': '',
+                        'password_option': 'Generate Secure Password',
+                        'manual_password': '',
+                        'is_admin': False,
+                        'generated_password': None
+                    }
+                    st.rerun()
     
     # Users list
     with st.container(border=True):
@@ -499,22 +580,31 @@ def create_users_tab(user_manager: UserManager, users: Dict, is_admin: bool):
                     
                     # Additional info
                     if user.get('created_at'):
-                        created_date = datetime.fromisoformat(user['created_at']).strftime('%Y-%m-%d')
-                        st.markdown(f"📅 Created: {created_date}")
+                        try:
+                            created_date = datetime.fromisoformat(user['created_at']).strftime('%Y-%m-%d')
+                            st.markdown(f"📅 Created: {created_date}")
+                        except:
+                            st.markdown("📅 Created: Unknown")
                     
                     if user.get('last_login'):
-                        last_login = datetime.fromisoformat(user['last_login']).strftime('%Y-%m-%d %H:%M')
-                        st.markdown(f"🕒 Last Login: {last_login}")
+                        try:
+                            last_login = datetime.fromisoformat(user['last_login']).strftime('%Y-%m-%d %H:%M')
+                            st.markdown(f"🕒 Last Login: {last_login}")
+                        except:
+                            st.markdown("🕒 Last Login: Invalid date")
                     else:
                         st.markdown("🕒 Last Login: Never")
                 
                 with col2:
                     # User status
                     if user.get('locked_until'):
-                        locked_until = datetime.fromisoformat(user['locked_until'])
-                        if locked_until > datetime.now():
-                            st.error("🔒 Account Locked")
-                        else:
+                        try:
+                            locked_until = datetime.fromisoformat(user['locked_until'])
+                            if locked_until > datetime.now():
+                                st.error("🔒 Account Locked")
+                            else:
+                                st.success("✅ Active")
+                        except:
                             st.success("✅ Active")
                     else:
                         st.success("✅ Active")
@@ -529,24 +619,25 @@ def create_users_tab(user_manager: UserManager, users: Dict, is_admin: bool):
                     if is_admin:
                         if st.button("✏️ Edit", key=f"edit_{username}"):
                             st.session_state[f'edit_user_{username}'] = True
+                            st.rerun()
                         
                         if username != st.session_state.get('username'):  # Can't delete self
                             if st.button("🗑️ Delete", key=f"delete_{username}"):
                                 st.session_state[f'delete_user_{username}'] = True
+                                st.rerun()
                     else:
                         if username == st.session_state.get('username'):
                             if st.button("🔑 Change Password", key=f"change_pwd_{username}"):
                                 st.session_state[f'change_password_{username}'] = True
+                                st.rerun()
                 
-                # Edit user modal
+                # Handle edit/delete/change password modals
                 if is_admin and st.session_state.get(f'edit_user_{username}'):
                     edit_user_modal(user_manager, username, user)
                 
-                # Delete user modal
                 if is_admin and st.session_state.get(f'delete_user_{username}'):
                     delete_user_modal(user_manager, username, user)
                 
-                # Change password modal
                 if st.session_state.get(f'change_password_{username}'):
                     change_password_modal(user_manager, username)
 
@@ -554,34 +645,33 @@ def edit_user_modal(user_manager: UserManager, username: str, user: Dict):
     """Modal for editing user."""
     st.subheader(f"✏️ Edit User: {username}")
     
-    with st.form(f"edit_user_{username}"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            edit_name = st.text_input("Full Name", value=user['name'])
-            edit_email = st.text_input("Email", value=user['email'])
-        
-        with col2:
-            edit_is_admin = st.checkbox("Admin User", value=user.get('is_admin', False))
-            change_password = st.checkbox("Change Password")
-        
-        edit_password = ""
-        if change_password:
-            edit_password = st.text_input("New Password", type="password")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.form_submit_button("💾 Save Changes", type="primary"):
-                if user_manager.update_user(username, edit_name, edit_email, edit_password or None, edit_is_admin):
-                    st.success("✅ User updated successfully!")
-                    st.session_state[f'edit_user_{username}'] = False
-                    st.rerun()
-        
-        with col2:
-            if st.form_submit_button("❌ Cancel"):
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        edit_name = st.text_input("Full Name", value=user['name'], key=f"edit_name_{username}")
+        edit_email = st.text_input("Email", value=user['email'], key=f"edit_email_{username}")
+    
+    with col2:
+        edit_is_admin = st.checkbox("Admin User", value=user.get('is_admin', False), key=f"edit_admin_{username}")
+        change_password = st.checkbox("Change Password", key=f"change_pwd_check_{username}")
+    
+    edit_password = ""
+    if change_password:
+        edit_password = st.text_input("New Password", type="password", key=f"edit_password_{username}")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("💾 Save Changes", type="primary", key=f"save_changes_{username}"):
+            if user_manager.update_user(username, edit_name, edit_email, edit_password or None, edit_is_admin):
+                st.success("✅ User updated successfully!")
                 st.session_state[f'edit_user_{username}'] = False
                 st.rerun()
+    
+    with col2:
+        if st.button("❌ Cancel", key=f"cancel_edit_{username}"):
+            st.session_state[f'edit_user_{username}'] = False
+            st.rerun()
 
 def delete_user_modal(user_manager: UserManager, username: str, user: Dict):
     """Modal for deleting user."""
@@ -593,14 +683,14 @@ def delete_user_modal(user_manager: UserManager, username: str, user: Dict):
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🗑️ Confirm Delete", type="primary"):
+        if st.button("🗑️ Confirm Delete", type="primary", key=f"confirm_delete_{username}"):
             if user_manager.delete_user(username):
                 st.success("✅ User deleted successfully!")
                 st.session_state[f'delete_user_{username}'] = False
                 st.rerun()
     
     with col2:
-        if st.button("❌ Cancel"):
+        if st.button("❌ Cancel", key=f"cancel_delete_{username}"):
             st.session_state[f'delete_user_{username}'] = False
             st.rerun()
 
@@ -608,25 +698,24 @@ def change_password_modal(user_manager: UserManager, username: str):
     """Modal for changing password."""
     st.subheader(f"🔑 Change Password: {username}")
     
-    with st.form(f"change_password_{username}"):
-        new_password = st.text_input("New Password", type="password")
-        confirm_password = st.text_input("Confirm Password", type="password")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.form_submit_button("🔑 Change Password", type="primary"):
-                if new_password != confirm_password:
-                    st.error("❌ Passwords do not match")
-                elif user_manager.update_user(username, password=new_password):
-                    st.success("✅ Password changed successfully!")
-                    st.session_state[f'change_password_{username}'] = False
-                    st.rerun()
-        
-        with col2:
-            if st.form_submit_button("❌ Cancel"):
+    new_password = st.text_input("New Password", type="password", key=f"new_pwd_{username}")
+    confirm_password = st.text_input("Confirm Password", type="password", key=f"confirm_pwd_{username}")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔑 Change Password", type="primary", key=f"submit_pwd_change_{username}"):
+            if new_password != confirm_password:
+                st.error("❌ Passwords do not match")
+            elif user_manager.update_user(username, password=new_password):
+                st.success("✅ Password changed successfully!")
                 st.session_state[f'change_password_{username}'] = False
                 st.rerun()
+    
+    with col2:
+        if st.button("❌ Cancel", key=f"cancel_pwd_change_{username}"):
+            st.session_state[f'change_password_{username}'] = False
+            st.rerun()
 
 def create_audit_tab(user_manager: UserManager):
     """Create the audit log tab."""
@@ -645,7 +734,10 @@ def create_audit_tab(user_manager: UserManager):
             col1, col2, col3 = st.columns([2, 1, 2])
             
             with col1:
-                timestamp = datetime.fromisoformat(entry['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+                try:
+                    timestamp = datetime.fromisoformat(entry['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+                except:
+                    timestamp = entry.get('timestamp', 'Unknown')
                 st.markdown(f"**{timestamp}**")
                 st.markdown(f"Event: {entry['event_type']}")
             
@@ -654,7 +746,7 @@ def create_audit_tab(user_manager: UserManager):
                 st.markdown(f"**By:** {entry['performed_by']}")
             
             with col3:
-                if entry['details']:
+                if entry.get('details'):
                     st.markdown(f"**Details:** {entry['details']}")
 
 def create_security_tab(user_manager: UserManager):
@@ -770,12 +862,18 @@ def create_profile_tab(user_manager: UserManager, username: str):
         
         with col2:
             if user.get('created_at'):
-                created_date = datetime.fromisoformat(user['created_at']).strftime('%Y-%m-%d')
-                st.markdown(f"**Member Since:** {created_date}")
+                try:
+                    created_date = datetime.fromisoformat(user['created_at']).strftime('%Y-%m-%d')
+                    st.markdown(f"**Member Since:** {created_date}")
+                except:
+                    st.markdown("**Member Since:** Unknown")
             
             if user.get('last_login'):
-                last_login = datetime.fromisoformat(user['last_login']).strftime('%Y-%m-%d %H:%M')
-                st.markdown(f"**Last Login:** {last_login}")
+                try:
+                    last_login = datetime.fromisoformat(user['last_login']).strftime('%Y-%m-%d %H:%M')
+                    st.markdown(f"**Last Login:** {last_login}")
+                except:
+                    st.markdown("**Last Login:** Invalid date")
             else:
                 st.markdown("**Last Login:** Never")
             
@@ -786,13 +884,12 @@ def create_profile_tab(user_manager: UserManager, username: str):
     with st.container(border=True):
         st.subheader("🔑 Change Password")
         
-        with st.form("change_my_password"):
-            new_password = st.text_input("New Password", type="password")
-            confirm_password = st.text_input("Confirm Password", type="password")
-            
-            if st.form_submit_button("🔑 Change Password", type="primary"):
-                if new_password != confirm_password:
-                    st.error("❌ Passwords do not match")
-                elif user_manager.update_user(username, password=new_password):
-                    st.success("✅ Password changed successfully!")
-                    st.rerun()
+        new_password = st.text_input("New Password", type="password", key="profile_new_password")
+        confirm_password = st.text_input("Confirm Password", type="password", key="profile_confirm_password")
+        
+        if st.button("🔑 Change Password", type="primary", key="profile_change_password"):
+            if new_password != confirm_password:
+                st.error("❌ Passwords do not match")
+            elif user_manager.update_user(username, password=new_password):
+                st.success("✅ Password changed successfully!")
+                st.rerun()

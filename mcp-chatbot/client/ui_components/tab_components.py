@@ -1,4 +1,4 @@
-# Updated ui_components/tab_components.py with User Management Tab
+# Fixed section of ui_components/tab_components.py for Configuration tab
 
 import streamlit as st
 from config import MODEL_OPTIONS
@@ -6,46 +6,10 @@ import traceback
 import os
 from services.mcp_service import connect_to_mcp_servers
 from utils.tool_schema_parser import extract_tool_parameters
-from utils.async_helpers import reset_connection_state
-
-# Import the user management components
-try:
-    from ui_components.user_management_tab import create_user_management_tab
-    USER_MANAGEMENT_AVAILABLE = True
-except ImportError:
-    USER_MANAGEMENT_AVAILABLE = False
-
-def create_main_tabs():
-    """Create the main application tabs including User Management."""
-    # Check if current user is admin for conditional tab display
-    current_user = st.session_state.get('username')
-    is_admin = current_user == 'admin'  # Simple admin check, can be enhanced
-    
-    # Create tabs based on user permissions
-    if is_admin and USER_MANAGEMENT_AVAILABLE:
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "💬 Chat", 
-            "⚙️ Configuration", 
-            "🔌 Connections", 
-            "🧰 Tools",
-            "👥 User Management"
-        ])
-    else:
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "💬 Chat", 
-            "⚙️ Configuration", 
-            "🔌 Connections", 
-            "🧰 Tools"
-        ])
-    
-    # Return tabs for use in main app
-    if is_admin and USER_MANAGEMENT_AVAILABLE:
-        return tab1, tab2, tab3, tab4, tab5
-    else:
-        return tab1, tab2, tab3, tab4, None
+from utils.async_helpers import safe_reset_connection_state, handle_provider_change
 
 def create_configuration_tab():
-    """Create the Configuration tab content."""
+    """Create the Configuration tab content with improved error handling."""
     # Import the enhanced configuration function
     try:
         from ui_components.enhanced_config import create_enhanced_configuration_tab
@@ -80,7 +44,7 @@ def create_configuration_tab():
         create_simple_configuration_tab()
 
 def create_simple_configuration_tab():
-    """Create the original simple Configuration tab content."""
+    """Create the original simple Configuration tab content with improved provider handling."""
     st.markdown("Configure your AI provider and model parameters.")
     
     # Provider Configuration Section
@@ -91,41 +55,79 @@ def create_simple_configuration_tab():
         
         # Load previously selected provider or default to the first
         default_provider = params.get("model_id", list(MODEL_OPTIONS.keys())[0])
-        default_index = list(MODEL_OPTIONS.keys()).index(default_provider)
         
-        # Provider selector with synced state
+        try:
+            default_index = list(MODEL_OPTIONS.keys()).index(default_provider)
+        except ValueError:
+            default_index = 0
+            default_provider = list(MODEL_OPTIONS.keys())[0]
+        
+        # Provider selector with improved change handling
         selected_provider = st.selectbox(
             'Choose Provider',
             options=list(MODEL_OPTIONS.keys()),
             index=default_index,
             key="provider_selection_tab",
-            on_change=reset_connection_state,
             help="Select your preferred AI provider"
         )
         
-        # Save new provider and its index
-        if selected_provider:
+        # Handle provider change
+        if selected_provider != params.get("model_id"):
+            handle_provider_change_safely(selected_provider, params)
+
+def handle_provider_change_safely(selected_provider, params):
+    """Handle provider change with proper error handling."""
+    try:
+        # Show loading message
+        with st.spinner("🔄 Changing AI provider..."):
+            # Update parameters
             params['model_id'] = selected_provider
             params['provider_index'] = list(MODEL_OPTIONS.keys()).index(selected_provider)
-            st.success(f"Selected Model: {MODEL_OPTIONS[selected_provider]}")
+            
+            # Handle connection reset safely
+            handle_provider_change()
+            
+            # Show success message
+            st.success(f"✅ Provider changed to: {MODEL_OPTIONS[selected_provider]}")
+            
+    except Exception as e:
+        st.error(f"❌ Error changing provider: {str(e)}")
+        
+        # Show detailed error in expander
+        with st.expander("🐛 Error Details", expanded=False):
+            st.code(traceback.format_exc())
+        
+        # Try to recover by resetting everything
+        try:
+            safe_reset_connection_state()
+            st.warning("⚠️ Connections reset. Please reconnect in the Connections tab.")
+        except Exception as recovery_error:
+            st.error(f"❌ Recovery failed: {str(recovery_error)}")
 
-    # Credentials Status Section
-    with st.container(border=True):
-        st.subheader("🔐 Credentials Status")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if selected_provider == "OpenAI":
+def create_provider_credentials_section(selected_provider):
+    """Create the credentials status section with improved error handling."""
+    st.subheader("🔐 Credentials Status")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if selected_provider == "OpenAI":
+            try:
                 openai_key = os.getenv("OPENAI_API_KEY")
                 if openai_key:
                     st.success("✅ OpenAI API Key loaded")
+                    # Show partial key for verification
+                    masked_key = f"{openai_key[:8]}...{openai_key[-4:]}" if len(openai_key) > 12 else "***"
+                    st.caption(f"Key: {masked_key}")
                 else:
                     st.error("❌ OpenAI API Key not found in .env")
                     st.info("Add OPENAI_API_KEY to your .env file")
+            except Exception as e:
+                st.error(f"❌ Error checking OpenAI credentials: {str(e)}")
                     
-        with col2:
-            if selected_provider == "Azure OpenAI":
+    with col2:
+        if selected_provider == "Azure OpenAI":
+            try:
                 azure_key = os.getenv("AZURE_API_KEY")
                 azure_endpoint = os.getenv("AZURE_ENDPOINT")
                 azure_deployment = os.getenv("AZURE_DEPLOYMENT")
@@ -133,11 +135,17 @@ def create_simple_configuration_tab():
                 
                 if all([azure_key, azure_endpoint, azure_deployment, azure_version]):
                     st.success("✅ Azure OpenAI configuration loaded")
-                    # Use container instead of expander to avoid nesting
+                    
+                    # Show configuration details
                     if st.checkbox("Show Azure Config Details", key="show_azure_config_details"):
                         st.text(f"Endpoint: {azure_endpoint}")
                         st.text(f"Deployment: {azure_deployment}")
                         st.text(f"API Version: {azure_version}")
+                        
+                        # Show masked key
+                        if azure_key:
+                            masked_key = f"{azure_key[:8]}...{azure_key[-4:]}" if len(azure_key) > 12 else "***"
+                            st.text(f"Key: {masked_key}")
                 else:
                     st.error("❌ Azure OpenAI configuration incomplete")
                     missing = []
@@ -151,36 +159,208 @@ def create_simple_configuration_tab():
                         missing.append("AZURE_API_VERSION")
                     st.error(f"Missing: {', '.join(missing)}")
                     st.info("Add the missing variables to your .env file")
+            except Exception as e:
+                st.error(f"❌ Error checking Azure credentials: {str(e)}")
 
-    # Model Parameters Section
-    with st.container(border=True):
-        st.subheader("⚙️ Model Parameters")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            params['max_tokens'] = st.number_input(
+def create_model_parameters_section(params):
+    """Create the model parameters section with validation."""
+    st.subheader("⚙️ Model Parameters")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Max tokens with validation
+        try:
+            current_max_tokens = params.get('max_tokens', 4096)
+            max_tokens = st.number_input(
                 "Max tokens",
-                min_value=1024,
-                max_value=10240,
-                value=params.get('max_tokens', 4096),
+                min_value=512,
+                max_value=32000,
+                value=current_max_tokens,
                 step=512,
                 help="Maximum number of tokens in the response",
                 key="config_max_tokens"
             )
+            params['max_tokens'] = max_tokens
+        except Exception as e:
+            st.error(f"Error with max tokens: {str(e)}")
+            params['max_tokens'] = 4096
             
-        with col2:
-            params['temperature'] = st.slider(
+    with col2:
+        # Temperature with validation
+        try:
+            current_temperature = params.get('temperature', 1.0)
+            temperature = st.slider(
                 "Temperature", 
                 0.0, 
-                1.0, 
+                2.0, 
                 step=0.05, 
-                value=params.get('temperature', 1.0),
-                help="Controls randomness: 0.0 = deterministic, 1.0 = creative",
+                value=current_temperature,
+                help="Controls randomness: 0.0 = deterministic, 2.0 = very creative",
                 key="config_temperature"
             )
+            params['temperature'] = temperature
+        except Exception as e:
+            st.error(f"Error with temperature: {str(e)}")
+            params['temperature'] = 1.0
 
-    # Environment Variables Guide - Use checkbox instead of expander
+def create_connection_test_section(selected_provider):
+    """Create connection test section."""
+    st.subheader("🧪 Test Configuration")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        test_button = st.button(
+            "🔍 Test AI Provider Connection",
+            type="secondary",
+            use_container_width=True,
+            help="Test if the AI provider credentials are working"
+        )
+        
+        if test_button:
+            test_ai_provider_connection(selected_provider)
+    
+    with col2:
+        if st.session_state.get("agent"):
+            st.success("🟢 MCP Agent Connected")
+            
+            test_full_button = st.button(
+                "🔄 Test Full Pipeline",
+                type="primary",
+                use_container_width=True,
+                help="Test AI provider + MCP connection"
+            )
+            
+            if test_full_button:
+                test_full_pipeline(selected_provider)
+        else:
+            st.info("🔌 Connect to MCP servers first")
+
+def test_ai_provider_connection(provider):
+    """Test AI provider connection."""
+    try:
+        with st.spinner(f"Testing {provider} connection..."):
+            from services.ai_service import create_llm_model
+            
+            # Get current parameters
+            params = st.session_state.get('params', {})
+            
+            # Try to create LLM model
+            llm = create_llm_model(provider, 
+                                 temperature=params.get('temperature', 0.7),
+                                 max_tokens=min(params.get('max_tokens', 4096), 100))  # Limit for test
+            
+            # Simple test message
+            from langchain_core.messages import HumanMessage
+            test_message = HumanMessage(content="Hello, this is a test. Please respond with 'Test successful'.")
+            
+            response = llm.invoke([test_message])
+            
+            if response and hasattr(response, 'content'):
+                st.success(f"✅ {provider} connection successful!")
+                st.info(f"Response: {response.content[:100]}...")
+            else:
+                st.warning("⚠️ Connection established but response format unexpected")
+                
+    except Exception as e:
+        st.error(f"❌ {provider} connection failed: {str(e)}")
+        
+        # Show troubleshooting tips
+        with st.expander("🔧 Troubleshooting Tips"):
+            if provider == "OpenAI":
+                st.markdown("""
+                **Common OpenAI issues:**
+                - Check if OPENAI_API_KEY is set correctly
+                - Verify API key has sufficient credits
+                - Ensure no rate limiting is active
+                """)
+            elif provider == "Azure OpenAI":
+                st.markdown("""
+                **Common Azure OpenAI issues:**
+                - Verify all Azure environment variables are set
+                - Check deployment name matches your Azure setup
+                - Ensure endpoint URL is correct
+                - Verify API version is supported
+                """)
+
+def test_full_pipeline(provider):
+    """Test the full AI + MCP pipeline."""
+    try:
+        with st.spinner("Testing full pipeline..."):
+            # Test if we can get tools
+            tools = st.session_state.get("tools", [])
+            if not tools:
+                st.error("❌ No MCP tools available")
+                return
+            
+            # Test a simple query
+            from services.chat_service import ChatService
+            chat_service = ChatService()
+            
+            test_query = "List the available tools"
+            response = chat_service.process_message(test_query)
+            
+            if response and "error" not in response.lower():
+                st.success("✅ Full pipeline test successful!")
+                st.info(f"Response preview: {response[:200]}...")
+            else:
+                st.warning("⚠️ Pipeline test completed but response may indicate issues")
+                st.text(f"Response: {response[:500]}...")
+                
+    except Exception as e:
+        st.error(f"❌ Full pipeline test failed: {str(e)}")
+        st.info("💡 Try reconnecting to MCP servers in the Connections tab")
+
+# Update the main configuration function to use the improved sections
+def create_simple_configuration_tab_complete():
+    """Complete simple configuration tab with all improved sections."""
+    st.markdown("Configure your AI provider and model parameters.")
+    
+    # Provider Configuration Section
+    with st.container(border=True):
+        st.subheader("🔎 AI Provider Selection")
+        
+        params = st.session_state.setdefault('params', {})
+        
+        # Load previously selected provider or default to the first
+        default_provider = params.get("model_id", list(MODEL_OPTIONS.keys())[0])
+        
+        try:
+            default_index = list(MODEL_OPTIONS.keys()).index(default_provider)
+        except ValueError:
+            default_index = 0
+            default_provider = list(MODEL_OPTIONS.keys())[0]
+        
+        # Provider selector with improved change handling
+        selected_provider = st.selectbox(
+            'Choose Provider',
+            options=list(MODEL_OPTIONS.keys()),
+            index=default_index,
+            key="provider_selection_tab",
+            help="Select your preferred AI provider"
+        )
+        
+        # Handle provider change
+        if selected_provider != params.get("model_id"):
+            handle_provider_change_safely(selected_provider, params)
+        else:
+            # Show current selection
+            st.success(f"Selected Model: {MODEL_OPTIONS[selected_provider]}")
+
+    # Credentials Status Section
+    with st.container(border=True):
+        create_provider_credentials_section(selected_provider)
+
+    # Model Parameters Section
+    with st.container(border=True):
+        create_model_parameters_section(params)
+
+    # Connection Test Section
+    with st.container(border=True):
+        create_connection_test_section(selected_provider)
+
+    # Environment Variables Guide
     show_env_guide = st.checkbox("📋 Show Environment Variables Guide", key="config_show_env_guide")
     if show_env_guide:
         st.markdown("""
@@ -218,456 +398,7 @@ def create_simple_configuration_tab():
     with st.container(border=True):
         st.info("💡 **Want more providers and advanced features?** Enable **Enhanced Mode** above for support of Anthropic Claude, Google Gemini, Cohere, Mistral AI, and local Ollama models!")
 
-
-def categorize_tools(tools):
-    """Categorize tools by server type with improved detection."""
-    mssql_tools = []
-    other_tools = []
-    
-    for tool in tools:
-        tool_name_lower = tool.name.lower()
-        tool_desc_lower = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
-        
-        # MSSQL tool detection - improved logic
-        if (any(keyword in tool_name_lower for keyword in ['sql', 'mssql', 'execute_sql', 'list_tables', 'describe_table', 'get_table_sample']) or
-              any(keyword in tool_desc_lower for keyword in ['sql', 'mssql', 'database', 'table', 'execute'])):
-            mssql_tools.append(tool)
-        else:
-            other_tools.append(tool)
-    
-    return mssql_tools, other_tools
-
-
-def create_connection_tab():
-    """Create the Connections tab content."""
-    st.header("🔌 MCP Server Connections")
-    st.markdown("Manage connections to your Model Context Protocol servers.")
-    
-    # Current Connection Status
-    with st.container(border=True):
-        st.subheader("📊 Connection Status")
-        
-        if st.session_state.get("agent"):
-            st.success(f"🟢 Connected to {len(st.session_state.servers)} MCP servers")
-            st.info(f"🔧 Found {len(st.session_state.tools)} available tools")
-            
-            # Categorize tools using improved logic
-            mssql_tools, other_tools = categorize_tools(st.session_state.tools)
-            
-            # Connection details
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Connected Servers", len(st.session_state.servers))
-            with col2:
-                st.metric("Total Tools", len(st.session_state.tools))
-            with col3:
-                st.metric("MSSQL Tools", len(mssql_tools))
-            with col4:
-                if other_tools:
-                    st.metric("Other Tools", len(other_tools))
-                
-        else:
-            st.warning("🟡 Not connected to MCP servers")
-            st.info("Click 'Connect to MCP Servers' below to establish connections")
-
-    # Server Configuration - Use checkbox instead of nested expanders
-    with st.container(border=True):
-        st.subheader("🖥️ Server Configuration")
-        
-        show_server_details = st.checkbox("Show Server Details", key="connection_show_server_details")
-        if show_server_details:
-            # Display configured servers
-            for name, config in st.session_state.servers.items():
-                st.markdown(f"### 📡 {name} Server")
-                
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    st.markdown(f"**URL:** `{config['url']}`")
-                    st.markdown(f"**Transport:** {config['transport']}")
-                    st.markdown(f"**Timeout:** {config['timeout']}s")
-                    st.markdown(f"**SSE Read Timeout:** {config['sse_read_timeout']}s")
-                    
-                    # Add server-specific info
-                    if name == "MSSQL":
-                        st.markdown("**Type:** SQL Database")
-                        st.markdown("**Operations:** SQL queries, table operations")
-                
-                with col2:
-                    if st.button(f"🗑️ Remove {name}", key=f"connection_remove_{name}"):
-                        del st.session_state.servers[name]
-                        if st.session_state.get("agent"):
-                            reset_connection_state()
-                        st.rerun()
-                
-                st.divider()
-
-    # Connection Controls
-    with st.container(border=True):
-        st.subheader("🎛️ Connection Controls")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if not st.session_state.get("agent"):
-                if st.button("🔗 Connect to MCP Servers", type="primary", use_container_width=True, key="connection_connect_btn"):
-                    with st.spinner("🔄 Connecting to MCP servers..."):
-                        try:
-                            connect_to_mcp_servers()
-                            st.success("✅ Successfully connected to MCP servers!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error connecting to MCP servers: {str(e)}")
-                            show_error_details = st.checkbox("🐛 Show Error Details", key="connection_show_connection_error")
-                            if show_error_details:
-                                st.code(traceback.format_exc(), language="python")
-            else:
-                st.success("✅ Already connected")
-        
-        with col2:
-            if st.session_state.get("agent"):
-                if st.button("🔌 Disconnect from MCP Servers", use_container_width=True, key="connection_disconnect_btn"):
-                    with st.spinner("🔄 Disconnecting from MCP servers..."):
-                        try:
-                            reset_connection_state()
-                            st.success("✅ Successfully disconnected!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error disconnecting: {str(e)}")
-                            show_error_details = st.checkbox("🐛 Show Error Details", key="connection_show_disconnect_error")
-                            if show_error_details:
-                                st.code(traceback.format_exc(), language="python")
-            else:
-                st.info("No active connections")
-
-    # Server Health Check
-    with st.container(border=True):
-        st.subheader("🏥 Server Health Check")
-        
-        if st.button("🔍 Check Server Health", use_container_width=True, key="connection_health_check_btn"):
-            for name, config in st.session_state.servers.items():
-                # Extract base URL for health check
-                base_url = config['url'].replace('/sse', '/health')
-                
-                try:
-                    import requests
-                    response = requests.get(base_url, timeout=5)
-                    if response.status_code == 200:
-                        st.success(f"✅ {name}: Healthy (Status: {response.status_code})")
-                    else:
-                        st.warning(f"⚠️ {name}: Status {response.status_code}")
-                except Exception as e:
-                    st.error(f"❌ {name}: Connection failed - {str(e)}")
-
-    # Troubleshooting Guide
-    show_troubleshooting = st.checkbox("🛠️ Show Troubleshooting Guide", key="connection_show_troubleshooting")
-    if show_troubleshooting:
-        st.markdown("""
-        ### Common Connection Issues
-        
-        **🔴 Connection Failed:**
-        - Ensure MSSQL MCP server is running
-        - Check if port 8008 is accessible
-        - Verify server URLs in `servers_config.json`
-        
-        **🟡 Authentication Issues:**
-        - Check MSSQL_USER and MSSQL_PASSWORD for MSSQL server
-        - Ensure database permissions are properly configured
-        
-        **🟠 Timeout Issues:**
-        - Increase timeout values in server configuration
-        - Check network connectivity
-        - Verify server performance
-        
-        **🔵 Tool Loading Issues:**
-        - Restart MSSQL MCP server
-        - Check server logs for errors
-        - Verify server implementation
-        
-        **🟣 MSSQL Specific Issues:**
-        - Verify ODBC driver is installed
-        - Check SQL Server connectivity
-        - Ensure TrustServerCertificate is set correctly
-        - Verify database permissions
-        """)
-
-
-def create_tools_tab():
-    """Create the Tools tab content."""
-    st.header("🧰 Available Tools")
-    st.markdown("Explore and understand the available MCP tools and their parameters.")
-    
-    if not st.session_state.tools:
-        st.warning("🔧 No tools available. Please connect to MCP servers first.")
-        st.info("👉 Go to the **Connections** tab to establish server connections.")
-        return
-    
-    # Categorize tools using improved logic
-    mssql_tools, other_tools = categorize_tools(st.session_state.tools)
-    
-    # Tools Overview
-    with st.container(border=True):
-        st.subheader("📊 Tools Overview")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Total Tools", len(st.session_state.tools))
-        
-        with col2:
-            st.metric("MSSQL Tools", len(mssql_tools))
-            
-        with col3:
-            if other_tools:
-                st.metric("Other Tools", len(other_tools))
-
-    # Tool Categories
-    st.subheader("🗂️ Tools by Category")
-    
-    # Create tabs for different tool categories
-    mssql_tab, all_tab = st.tabs(["🗃️ MSSQL Tools", "📋 All Tools"])
-    
-    with mssql_tab:
-        display_tools_list(mssql_tools, "MSSQL Database Operations", "mssql")
-    
-    with all_tab:
-        display_all_tools()
-
-
-def display_tools_list(tools_list, category_title, category_key):
-    """Display tools for a specific category."""
-    if not tools_list:
-        st.info(f"No {category_title.lower()} available.")
-        return
-    
-    st.markdown(f"### {category_title}")
-    st.write(f"Found **{len(tools_list)}** tools in this category.")
-    
-    # Tool selector
-    selected_tool_name = st.selectbox(
-        "Select a Tool",
-        options=[tool.name for tool in tools_list],
-        index=0,
-        key=f"tools_{category_key}_tool_selector"
-    )
-    
-    if selected_tool_name:
-        selected_tool = next(
-            (tool for tool in tools_list if tool.name == selected_tool_name),
-            None
-        )
-        
-        if selected_tool:
-            display_tool_details(selected_tool, f"tools_{category_key}")
-
-
-def display_all_tools():
-    """Display all available tools."""
-    st.markdown("### All Available Tools")
-    st.write(f"Total of **{len(st.session_state.tools)}** tools available.")
-    
-    # Search functionality
-    search_term = st.text_input("🔍 Search tools", placeholder="Enter tool name or description...", key="tools_all_search")
-    
-    if search_term:
-        filtered_tools = [
-            tool for tool in st.session_state.tools 
-            if search_term.lower() in tool.name.lower() or 
-               (hasattr(tool, 'description') and tool.description and search_term.lower() in tool.description.lower())
-        ]
-    else:
-        filtered_tools = st.session_state.tools
-    
-    if not filtered_tools:
-        st.warning("No tools match your search criteria.")
-        return
-    
-    # Tool selector
-    selected_tool_name = st.selectbox(
-        "Select a Tool",
-        options=[tool.name for tool in filtered_tools],
-        index=0,
-        key="tools_all_tools_selector"
-    )
-    
-    if selected_tool_name:
-        selected_tool = next(
-            (tool for tool in filtered_tools if tool.name == selected_tool_name),
-            None
-        )
-        
-        if selected_tool:
-            display_tool_details(selected_tool, "tools_all")
-
-
-def display_tool_details(tool, prefix="tools"):
-    """Display detailed information about a specific tool."""
-    # Generate unique key for this tool
-    tool_safe_name = tool.name.replace('-', '_').replace(' ', '_').lower()
-    
-    with st.container(border=True):
-        st.subheader(f"🔧 {tool.name}")
-        
-        # Description
-        st.markdown("**Description:**")
-        if hasattr(tool, 'description') and tool.description:
-            st.write(tool.description)
-        else:
-            st.write("No description available.")
-        
-        # Parameters
-        parameters = extract_tool_parameters(tool)
-        
-        if parameters:
-            st.markdown("**Parameters:**")
-            for param in parameters:
-                st.code(param)
-        else:
-            st.info("This tool doesn't require any parameters.")
-        
-        # Additional details if available - use checkbox instead of expander with unique key
-        if hasattr(tool, 'args_schema'):
-            show_schema = st.checkbox("📋 Show Raw Schema", key=f"{prefix}_show_schema_{tool_safe_name}")
-            if show_schema:
-                schema = tool.args_schema
-                if isinstance(schema, dict):
-                    st.json(schema)
-                else:
-                    st.json(schema.schema() if hasattr(schema, 'schema') else str(schema))
-        
-        # Usage example
-        st.markdown("**Usage Example:**")
-        st.code(f'Ask the AI: "Use the {tool.name} tool to..."', language="text")
-        
-        # Tool category badge - using improved categorization
-        tool_name_lower = tool.name.lower()
-        tool_desc_lower = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
-        
-        if (any(keyword in tool_name_lower for keyword in ['sql', 'mssql', 'execute_sql', 'list_tables', 'describe_table', 'get_table_sample']) or
-              any(keyword in tool_desc_lower for keyword in ['sql', 'mssql', 'database', 'table', 'execute'])):
-            st.warning("🗃️ MSSQL Database Tool")
-        else:
-            st.info("🔧 General Tool")
-
-
-def create_user_management_tab_wrapper():
-    """Wrapper function to create user management tab with error handling."""
-    if not USER_MANAGEMENT_AVAILABLE:
-        st.error("❌ User Management module not available")
-        st.info("Please ensure the user_management_tab.py file is properly installed")
-        return
-    
-    # Check admin permissions
-    current_user = st.session_state.get('username')
-    if current_user != 'admin':
-        st.warning("⚠️ Admin privileges required to access User Management")
-        st.info("Contact your administrator for access to user management features")
-        return
-    
-    try:
-        create_user_management_tab()
-    except Exception as e:
-        st.error(f"❌ Error loading User Management: {str(e)}")
-        st.info("Please check the user management module installation")
-
-
-# Security recommendations for deployment
-def show_security_recommendations():
-    """Show security recommendations for production deployment."""
-    with st.container(border=True):
-        st.subheader("🔒 Security Recommendations")
-        
-        recommendations = [
-            "**Authentication Security:**",
-            "• Use SQLite or PostgreSQL instead of YAML for user storage",
-            "• Enable encrypted storage for sensitive data",
-            "• Implement session timeout and secure cookies",
-            "• Use environment variables for encryption keys",
-            "",
-            "**Application Security:**",
-            "• Deploy with HTTPS in production",
-            "• Enable CSRF protection",
-            "• Implement rate limiting for login attempts",
-            "• Regular security audits and updates",
-            "",
-            "**Data Security:**",
-            "• Regular encrypted backups",
-            "• Audit log monitoring",
-            "• Strong password policies",
-            "• Multi-factor authentication (future enhancement)"
-        ]
-        
-        for rec in recommendations:
-            if rec.startswith("**"):
-                st.markdown(rec)
-            elif rec == "":
-                st.write("")
-            else:
-                st.markdown(rec)
-        
-        # Security setup button
-        if st.button("🛠️ Setup Enhanced Security", key="setup_enhanced_security"):
-            st.info("Enhanced security setup would include:")
-            st.code("""
-# 1. Install additional dependencies
-pip install cryptography
-
-# 2. Set environment variables
-USE_SQLITE=true
-ENCRYPTION_PASSWORD=your_secure_password_here
-SESSION_TIMEOUT_HOURS=24
-
-# 3. Run migration script
-python -c "from enhanced_security_config import SecurityConfig; SecurityConfig.migrate_from_yaml('sqlite')"
-
-# 4. Update app.py to use SecureUserStore
-            """)
-
-
-# Enhanced tab management for better UX
-def get_tab_configuration():
-    """Get tab configuration based on user permissions."""
-    current_user = st.session_state.get('username')
-    is_admin = current_user == 'admin'
-    
-    base_tabs = [
-        {"title": "💬 Chat", "key": "chat", "accessible": True},
-        {"title": "⚙️ Configuration", "key": "config", "accessible": True},
-        {"title": "🔌 Connections", "key": "connections", "accessible": True},
-        {"title": "🧰 Tools", "key": "tools", "accessible": True}
-    ]
-    
-    if is_admin and USER_MANAGEMENT_AVAILABLE:
-        base_tabs.append({
-            "title": "👥 User Management", 
-            "key": "users", 
-            "accessible": True
-        })
-    
-    return base_tabs
-
-
-def create_dynamic_tabs():
-    """Create tabs dynamically based on user permissions."""
-    tab_config = get_tab_configuration()
-    accessible_tabs = [tab for tab in tab_config if tab["accessible"]]
-    tab_titles = [tab["title"] for tab in accessible_tabs]
-    
-    # Create tabs
-    created_tabs = st.tabs(tab_titles)
-    
-    # Map tabs to their handlers
-    tab_handlers = {
-        "chat": None,  # Handled in main app
-        "config": create_configuration_tab,
-        "connections": create_connection_tab,
-        "tools": create_tools_tab,
-        "users": create_user_management_tab_wrapper
-    }
-    
-    # Return tabs with their keys for use in main app
-    result = {}
-    for i, tab in enumerate(accessible_tabs):
-        result[tab["key"]] = created_tabs[i]
-    
-    return result, tab_handlers
+# Make sure to use the complete version
+def create_simple_configuration_tab():
+    """Use the complete improved configuration tab."""
+    create_simple_configuration_tab_complete()

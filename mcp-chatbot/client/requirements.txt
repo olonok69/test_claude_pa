@@ -18,3 +18,4 @@ langchain-mcp-adapters==0.0.7
 langgraph==0.3.30
 cryptography
 chardet 
+pyperclip
