@@ -17,7 +17,7 @@ nest_asyncio.apply()
 page_icon_path = os.path.join('.', 'icons', 'playground.png')
 
 st.set_page_config(
-    page_title="CSM MCP Servers",
+    page_title="The Machine Learning Engineer - MCP Client",
     page_icon=page_icon_path,
     layout='wide',
     initial_sidebar_state="expanded"
@@ -113,11 +113,20 @@ def show_authentication_required_message():
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        st.markdown("""
-        ### Welcome to CSM MCP Servers
+        # Add logo in the welcome message if available
+        logo_path = os.path.join('.', 'icons', 'Logo.png')
+        if os.path.exists(logo_path):
+            # Center the logo
+            col_a, col_b, col_c = st.columns([1, 1, 1])
+            with col_b:
+                st.image(logo_path, width=120)
+            st.markdown("<br>", unsafe_allow_html=True)
         
-        This application provides AI-powered interactions with **Neo4j graph databases**, 
-        **HubSpot CRM systems**, and **MSSQL databases** through Model Context Protocol (MCP) servers.
+        st.markdown("""
+        ### Welcome to CloserStill Media - MCP Client
+        
+        This application provides AI-powered interactions with **MSSQL databases** 
+        through Model Context Protocol (MCP) servers.
         
         **Please authenticate using the sidebar to access the application.**
         
@@ -126,34 +135,27 @@ def show_authentication_required_message():
         #### 🚀 Features Available After Login:
         
         - **💬 AI Chat Interface**: Interactive conversations with AI agents
-        - **🗄️ Neo4j Database Operations**: Query and manage graph data with Cypher
-        - **🏢 HubSpot CRM Integration**: Access contacts, companies, deals, tickets, and more
         - **🗃️ MSSQL Database Operations**: Execute SQL queries, explore tables, and manage data
-        - **🔧 Tool Management**: Execute specialized MCP tools across all platforms
-        - **📊 Real-time Analytics**: Monitor and analyze your data across databases
-        - **🔄 Cross-Platform Integration**: Compare and sync data between systems
+        - **🔧 Tool Management**: Execute specialized MCP tools for database operations
+        - **📊 Real-time Analytics**: Monitor and analyze your data
+        - **🔄 Database Integration**: Comprehensive SQL Server connectivity and management
         
         ---
         
-        #### 🗄️ Database Capabilities:
-        
-        **Neo4j Graph Database:**
-        - Schema discovery and visualization
-        - Complex relationship queries with Cypher
-        - Graph data creation and modification
-        - Performance analytics and insights
-        
-        **HubSpot CRM System:**
-        - Contact and company management
-        - Deal tracking and pipeline analysis
-        - Ticket management and support workflows
-        - Custom properties and associations
+        #### 🗃️ Database Capabilities:
         
         **MSSQL Database:**
         - Table exploration and schema analysis
         - SQL query execution with proper syntax
         - Sample data retrieval and analysis
         - Data modification and management operations
+        - Comprehensive database operations through MCP tools
+        
+        **Available Tools:**
+        - **execute_sql**: Run SQL queries with proper SQL Server syntax
+        - **list_tables**: Explore database structure and available tables
+        - **describe_table**: Get detailed information about table schemas
+        - **get_table_sample**: Retrieve sample data from tables
         
         ---
         
@@ -165,7 +167,7 @@ def show_authentication_required_message():
         """)
         
         # Add visual elements with updated info
-        st.info("👈 Use the sidebar to authenticate and start using the multi-database platform")
+        st.info("👈 Use the sidebar to authenticate and start using the database platform")
         
         # Add quick stats about the platform
         with st.container():
@@ -174,25 +176,48 @@ def show_authentication_required_message():
             
             with col_a:
                 st.metric(
-                    label="🗄️ Database Types",
-                    value="3",
-                    help="Neo4j, HubSpot CRM, MSSQL"
+                    label="🗃️ Database Types",
+                    value="1",
+                    help="MSSQL Server"
                 )
             
             with col_b:
                 st.metric(
                     label="🧰 Tool Categories", 
-                    value="25+",
-                    help="Graph, CRM, SQL operations"
+                    value="4+",
+                    help="SQL operations and management"
                 )
             
             with col_c:
                 st.metric(
                     label="🔌 MCP Servers",
-                    value="3",
-                    help="Specialized protocol servers"
+                    value="1",
+                    help="MSSQL specialized protocol server"
                 )
-
+        
+        # Add usage examples
+        with st.expander("💡 Example Queries", expanded=False):
+            st.markdown("""
+            **Database Exploration:**
+            - "Show me all tables in the database"
+            - "Describe the structure of the users table"
+            - "Give me 5 sample records from the products table"
+            
+            **Data Analysis:**
+            - "Count all records in the orders table"
+            - "Find all customers from New York"
+            - "Show me the top 10 products by sales"
+            
+            **SQL Operations:**
+            - "Execute: SELECT TOP 5 * FROM employees ORDER BY hire_date DESC"
+            - "Get all orders from the last 30 days"
+            - "Find the average price of products in each category"
+            
+            **Advanced Queries:**
+            - "Show me sales trends by month"
+            - "Find customers who haven't placed orders recently"
+            - "Analyze product performance across different regions"
+            """)
 
 
 def main():
@@ -205,6 +230,11 @@ def main():
         
         # Register shutdown handler
         atexit.register(on_shutdown)
+        
+        # Always show logo at the top of sidebar first
+        with st.sidebar:
+            from ui_components.sidebar_components import create_sidebar_header_with_icon
+            create_sidebar_header_with_icon()
         
         # Handle authentication
         authentication_status = handle_authentication()

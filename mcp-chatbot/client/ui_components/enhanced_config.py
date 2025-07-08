@@ -1,4 +1,4 @@
-# Fixed ui_components/enhanced_config.py - Remove nested expanders
+# Enhanced ui_components/enhanced_config.py for mcp-chatbot
 
 import streamlit as st
 import os
@@ -19,58 +19,13 @@ EXTENDED_MODEL_OPTIONS = {
         'status_check': 'openai_status'
     },
     'Azure OpenAI': {
-        'models': ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
-        'default_model': 'o3-mini',
+        'models': ['gpt-4.1','gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+        'default_model': 'gpt-4.1',
         'required_env': ['AZURE_API_KEY', 'AZURE_ENDPOINT', 'AZURE_DEPLOYMENT', 'AZURE_API_VERSION'],
         'optional_env': [],
         'base_url': 'Custom Azure endpoint',
         'description': 'Azure-hosted OpenAI models with enterprise features',
         'status_check': 'azure_status'
-    },
-    'Anthropic': {
-        'models': ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307', 'claude-3-opus-20240229'],
-        'default_model': 'claude-3-5-sonnet-20241022',
-        'required_env': ['ANTHROPIC_API_KEY'],
-        'optional_env': [],
-        'base_url': 'https://api.anthropic.com',
-        'description': 'Anthropic Claude models with superior reasoning and safety',
-        'status_check': 'anthropic_status'
-    },
-    'Google Gemini': {
-        'models': ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'],
-        'default_model': 'gemini-1.5-pro',
-        'required_env': ['GOOGLE_API_KEY'],
-        'optional_env': ['GOOGLE_PROJECT_ID'],
-        'base_url': 'https://generativelanguage.googleapis.com',
-        'description': 'Google Gemini models with multimodal capabilities',
-        'status_check': 'google_status'
-    },
-    'Cohere': {
-        'models': ['command-r-plus', 'command-r', 'command'],
-        'default_model': 'command-r-plus',
-        'required_env': ['COHERE_API_KEY'],
-        'optional_env': [],
-        'base_url': 'https://api.cohere.ai',
-        'description': 'Cohere Command models optimized for business use cases',
-        'status_check': 'cohere_status'
-    },
-    'Mistral AI': {
-        'models': ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'],
-        'default_model': 'mistral-large-latest',
-        'required_env': ['MISTRAL_API_KEY'],
-        'optional_env': [],
-        'base_url': 'https://api.mistral.ai',
-        'description': 'Mistral AI models with European privacy standards',
-        'status_check': 'mistral_status'
-    },
-    'Ollama (Local)': {
-        'models': ['llama3.1:70b', 'llama3.1:8b', 'mixtral:8x7b', 'codellama:13b'],
-        'default_model': 'llama3.1:8b',
-        'required_env': ['OLLAMA_BASE_URL'],
-        'optional_env': ['OLLAMA_API_KEY'],
-        'base_url': 'http://localhost:11434',
-        'description': 'Local Ollama models for privacy and cost efficiency',
-        'status_check': 'ollama_status'
     }
 }
 
@@ -198,7 +153,7 @@ def test_model_connection(provider_name, model_name):
 def save_model_configuration(config_data):
     """Save model configuration to file."""
     try:
-        config_path = "client/model_configs.json"
+        config_path = "model_configs.json"
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         
         with open(config_path, 'w') as f:
@@ -210,7 +165,7 @@ def save_model_configuration(config_data):
 def load_model_configuration():
     """Load model configuration from file."""
     try:
-        config_path = "client/model_configs.json"
+        config_path = "model_configs.json"
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 return json.load(f)

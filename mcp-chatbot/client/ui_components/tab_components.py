@@ -1,3 +1,5 @@
+# Fixed ui_components/tab_components.py with unique keys
+
 import streamlit as st
 from config import MODEL_OPTIONS
 import traceback
@@ -9,7 +11,41 @@ from utils.async_helpers import reset_connection_state
 
 def create_configuration_tab():
     """Create the Configuration tab content."""
-    st.header("⚙️ Configuration")
+    # Import the enhanced configuration function
+    try:
+        from ui_components.enhanced_config import create_enhanced_configuration_tab
+        enhanced_available = True
+    except ImportError:
+        enhanced_available = False
+    
+    # Check if enhanced mode is enabled
+    enhanced_mode = st.session_state.get('enhanced_config_mode', False)
+    
+    # Mode toggle
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.header("⚙️ Configuration")
+    with col2:
+        if enhanced_available:
+            enhanced_mode = st.toggle(
+                "Enhanced Mode",
+                value=enhanced_mode,
+                help="Enable enhanced configuration with multiple provider support",
+                key="config_enhanced_mode_toggle"
+            )
+            st.session_state['enhanced_config_mode'] = enhanced_mode
+        else:
+            st.info("Enhanced mode not available")
+    
+    if enhanced_mode and enhanced_available:
+        # Use enhanced configuration
+        create_enhanced_configuration_tab()
+    else:
+        # Use original simple configuration
+        create_simple_configuration_tab()
+
+def create_simple_configuration_tab():
+    """Create the original simple Configuration tab content."""
     st.markdown("Configure your AI provider and model parameters.")
     
     # Provider Configuration Section
@@ -62,7 +98,8 @@ def create_configuration_tab():
                 
                 if all([azure_key, azure_endpoint, azure_deployment, azure_version]):
                     st.success("✅ Azure OpenAI configuration loaded")
-                    with st.expander("Azure Config Details"):
+                    # Use container instead of expander to avoid nesting
+                    if st.checkbox("Show Azure Config Details", key="show_azure_config_details"):
                         st.text(f"Endpoint: {azure_endpoint}")
                         st.text(f"Deployment: {azure_deployment}")
                         st.text(f"API Version: {azure_version}")
@@ -93,7 +130,8 @@ def create_configuration_tab():
                 max_value=10240,
                 value=params.get('max_tokens', 4096),
                 step=512,
-                help="Maximum number of tokens in the response"
+                help="Maximum number of tokens in the response",
+                key="config_max_tokens"
             )
             
         with col2:
@@ -103,11 +141,13 @@ def create_configuration_tab():
                 1.0, 
                 step=0.05, 
                 value=params.get('temperature', 1.0),
-                help="Controls randomness: 0.0 = deterministic, 1.0 = creative"
+                help="Controls randomness: 0.0 = deterministic, 1.0 = creative",
+                key="config_temperature"
             )
 
-    # Environment Variables Guide
-    with st.expander("📋 Environment Variables Guide", expanded=False):
+    # Environment Variables Guide - Use checkbox instead of expander
+    show_env_guide = st.checkbox("📋 Show Environment Variables Guide", key="config_show_env_guide")
+    if show_env_guide:
         st.markdown("""
         ### Required Environment Variables
         
@@ -138,6 +178,10 @@ def create_configuration_tab():
         Trusted_Connection=no
         ```
         """)
+
+    # Upgrade notice
+    with st.container(border=True):
+        st.info("💡 **Want more providers and advanced features?** Enable **Enhanced Mode** above for support of Anthropic Claude, Google Gemini, Cohere, Mistral AI, and local Ollama models!")
 
 
 def categorize_tools(tools):
@@ -191,13 +235,16 @@ def create_connection_tab():
             st.warning("🟡 Not connected to MCP servers")
             st.info("Click 'Connect to MCP Servers' below to establish connections")
 
-    # Server Configuration
+    # Server Configuration - Use checkbox instead of nested expanders
     with st.container(border=True):
         st.subheader("🖥️ Server Configuration")
         
-        # Display configured servers
-        for name, config in st.session_state.servers.items():
-            with st.expander(f"📡 {name} Server", expanded=False):
+        show_server_details = st.checkbox("Show Server Details", key="connection_show_server_details")
+        if show_server_details:
+            # Display configured servers
+            for name, config in st.session_state.servers.items():
+                st.markdown(f"### 📡 {name} Server")
+                
                 col1, col2 = st.columns([3, 1])
                 
                 with col1:
@@ -212,11 +259,13 @@ def create_connection_tab():
                         st.markdown("**Operations:** SQL queries, table operations")
                 
                 with col2:
-                    if st.button(f"🗑️ Remove", key=f"remove_{name}"):
+                    if st.button(f"🗑️ Remove {name}", key=f"connection_remove_{name}"):
                         del st.session_state.servers[name]
                         if st.session_state.get("agent"):
                             reset_connection_state()
                         st.rerun()
+                
+                st.divider()
 
     # Connection Controls
     with st.container(border=True):
@@ -226,7 +275,7 @@ def create_connection_tab():
         
         with col1:
             if not st.session_state.get("agent"):
-                if st.button("🔗 Connect to MCP Servers", type="primary", use_container_width=True):
+                if st.button("🔗 Connect to MCP Servers", type="primary", use_container_width=True, key="connection_connect_btn"):
                     with st.spinner("🔄 Connecting to MCP servers..."):
                         try:
                             connect_to_mcp_servers()
@@ -234,14 +283,15 @@ def create_connection_tab():
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error connecting to MCP servers: {str(e)}")
-                            with st.expander("🐛 Error Details"):
+                            show_error_details = st.checkbox("🐛 Show Error Details", key="connection_show_connection_error")
+                            if show_error_details:
                                 st.code(traceback.format_exc(), language="python")
             else:
                 st.success("✅ Already connected")
         
         with col2:
             if st.session_state.get("agent"):
-                if st.button("🔌 Disconnect from MCP Servers", use_container_width=True):
+                if st.button("🔌 Disconnect from MCP Servers", use_container_width=True, key="connection_disconnect_btn"):
                     with st.spinner("🔄 Disconnecting from MCP servers..."):
                         try:
                             reset_connection_state()
@@ -249,7 +299,8 @@ def create_connection_tab():
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error disconnecting: {str(e)}")
-                            with st.expander("🐛 Error Details"):
+                            show_error_details = st.checkbox("🐛 Show Error Details", key="connection_show_disconnect_error")
+                            if show_error_details:
                                 st.code(traceback.format_exc(), language="python")
             else:
                 st.info("No active connections")
@@ -258,7 +309,7 @@ def create_connection_tab():
     with st.container(border=True):
         st.subheader("🏥 Server Health Check")
         
-        if st.button("🔍 Check Server Health", use_container_width=True):
+        if st.button("🔍 Check Server Health", use_container_width=True, key="connection_health_check_btn"):
             for name, config in st.session_state.servers.items():
                 # Extract base URL for health check
                 base_url = config['url'].replace('/sse', '/health')
@@ -274,7 +325,8 @@ def create_connection_tab():
                     st.error(f"❌ {name}: Connection failed - {str(e)}")
 
     # Troubleshooting Guide
-    with st.expander("🛠️ Troubleshooting Guide", expanded=False):
+    show_troubleshooting = st.checkbox("🛠️ Show Troubleshooting Guide", key="connection_show_troubleshooting")
+    if show_troubleshooting:
         st.markdown("""
         ### Common Connection Issues
         
@@ -361,7 +413,7 @@ def display_tools_list(tools_list, category_title, category_key):
         "Select a Tool",
         options=[tool.name for tool in tools_list],
         index=0,
-        key=f"{category_key}_tool_selector"
+        key=f"tools_{category_key}_tool_selector"
     )
     
     if selected_tool_name:
@@ -371,7 +423,7 @@ def display_tools_list(tools_list, category_title, category_key):
         )
         
         if selected_tool:
-            display_tool_details(selected_tool)
+            display_tool_details(selected_tool, f"tools_{category_key}")
 
 
 def display_all_tools():
@@ -380,7 +432,7 @@ def display_all_tools():
     st.write(f"Total of **{len(st.session_state.tools)}** tools available.")
     
     # Search functionality
-    search_term = st.text_input("🔍 Search tools", placeholder="Enter tool name or description...")
+    search_term = st.text_input("🔍 Search tools", placeholder="Enter tool name or description...", key="tools_all_search")
     
     if search_term:
         filtered_tools = [
@@ -400,7 +452,7 @@ def display_all_tools():
         "Select a Tool",
         options=[tool.name for tool in filtered_tools],
         index=0,
-        key="all_tools_selector"
+        key="tools_all_tools_selector"
     )
     
     if selected_tool_name:
@@ -410,11 +462,14 @@ def display_all_tools():
         )
         
         if selected_tool:
-            display_tool_details(selected_tool)
+            display_tool_details(selected_tool, "tools_all")
 
 
-def display_tool_details(tool):
+def display_tool_details(tool, prefix="tools"):
     """Display detailed information about a specific tool."""
+    # Generate unique key for this tool
+    tool_safe_name = tool.name.replace('-', '_').replace(' ', '_').lower()
+    
     with st.container(border=True):
         st.subheader(f"🔧 {tool.name}")
         
@@ -435,9 +490,10 @@ def display_tool_details(tool):
         else:
             st.info("This tool doesn't require any parameters.")
         
-        # Additional details if available
+        # Additional details if available - use checkbox instead of expander with unique key
         if hasattr(tool, 'args_schema'):
-            with st.expander("📋 Raw Schema", expanded=False):
+            show_schema = st.checkbox("📋 Show Raw Schema", key=f"{prefix}_show_schema_{tool_safe_name}")
+            if show_schema:
                 schema = tool.args_schema
                 if isinstance(schema, dict):
                     st.json(schema)
@@ -456,4 +512,4 @@ def display_tool_details(tool):
               any(keyword in tool_desc_lower for keyword in ['sql', 'mssql', 'database', 'table', 'execute'])):
             st.warning("🗃️ MSSQL Database Tool")
         else:
-            st.secondary("🔧 General Tool")
+            st.info("🔧 General Tool")
