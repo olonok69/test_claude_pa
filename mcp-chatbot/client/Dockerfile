@@ -3,8 +3,7 @@ FROM python:3.11-slim-bullseye
 WORKDIR /app
 
 # Install OpenSSL for certificate generation
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
-RUN apt-get update && apt-get install -y dnsutils
+RUN apt-get update && apt-get install -y openssl dnsutils && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .
@@ -19,9 +18,7 @@ RUN mkdir -p keys ssl
 COPY . .
 
 # Copy SSL-related scripts and make them executable
-COPY generate_ssl_certificate.sh startup_ssl.sh ./
-RUN chmod +x generate_ssl_certificate.sh startup_ssl.sh
-RUN chmod 755 generate_ssl_certificate.sh startup_ssl.sh
+RUN chmod +x startup_ssl.sh generate_ssl_certificate.sh 2>/dev/null || true
 
 # Ensure proper permissions for directories
 RUN chmod 755 keys ssl
@@ -31,4 +28,4 @@ EXPOSE 8501
 EXPOSE 8502
 
 # Use the startup script as default command
-CMD ["./startup_ssl.sh"]
+CMD ["bash", "./startup_ssl.sh"]
