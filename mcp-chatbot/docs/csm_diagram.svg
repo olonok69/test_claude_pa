@@ -284,7 +284,7 @@
     <g transform="translate(20, 70)">
       <!-- Left column -->
       <text x="0" y="0" font-family="Arial, sans-serif" font-size="11" fill="white">
-        • Table Operations & Listing
+        • Table Operations &amp; Listing
       </text>
       <text x="0" y="15" font-family="Arial, sans-serif" font-size="11" fill="white">
         • SQL Query Execution
@@ -293,21 +293,21 @@
         • ODBC Driver Integration
       </text>
       <text x="0" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
-        • Data Sampling & Analysis
+        • Data Sampling &amp; Analysis
       </text>
       
       <!-- Right column -->
       <text x="240" y="0" font-family="Arial, sans-serif" font-size="11" fill="white">
-        • Schema Discovery & Validation
+        • Schema Discovery &amp; Validation
       </text>
       <text x="240" y="15" font-family="Arial, sans-serif" font-size="11" fill="white">
         • CRUD Operations (Create/Read/Update/Delete)
       </text>
       <text x="240" y="30" font-family="Arial, sans-serif" font-size="11" fill="white">
-        • Query Optimization & Performance
+        • Query Optimization &amp; Performance
       </text>
       <text x="240" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
-        • Health Monitoring & Error Handling
+        • Health Monitoring &amp; Error Handling
       </text>
     </g>
   </g>
@@ -339,18 +339,18 @@
     <g transform="translate(20, 70)">
       <!-- Left column -->
       <text x="0" y="0" font-family="Arial, sans-serif" font-size="11" fill="white">
-        • Relational Tables & Indexes
+        • Relational Tables &amp; Indexes
       </text>
       <text x="0" y="15" font-family="Arial, sans-serif" font-size="11" fill="white">
-        • Stored Procedures & Functions
+        • Stored Procedures &amp; Functions
       </text>
       
       <!-- Right column -->
       <text x="240" y="0" font-family="Arial, sans-serif" font-size="11" fill="white">
-        • ODBC Driver 18 & SSL/TLS Support
+        • ODBC Driver 18 &amp; SSL/TLS Support
       </text>
       <text x="240" y="15" font-family="Arial, sans-serif" font-size="11" fill="white">
-        • Enterprise Features & High Availability
+        • Enterprise Features &amp; High Availability
       </text>
     </g>
   </g>

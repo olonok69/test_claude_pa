@@ -21,6 +21,7 @@ COPY . .
 # Copy SSL-related scripts and make them executable
 COPY generate_ssl_certificate.sh startup_ssl.sh ./
 RUN chmod +x generate_ssl_certificate.sh startup_ssl.sh
+RUN chmod 755 generate_ssl_certificate.sh startup_ssl.sh
 
 # Ensure proper permissions for directories
 RUN chmod 755 keys ssl
