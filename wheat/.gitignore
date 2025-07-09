@@ -1,0 +1,60 @@
+# Environment variables
+.env
+
+# Data directories
+csm_data/
+csv/
+output/
+logs/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Classification directory
+classification/
+
+# Docker directories
+docker/ollama/
+docker/ollama/.ipynb_checkpoints/
+
+# App specific
+app/keys
+app/login
+PA/app/data
+PA/app/config/config.yaml
+PA/app/keys/.env
+
+# Node modules
+mcp-chatbot/servers/server5/node_modules/
+mcp-chatbot/client/keys/config.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Database
+*.db-journal
+*.db-wal
+
+# Streamlit
+.streamlit/secrets.toml
+*.log
+*.db
