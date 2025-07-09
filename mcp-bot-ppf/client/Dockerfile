@@ -14,22 +14,42 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create directories for authentication config, SSL certificates, and MCP servers
-RUN mkdir -p keys ssl mcp_servers/company_tagging/categories
+# Create directories for authentication config, SSL certificates, MCP servers, and wheat data
+RUN mkdir -p keys ssl mcp_servers/company_tagging/categories wheat_pages wheat_helpers mcp_pages
 
 # Copy the application code
 COPY . .
 
+# Copy wheat-specific files
+COPY wheat_pages/ ./wheat_pages/
+COPY wheat_helpers/ ./wheat_helpers/
+COPY database_setup/ ./database_setup/
+COPY wheat_production.db ./wheat_production.db
 
+# Copy MCP pages
+COPY mcp_pages/ ./mcp_pages/
 
 # Copy SSL-related scripts and make them executable
 COPY generate_ssl_certificate.sh startup_ssl.sh ./
 RUN chmod +x generate_ssl_certificate.sh startup_ssl.sh
 
-# Ensure proper permissions for directories (run as root to avoid permission issues)
-RUN chmod 755 keys ssl mcp_servers
+# Ensure proper permissions for directories
+RUN chmod 755 keys ssl mcp_servers wheat_pages wheat_helpers mcp_pages
 
-# Expose both HTTP and HTTPS ports (updated HTTPS port to 8503)
+# Initialize the wheat database if it doesn't exist
+# RUN if [ ! -f wheat_production.db ]; then \
+#         cd database_setup && \
+#         python database_setup.py && \
+#         python database_setup_exports.py && \
+#         python database_setup_imports.py && \
+#         python database_setup_stocks.py && \
+#         python database_setup_su_ratio.py && \
+#         python database_setup_acreage.py && \
+#         python database_setup_yield.py && \
+#         cd ..; \
+#     fi
+
+# Expose both HTTP and HTTPS ports
 EXPOSE 8501
 EXPOSE 8503
 
