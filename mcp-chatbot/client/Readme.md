@@ -1,34 +1,46 @@
-# MCP Client - AI Chat Interface with Authentication & Multi-Server Integration
+# MCP Client - AI Chat Interface with Enhanced Security & Multi-Server Integration
 
-A secure Streamlit-based chat application that connects to Model Context Protocol (MCP) servers to provide AI-powered interactions with Neo4j graph databases and HubSpot CRM systems. Features comprehensive user authentication, session management, and multi-provider AI support.
+A secure Streamlit-based chat application that connects to Model Context Protocol (MCP) servers to provide AI-powered interactions with MSSQL databases. Features comprehensive user authentication, session management, and multi-provider AI support with enhanced security.
 
 ## 🚀 Features
 
 ### **Security & Authentication**
-- **User Authentication System**: Secure login with bcrypt password hashing
-- **Session Management**: Persistent user sessions with configurable expiry
-- **Role-Based Access**: Pre-authorized email domains and user management
+- **Enhanced User Authentication**: Secure login with bcrypt password hashing and SQLite/YAML storage options
+- **Session Management**: Persistent user sessions with configurable expiry and isolation
+- **Role-Based Access**: Admin and regular user roles with permission management
+- **User Management Interface**: Full admin panel for user creation, editing, and management
 - **Secure Cookies**: Configurable authentication cookies with custom keys
+- **Audit Logging**: Comprehensive audit trail for security compliance
+- **Account Security**: Failed login tracking, account lockout, and password strength validation
 
 ### **AI & Integration**
 - **Multi-Provider AI Support**: Compatible with OpenAI and Azure OpenAI
-- **MCP Server Integration**: Connect to Neo4j and HubSpot MCP servers
-- **Real-time Chat Interface**: Interactive chat with conversation history
-- **Tool Execution Tracking**: Monitor and debug tool usage
-- **Schema-Aware Operations**: Automatic schema retrieval for intelligent queries
+- **MCP Server Integration**: Connect to MSSQL MCP servers
+- **Real-time Chat Interface**: Interactive chat with conversation history and user isolation
+- **Tool Execution Tracking**: Monitor and debug tool usage with detailed execution history
+- **Schema-Aware Operations**: Automatic schema retrieval for intelligent MSSQL queries
 
 ### **User Experience**
-- **Modern Tabbed Interface**: Configuration, Connections, Tools, and Chat tabs
-- **Responsive Design**: Modern UI with customizable themes and animations
-- **User Dashboard**: Personal information and session management
-- **Conversation Management**: Create, switch, and delete chat sessions
+- **Modern Tabbed Interface**: Configuration, Connections, Tools, Chat, and User Management tabs
+- **Responsive Design**: Modern UI with customizable themes, animations, and enhanced chat interface
+- **User Dashboard**: Personal information, session management, and activity tracking
+- **Conversation Management**: Create, switch, delete, and export chat sessions
+- **User Session Isolation**: Complete separation of user data and conversations
+
+### **Enterprise Features**
+- **SSL/HTTPS Support**: Optional SSL certificate generation and HTTPS deployment
+- **Enhanced Configuration**: Multiple storage backends (SQLite, YAML, encrypted JSON)
+- **Backup & Recovery**: Secure user data backup and restoration capabilities
+- **Migration Tools**: Scripts for migrating between authentication systems
+- **Docker Support**: Containerized deployment with SSL support
 
 ## 📋 Prerequisites
 
 - Python 3.11+
 - Docker (optional, for containerized deployment)
-- Active MCP servers for Neo4j and/or HubSpot
+- Active MSSQL MCP server
 - OpenAI API key or Azure OpenAI configuration
+- SQL Server ODBC Driver (for database connectivity)
 
 ## 🛠️ Installation
 
@@ -37,7 +49,7 @@ A secure Streamlit-based chat application that connects to Model Context Protoco
 1. **Clone the repository**
    ```bash
    git clone <your-repo-url>
-   cd client
+   cd mcp-chatbot/client
    ```
 
 2. **Install dependencies**
@@ -49,7 +61,7 @@ A secure Streamlit-based chat application that connects to Model Context Protoco
    
    Create a `.env` file in the client directory:
    ```env
-   # OpenAI Configuration (choose one)
+   # AI Provider Configuration (choose one)
    OPENAI_API_KEY=your_openai_api_key_here
    
    # OR Azure OpenAI Configuration
@@ -57,37 +69,39 @@ A secure Streamlit-based chat application that connects to Model Context Protoco
    AZURE_ENDPOINT=https://your-endpoint.openai.azure.com/
    AZURE_DEPLOYMENT=your_deployment_name
    AZURE_API_VERSION=2023-12-01-preview
+   
+   # Enhanced Security (optional)
+   USE_SQLITE=true
+   ENCRYPTION_PASSWORD=your_secure_encryption_password
+   SESSION_TIMEOUT_HOURS=24
+   MAX_LOGIN_ATTEMPTS=5
+   
+   # SSL Configuration (optional)
+   SSL_ENABLED=false
    ```
 
 4. **Set up user authentication**
    
-   Generate user credentials:
+   Generate user credentials (creates default users):
    ```bash
-   python simple_generate_password.py
+   python one_time/simple_generate_password.py
    ```
    
    This creates `keys/config.yaml` with default users:
-   - **admin**: very_Secure_p@ssword_123!
-   - **juan**: Larisa1000@
-   - **giovanni_romero**: MrRomero2024!
-   - **demo_user**: strong_password_123!
+   - **admin**: -------
+   - **juan**: -------
+   - **giovanni_romero**: -------
+   - **demo_user**: -------
 
-5. **Update MCP server configuration**
+5. **Configure MCP server**
    
-   Edit `servers_config.json` to match your MCP server endpoints:
+   The `servers_config.json` is pre-configured for MSSQL:
    ```json
    {
      "mcpServers": {
-       "Neo4j": {
+       "MSSQL": {
          "transport": "sse",
-         "url": "http://your-neo4j-mcp-server:8003/sse",
-         "timeout": 600,
-         "headers": null,
-         "sse_read_timeout": 900
-       },
-       "HubSpot": {
-         "transport": "sse",
-         "url": "http://your-hubspot-mcp-server:8004/sse",
+         "url": "http://mcpserver3:8008/sse",
          "timeout": 600,
          "headers": null,
          "sse_read_timeout": 900
@@ -101,6 +115,55 @@ A secure Streamlit-based chat application that connects to Model Context Protoco
    streamlit run app.py
    ```
 
+### Enhanced SQLite Authentication Setup
+
+1. **Enable SQLite authentication**
+   ```bash
+   # Set in your .env file
+   echo "USE_SQLITE=true" >> .env
+   ```
+
+2. **Migrate users to SQLite** (optional, for enhanced security)
+   ```bash
+   python migration_scripts/migrate_users_to_sqlite.py
+   ```
+
+3. **Test the enhanced authentication**
+   ```bash
+   python migration_scripts/simple_verification_script.py
+   ```
+
+### SSL/HTTPS Setup
+
+1. **Enable SSL in environment**
+   ```bash
+   echo "SSL_ENABLED=true" >> .env
+   ```
+
+2. **Generate SSL certificates**
+   ```bash
+   # Python method (cross-platform)
+   python generate_ssl_certificate.py
+   
+   # OR Shell method (Unix/Linux/Mac)
+   chmod +x generate_ssl_certificate.sh
+   ./generate_ssl_certificate.sh
+   ```
+
+3. **Start with SSL**
+   ```bash
+   # Using startup script
+   ./startup_ssl.sh
+   
+   # OR manual Streamlit command
+   streamlit run app.py \
+     --server.port=8502 \
+     --server.enableCORS=false \
+     --server.enableXsrfProtection=false \
+     --server.sslCertFile=ssl/cert.pem \
+     --server.sslKeyFile=ssl/private.key
+   ```
+
 ### Docker Deployment
 
 1. **Build the Docker image**
@@ -112,8 +175,21 @@ A secure Streamlit-based chat application that connects to Model Context Protoco
    ```bash
    docker run -p 8501:8501 \
      -e OPENAI_API_KEY=your_key \
+     -e USE_SQLITE=true \
      -v $(pwd)/.env:/app/.env \
      -v $(pwd)/keys:/app/keys \
+     -v $(pwd)/ssl:/app/ssl \
+     mcp-client
+   ```
+
+3. **Run with SSL enabled**
+   ```bash
+   docker run -p 8502:8502 \
+     -e SSL_ENABLED=true \
+     -e OPENAI_API_KEY=your_key \
+     -v $(pwd)/.env:/app/.env \
+     -v $(pwd)/keys:/app/keys \
+     -v $(pwd)/ssl:/app/ssl \
      mcp-client
    ```
 
@@ -121,7 +197,9 @@ A secure Streamlit-based chat application that connects to Model Context Protoco
 
 ### Getting Started
 
-1. **Launch the application** and navigate to `http://localhost:8501`
+1. **Launch the application** and navigate to:
+   - HTTP: `http://localhost:8501`
+   - HTTPS: `https://localhost:8502` (if SSL enabled)
 
 2. **Authenticate**:
    - Use the sidebar authentication panel
@@ -139,38 +217,50 @@ A secure Streamlit-based chat application that connects to Model Context Protoco
    - Check server health status
 
 5. **Explore available tools** (Tools tab):
-   - Browse Neo4j and HubSpot tools
+   - Browse MSSQL database tools
    - View tool documentation and parameters
    - Search for specific tools
 
 6. **Start chatting** (Chat tab):
-   - Ask questions about your Neo4j database or HubSpot CRM
+   - Ask questions about your MSSQL database
    - The AI will automatically use appropriate tools to answer
    - View tool execution history
 
+### User Management (Admin Only)
+
+1. **Access User Management** (Admin users only):
+   - Navigate to the "User Management" tab
+   - View all users, their roles, and activity
+
+2. **Add new users**:
+   - Fill in username, full name, and email
+   - Choose to generate secure password or set manually
+   - Assign admin privileges if needed
+
+3. **Manage existing users**:
+   - Edit user information
+   - Reset passwords
+   - Enable/disable accounts
+   - View audit logs
+
 ### Example Queries
 
-**Neo4j Database Operations:**
+**MSSQL Database Operations:**
 ```
-"Show me the database schema"
-"How many visitors do we have this year?"
-"Find all nodes connected to user John"
-"Create a new person node with name 'Alice'"
-```
-
-**HubSpot CRM Operations:**
-```
-"Get my user details"
-"Show me all contacts from this month"
-"Find companies in the technology industry"
-"List all open deals"
+"Show me all tables in the database"
+"Get the structure of the users table"
+"Count all records in the orders table"
+"Get 5 sample records from the customers table"
+"Find all orders from the last 30 days"
+"Show me the top 10 customers by order value"
 ```
 
 **General Queries:**
 ```
-"What tools are available?"
-"Explain the database structure"
-"Help me understand my CRM data"
+"What tables are available in the database?"
+"Help me understand the database structure"
+"Show me some sample data from the main tables"
+"What tools are available for database operations?"
 ```
 
 ### Advanced Configuration
@@ -184,11 +274,13 @@ A secure Streamlit-based chat application that connects to Model Context Protoco
 - Access conversation history in the sidebar
 - Delete conversations as needed
 - Switch between conversations seamlessly
+- Export chat history as JSON
 
-**User Management:**
+**User Session Management:**
 - View current user information in the sidebar
 - Monitor session time and activity
 - Secure logout functionality
+- Data isolation between users
 
 ## 🏗️ Architecture
 
@@ -196,28 +288,70 @@ A secure Streamlit-based chat application that connects to Model Context Protoco
 ┌───────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Streamlit UI    │    │   LangChain      │    │   MCP Servers   │
 │                   │◄──►│   Agent          │◄──►│                 │
-│  - Chat Interface │    │  - Tool Routing  │    │  - Neo4j        │
-│  - Authentication │    │  - LLM Provider  │    │  - HubSpot      │
-│  - Config Panel   │    │  - Memory Mgmt   │    │  - Custom Tools │
-│  - Tool Display   │    │                  │    │                 │
+│  - Chat Interface │    │  - Tool Routing  │    │  - MSSQL        │
+│  - Authentication │    │  - LLM Provider  │    │  - Custom Tools │
+│  - Config Panel   │    │  - Memory Mgmt   │    │                 │
+│  - User Mgmt      │    │                  │    │                 │
 └───────────────────┘    └──────────────────┘    └─────────────────┘
+        │                           │
+        └─────────────┬─────────────┘
+                      │
+            ┌─────────────────┐
+            │ Security Layer  │
+            │ - SQLite Auth   │
+            │ - Session Mgmt  │
+            │ - Audit Logs    │
+            │ - User Isolation│
+            └─────────────────┘
 ```
 
 ### Key Components
 
-- **`app.py`**: Main Streamlit application with authentication
+- **`app.py`**: Main Streamlit application with enhanced authentication
 - **`services/`**: Core business logic (AI, MCP, Chat management)
-- **`ui_components/`**: Reusable UI components and widgets
-- **`utils/`**: Helper functions and utilities
+- **`ui_components/`**: Reusable UI components and enhanced interfaces
+- **`utils/`**: Helper functions, security config, and utilities
 - **`config.py`**: Configuration management
-- **`simple_generate_password.py`**: User credential generation
+- **`migration_scripts/`**: Database migration and setup utilities
+- **`one_time/`**: One-time setup and configuration scripts
+
+### Directory Structure
+
+```
+mcp-chatbot/client/
+├── .streamlit/               # Streamlit configuration and CSS
+│   ├── config.toml          # Server configuration
+│   └── style.css            # Enhanced UI styling
+├── apps/                    # Application modules
+├── icons/                   # Application icons and logos
+│   ├── Logo.png            # Main application logo
+│   └── playground.png      # Page icon
+├── keys/                    # Security and authentication
+│   ├── config.yaml         # User authentication config
+│   ├── users.db           # SQLite user database (when enabled)
+│   └── migration_backup/   # Migration backups
+├── migration_scripts/       # Database migration tools
+├── one_time/               # Setup and configuration scripts
+├── services/               # Core business logic
+├── ssl/                    # SSL certificates (when generated)
+│   ├── cert.pem           # SSL certificate
+│   └── private.key        # SSL private key
+├── ui_components/          # UI components and interfaces
+├── utils/                  # Utilities and helpers
+├── app.py                 # Main application
+├── config.py              # Configuration management
+├── requirements.txt       # Python dependencies
+├── servers_config.json    # MCP server configuration
+└── Dockerfile            # Docker configuration
+```
 
 ### Authentication System
 
-- **Password Hashing**: bcrypt with salt for secure storage
-- **Session Management**: Streamlit-authenticator integration
-- **Cookie Configuration**: Secure, configurable authentication cookies
-- **User Validation**: Pre-authorized email domains
+- **Multi-Backend Support**: SQLite, YAML, encrypted JSON storage options
+- **Password Security**: bcrypt hashing with salt
+- **Session Management**: Secure token-based sessions
+- **User Isolation**: Complete separation of user data and conversations
+- **Audit Logging**: Comprehensive security event tracking
 
 ## 🔧 Configuration
 
@@ -227,65 +361,74 @@ The application supports multiple AI providers configured in `config.py`:
 
 ```python
 MODEL_OPTIONS = {
+    'Azure OpenAI': 'gpt-4.1',
     'OpenAI': 'gpt-4o',
-    'Azure OpenAI': 'gpt-4o-mini',
 }
 ```
 
 ### User Management
 
-User credentials are managed in `keys/config.yaml`. To add/modify users:
+User credentials are managed through multiple backends:
 
-1. Edit `simple_generate_password.py`
-2. Modify the `users` dictionary with desired credentials
-3. Run the script to generate new `config.yaml`
+**SQLite (Recommended):**
+- Set `USE_SQLITE=true` in `.env`
+- Users stored in `keys/users.db`
+- Full user management interface for admins
 
-Example user configuration:
-```python
-users = {
-    'new_user': {
-        'password': 'secure_password_123!',
-        'name': 'New User',
-        'email': 'newuser@company.com'
-    }
-}
-```
+**YAML (Legacy):**
+- Users defined in `keys/config.yaml`
+- Generated using `one_time/simple_generate_password.py`
+
+**Enhanced JSON (Advanced):**
+- Encrypted JSON storage
+- Set `USE_ENCRYPTION=true` in `.env`
 
 ### MCP Server Configuration
 
-Server endpoints are defined in `servers_config.json`. Each server requires:
-- **transport**: Connection method (typically "sse")
-- **url**: Server endpoint URL
-- **timeout**: Connection timeout in seconds
-- **sse_read_timeout**: Server-sent events timeout
+Server endpoints are defined in `servers_config.json`:
+```json
+{
+  "mcpServers": {
+    "MSSQL": {
+      "transport": "sse",
+      "url": "http://mcpserver3:8008/sse",
+      "timeout": 600,
+      "headers": null,
+      "sse_read_timeout": 900
+    }
+  }
+}
+```
 
-### Styling
+### Styling and UI
 
 Custom CSS is located in `.streamlit/style.css` for UI customization:
-- Tab styling and animations
-- Modern button designs
-- Responsive layout adjustments
-- Color scheme and themes
+- Enhanced chat interface with animations
+- Modern tab styling and layouts
+- Responsive design adjustments
+- Dark mode support
 
 ## 🔒 Security Features
 
 ### Authentication Security
+- **Multiple Storage Backends**: SQLite, YAML, encrypted JSON
 - **Bcrypt Hashing**: Industry-standard password protection
-- **Session Timeout**: Configurable session expiry (30 days default)
-- **Secure Cookies**: HTTPOnly and secure cookie attributes
-- **Access Control**: Pre-authorized email validation
+- **Session Management**: Configurable session expiry and secure tokens
+- **Account Security**: Failed login tracking and account lockout
+- **User Isolation**: Complete separation of user data and conversations
 
-### API Security
+### Application Security
+- **SSL/HTTPS Support**: Optional SSL certificate generation
 - **Environment Variables**: Secure credential storage
-- **Token Validation**: Real-time API key verification
-- **Input Sanitization**: XSS and injection protection
-- **Error Handling**: Secure error messages without data exposure
+- **Input Validation**: XSS and injection protection
+- **Audit Logging**: Comprehensive security event tracking
+- **Role-Based Access**: Admin and user permission levels
 
-### Session Management
-- **User Isolation**: Separate conversation histories per user
-- **Session Tracking**: Login time and activity monitoring
-- **Automatic Cleanup**: Session data management
-- **Cross-Session Security**: Protected against session hijacking
+### Data Security
+- **User Session Isolation**: Complete separation between users
+- **Encrypted Storage Options**: Multiple encryption backends
+- **Secure Backup**: Encrypted backup and recovery system
+- **Migration Tools**: Secure data migration between backends
 
 ## 🐛 Troubleshooting
 
@@ -294,13 +437,13 @@ Custom CSS is located in `.streamlit/style.css` for UI customization:
 **Authentication Problems:**
 - Verify `keys/config.yaml` exists and is properly formatted
 - Check user credentials match the generated passwords
-- Ensure email domains are in preauthorized list
+- For SQLite: ensure `USE_SQLITE=true` in `.env`
 - Clear browser cookies if experiencing login issues
 
 **Connection Problems:**
-- Verify MCP servers are running and accessible
+- Verify MSSQL MCP server is running and accessible
 - Check network connectivity to server endpoints
-- Ensure proper authentication credentials
+- Ensure proper MSSQL authentication credentials
 - Review `servers_config.json` for correct URLs
 
 **API Key Issues:**
@@ -309,62 +452,92 @@ Custom CSS is located in `.streamlit/style.css` for UI customization:
 - Verify endpoint URLs for Azure OpenAI
 - Test API connectivity outside the application
 
-**Tool Execution Errors:**
-- Review tool execution history in the expandable section
-- Check MCP server logs for detailed error information
-- Ensure database/CRM permissions are properly configured
-- Verify user has necessary access rights
+**SSL Certificate Issues:**
+- Run certificate generation script: `python generate_ssl_certificate.py`
+- Check file permissions on `ssl/` directory
+- Verify certificate and key files exist in `ssl/` folder
+- Use debug script: `./one_time/debug_ssl.sh`
 
-### Debug Mode
+### Debug Tools
 
-Enable debug information by:
-1. Using the "Tool Execution History" expander
-2. Checking browser console for JavaScript errors
-3. Monitoring Streamlit logs in terminal
-4. Reviewing authentication logs
+**Authentication Debugging:**
+```bash
+# Test SQLite authentication
+python migration_scripts/sqlite_auth_debug.py
 
-### Performance Optimization
+# Verify user migration
+python migration_scripts/simple_verification_script.py
 
-- Adjust `max_tokens` for faster responses
-- Use connection pooling for high-traffic scenarios
-- Monitor memory usage with multiple concurrent sessions
-- Optimize conversation history management
+# Check password issues
+python one_time/password_debug.py
+```
 
-## 🔄 User Management
+**SSL Debugging:**
+```bash
+# Debug SSL configuration
+./one_time/debug_ssl.sh
 
-### Adding New Users
+# Test certificate generation
+python generate_ssl_certificate.py
+```
 
-1. **Edit the password generation script**:
-   ```bash
-   # Edit simple_generate_password.py
-   # Add new users to the users dictionary
-   ```
+**General Debugging:**
+- Enable debug mode in the User Management tab
+- Check browser console for JavaScript errors
+- Monitor Streamlit logs in terminal
+- Review authentication and audit logs
 
-2. **Generate new configuration**:
-   ```bash
-   python simple_generate_password.py
-   ```
+## 🔄 Migration and Setup
 
-3. **Restart the application** to load new users
+### Database Migration
 
-### Managing Existing Users
+**From YAML to SQLite:**
+```bash
+# Full migration with backup
+python migration_scripts/migrate_users_to_sqlite.py
 
-- **Password Changes**: Regenerate `config.yaml` with new passwords
-- **Email Updates**: Modify user information in the generation script
-- **Access Revocation**: Remove users from the configuration and regenerate
+# Quick verification
+python migration_scripts/simple_verification_script.py
+```
 
-### Session Management
+**Fix Authentication Issues:**
+```bash
+# Comprehensive authentication fix
+python one_time/comprehensive_fix.py
 
-- **View Active Sessions**: Check sidebar for current user information
-- **Session Timeout**: Configure in `config.yaml` (expiry_days)
-- **Forced Logout**: Clear cookies or restart application
+# Manual password reset
+python one_time/fix_sqlite_auth.py
+```
 
-## 🔄 Version History
+### User Management
 
-- **v2.0.0**: Added comprehensive authentication system, enhanced UI
-- **v1.0.0**: Initial release with Neo4j and HubSpot MCP integration
-- Basic chat interface with multi-provider AI support
-- Tool execution tracking and conversation management
+**Add New Users:**
+- Use the User Management tab as admin
+- Or run: `python one_time/promote_admin.py`
+
+**Reset Passwords:**
+- Through User Management interface
+- Or manually using debug scripts
+
+## 📊 Monitoring and Maintenance
+
+### User Activity
+- View user statistics in the sidebar
+- Monitor session activity and login patterns
+- Export user data for analysis
+- Track conversation and message counts
+
+### System Health
+- Monitor MCP server connections
+- Check AI provider status
+- Review audit logs regularly
+- Monitor failed login attempts
+
+### Backup and Recovery
+- Enable automatic backups in User Management
+- Export user data regularly
+- Test backup restoration procedures
+- Monitor backup file encryption
 
 ## 🤝 Contributing
 
@@ -383,206 +556,10 @@ Enable debug information by:
 - Test authentication edge cases and error conditions
 
 ---
-# 🔧 SSL Setup Fix Instructions
 
-The issue you're experiencing is that the Streamlit command parameters aren't being properly passed. Here's how to fix it:
+**Version**: 2.1.0  
+**Last Updated**: January 2025  
+**Security**: Enhanced SQLite authentication, bcrypt password hashing, user session isolation  
+**Compatibility**: Python 3.11+, Streamlit 1.44+, MSSQL Server integration
 
-## 🚀 Quick Fix Steps
-
-### 1. Create the startup script in your client directory
-
-Create `client/startup_ssl.sh`:
-```bash
-cd client
-cat > startup_ssl.sh << 'EOF'
-#!/bin/bash
-
-# Startup script for Streamlit with SSL support
-echo "🚀 CSM MCP Servers - Starting Application..."
-
-if [ "$SSL_ENABLED" = "true" ]; then
-    echo "🔒 SSL mode enabled"
-    
-    # Generate certificates if they don't exist
-    if [ ! -f "ssl/cert.pem" ] || [ ! -f "ssl/private.key" ]; then
-        echo "📝 Generating SSL certificates..."
-        mkdir -p ssl
-        
-        if [ -f "generate_ssl_certificate.sh" ]; then
-            chmod +x generate_ssl_certificate.sh
-            ./generate_ssl_certificate.sh
-        else
-            echo "❌ Certificate generation script not found"
-            echo "🔄 Falling back to HTTP mode"
-            SSL_ENABLED="false"
-        fi
-    else
-        echo "✅ SSL certificates found"
-    fi
-    
-    # Start with HTTPS if certificates exist
-    if [ "$SSL_ENABLED" = "true" ] && [ -f "ssl/cert.pem" ] && [ -f "ssl/private.key" ]; then
-        echo "🔒 Starting Streamlit with HTTPS on port 8502..."
-        echo "📱 Access URL: https://localhost:8502"
-        echo "⚠️  Browser will show security warning for self-signed certificate"
-        echo ""
-        
-        exec streamlit run app.py \
-            --server.port=8502 \
-            --server.address=0.0.0.0 \
-            --server.enableCORS=false \
-            --server.enableXsrfProtection=false \
-            --server.sslCertFile=ssl/cert.pem \
-            --server.sslKeyFile=ssl/private.key
-    fi
-fi
-
-# Default to HTTP mode
-echo "🌐 Starting Streamlit with HTTP on port 8501..."
-echo "📱 Access URL: http://localhost:8501"
-
-exec streamlit run app.py \
-    --server.port=8501 \
-    --server.address=0.0.0.0
-EOF
-
-chmod +x startup_ssl.sh
-```
-
-### 2. Create the debug script
-
-Create `client/debug_ssl.sh`:
-```bash
-cat > debug_ssl.sh << 'EOF'
-#!/bin/bash
-
-echo "🔍 SSL Debug Information"
-echo "========================"
-
-echo "📊 Environment Variables:"
-echo "SSL_ENABLED: ${SSL_ENABLED:-not set}"
-echo ""
-
-echo "📁 SSL Directory Status:"
-if [ -d "ssl" ]; then
-    echo "✅ ssl/ directory exists"
-    ls -la ssl/
-else
-    echo "❌ ssl/ directory does not exist"
-fi
-echo ""
-
-echo "📄 SSL Files Status:"
-if [ -f "ssl/cert.pem" ]; then
-    echo "✅ Certificate file exists: ssl/cert.pem"
-else
-    echo "❌ Certificate file missing: ssl/cert.pem"
-fi
-
-if [ -f "ssl/private.key" ]; then
-    echo "✅ Private key file exists: ssl/private.key"
-else
-    echo "❌ Private key file missing: ssl/private.key"
-fi
-
-if [ -f "ssl/cert.pem" ]; then
-    echo "📅 Certificate Validity:"
-    openssl x509 -in ssl/cert.pem -dates -noout
-fi
-EOF
-
-chmod +x debug_ssl.sh
-```
-
-### 3. Update your Dockerfile
-
-Replace the CMD line in `client/Dockerfile`:
-```dockerfile
-# Replace the last line with:
-CMD ["./startup_ssl.sh"]
-```
-
-### 4. Update docker-compose.yml
-
-Replace the command section for hostclient:
-```yaml
-hostclient:
-  # ... other configuration ...
-  command: ["./startup_ssl.sh"]
-```
-
-### 5. Test the fix
-
-```bash
-# Stop current containers
-docker-compose down
-
-# Rebuild with SSL enabled
-echo "SSL_ENABLED=true" >> .env
-docker-compose up --build
-
-# Check if it's working
-curl -k https://localhost:8502
-```
-
-## 🔍 Debug Steps
-
-If it's still not working, run these debug commands:
-
-### Check the container logs
-```bash
-docker-compose logs hostclient
-```
-
-### Debug inside the container
-```bash
-# Access the running container
-docker-compose exec hostclient bash
-
-# Run debug script
-./debug_ssl.sh
-
-# Check if certificates exist
-ls -la ssl/
-
-# Test certificate
-openssl x509 -in ssl/cert.pem -text -noout | head -10
-```
-
-### Manual certificate generation
-```bash
-# Inside the container or locally
-cd client
-mkdir -p ssl
-./generate_ssl_certificate.sh
-
-# Verify files were created
-ls -la ssl/
-```
-
-## 🚀 Expected Output
-
-When SSL is working correctly, you should see:
-```
-🔒 Starting Streamlit with HTTPS on port 8502...
-📱 Access URL: https://localhost:8502
-
-You can now view your Streamlit app in your browser.
-URL: https://0.0.0.0:8502
-```
-
-And you should be able to access: https://localhost:8502
-
-## 🐛 Common Issues
-
-1. **Port 8501 instead of 8502**: The startup script isn't being used
-2. **Certificate not found**: Generation script didn't run properly
-3. **Permission denied**: Script isn't executable (`chmod +x startup_ssl.sh`)
-4. **SSL parameters ignored**: Using wrong command format in docker-compose
-
-
-
-**Version**: 2.0.0  
-**Last Updated**: June 2025  
-**Security**: Streamlit Authenticator 0.3.2, bcrypt password hashing  
-**Compatibility**: Python 3.11+, Streamlit 1.44+
+**Enterprise Features**: SSL/HTTPS support, user management interface, audit logging, backup/recovery, migration tools
