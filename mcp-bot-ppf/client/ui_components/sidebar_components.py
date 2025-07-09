@@ -160,6 +160,9 @@ def create_history_chat_container():
         return
 
     st.subheader("💬 Chat History")
+    # Ensure history_chats is initialized
+    if "history_chats" not in st.session_state:
+        st.session_state["history_chats"] = []
 
     history_container = st.container(height=300, border=True)
     with history_container:
