@@ -99,20 +99,20 @@ with st.sidebar:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🌾 Production", use_container_width=True):
-                st.switch_page("wheat_pages/1_wheat_production.py")
+                st.switch_page("pages/1_wheat_production.py")
             if st.button("📥 Imports", use_container_width=True):
-                st.switch_page("wheat_pages/3_wheat_imports.py")
+                st.switch_page("pages/3_wheat_imports.py")
             if st.button("📊 S/U Ratio", use_container_width=True):
-                st.switch_page("wheat_pages/5_stock_to_use_ratio.py")
+                st.switch_page("pages/5_stock_to_use_ratio.py")
             if st.button("🌱 Yield", use_container_width=True):
-                st.switch_page("wheat_pages/7_wheat_yield.py")
+                st.switch_page("pages/7_wheat_yield.py")
         with col2:
             if st.button("📦 Exports", use_container_width=True):
-                st.switch_page("wheat_pages/2_wheat_exports.py")
+                st.switch_page("pages/2_wheat_exports.py")
             if st.button("🏢 Stocks", use_container_width=True):
-                st.switch_page("wheat_pages/4_wheat_stocks.py")
+                st.switch_page("pages/4_wheat_stocks.py")
             if st.button("🌾 Acreage", use_container_width=True):
-                st.switch_page("wheat_pages/6_wheat_acreage.py")
+                st.switch_page("pages/6_wheat_acreage.py")
 
     st.markdown("---")
 

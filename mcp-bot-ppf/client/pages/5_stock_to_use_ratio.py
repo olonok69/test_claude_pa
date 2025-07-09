@@ -93,25 +93,25 @@ with st.sidebar:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🌾 Production", use_container_width=True):
-            st.switch_page("wheat_pages/1_wheat_production.py")
+            st.switch_page("pages/1_wheat_production.py")
         if st.button("📥 Imports", use_container_width=True):
-            st.switch_page("wheat_pages/3_wheat_imports.py")
+            st.switch_page("pages/3_wheat_imports.py")
         if st.button("🌾 Acreage", use_container_width=True):
-            st.switch_page("wheat_pages/6_wheat_acreage.py")
+            st.switch_page("pages/6_wheat_acreage.py")
     with col2:
         if st.button("📦 Exports", use_container_width=True):
-            st.switch_page("wheat_pages/2_wheat_exports.py")
+            st.switch_page("pages/2_wheat_exports.py")
         if st.button("🏢 Stocks", use_container_width=True):
-            st.switch_page("wheat_pages/4_wheat_stocks.py")
+            st.switch_page("pages/4_wheat_stocks.py")
         if st.button("🌱 Yield", use_container_width=True):
-            st.switch_page("wheat_pages/7_wheat_yield.py")
+            st.switch_page("pages/7_wheat_yield.py")
 
     st.markdown("---")
 
     # AI Tools section
     st.markdown("### 🤖 AI & MCP Tools")
     if st.button("💬 Launch AI Chat", use_container_width=True):
-        st.switch_page("mcp_pages/mcp_app.py")
+        st.switch_page("pages/8_mcp_app.py")
 
     st.markdown("---")
     st.markdown("### 📊 S/U Ratio Dashboard")
