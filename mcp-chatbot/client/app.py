@@ -1,4 +1,4 @@
-# Updated app.py with enhanced authentication and user session isolation
+# FIXED VERSION - app.py with proper SQLite authentication integration
 
 import streamlit as st
 import asyncio
@@ -14,11 +14,13 @@ from utils.async_helpers import on_shutdown
 from apps import mcp_app
 from pathlib import Path
 from utils.logger_util import set_up_logging
+
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 Path(LOGS_PATH).mkdir(parents=True, exist_ok=True)
 script_name = os.path.join(LOGS_PATH, "debug.log")
-# create loggers
+
+# Set up logging
 if not set_up_logging(
     console_log_output="stdout",
     console_log_level="info",
@@ -33,14 +35,13 @@ if not set_up_logging(
 
 # Enhanced security imports (with fallback)
 try:
-    from utils.enhanced_security_config import StreamlitSecureAuth, SecurityConfig
+    from utils.enhanced_security_config import StreamlitSecureAuth, SecurityConfig, migrate_yaml_users_to_sqlite
     ENHANCED_SECURITY_AVAILABLE = True
     logging.info("✅ Enhanced security module loaded successfully")
 except ImportError as e:
     ENHANCED_SECURITY_AVAILABLE = False
     logging.info(f"⚠️  Enhanced security module not available: {str(e)}")
     logging.info("📋 Using YAML authentication fallback")
-
 
 # Configure logging early
 logging.getLogger('watchdog.observers.inotify_buffer').setLevel(logging.WARNING)
@@ -59,108 +60,115 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Load custom CSS with enhanced chat styles
+# Load custom CSS
 css_path = os.path.join('.', '.streamlit', 'style.css')
 if os.path.exists(css_path):
     try:
         with open(css_path, 'r', encoding='utf-8') as f:
             css_content = f.read()
-        
-        # Add enhanced chat styles
-        enhanced_chat_css = """
-        /* Enhanced Chat Interface Styles */
-        .chat-message-user {
-            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-            padding: 12px 16px;
-            border-radius: 12px 12px 4px 12px;
-            margin: 8px 0 12px 15%;
-            border-left: 4px solid #2196f3;
-            box-shadow: 0 2px 4px rgba(33, 150, 243, 0.1);
-            word-wrap: break-word;
-            animation: slideInRight 0.3s ease-out;
-        }
-
-        .chat-message-assistant {
-            background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
-            padding: 12px 16px;
-            border-radius: 12px 12px 12px 4px;
-            margin: 8px 15% 12px 0;
-            border-left: 4px solid #9c27b0;
-            box-shadow: 0 2px 4px rgba(156, 39, 176, 0.1);
-            word-wrap: break-word;
-            animation: slideInLeft 0.3s ease-out;
-        }
-
-        @keyframes slideInRight {
-            from { opacity: 0; transform: translateX(20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
-        @keyframes slideInLeft {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
-        .stContainer[data-testid="metric-container"] {
-            background: linear-gradient(135deg, rgba(47, 46, 120, 0.05) 0%, rgba(76, 75, 154, 0.05) 100%);
-            border-radius: 8px;
-            padding: 12px;
-            border: 1px solid rgba(47, 46, 120, 0.1);
-        }
-        """
-        
-        combined_css = css_content + enhanced_chat_css
-        st.markdown(f'<style>{combined_css}</style>', unsafe_allow_html=True)
-    except UnicodeDecodeError:
-        # Fallback for encoding issues
-        try:
-            with open(css_path, 'r', encoding='latin1') as f:
-                st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-        except Exception as e:
-            logging.warning(f"Warning: Could not load CSS file: {str(e)}")
+        st.markdown(f'<style>{css_content}</style>', unsafe_allow_html=True)
+    except Exception as e:
+        logging.warning(f"Warning: Could not load CSS file: {str(e)}")
 
 
 def load_config():
-    """Load authentication configuration from secure storage or YAML fallback."""
+    """FIXED VERSION - Load authentication configuration from secure storage or YAML fallback."""
     try:
         # Check if SQLite is enabled and available
         use_sqlite = os.getenv('USE_SQLITE', 'false').lower() == 'true'
         
         if use_sqlite and ENHANCED_SECURITY_AVAILABLE:
             logging.info("🔒 Using SQLite authentication")
+            
+            # Check if migration is needed
+            yaml_path = os.path.join('keys', 'config.yaml')
+            sqlite_path = os.path.join('keys', 'users.db')
+            
+            # If YAML exists but SQLite doesn't have migrated users, migrate
+            if (os.path.exists(yaml_path) and 
+                (not os.path.exists(sqlite_path) or should_migrate_users())):
+                
+                logging.info("🔄 Migrating users from YAML to SQLite...")
+                migration_success = migrate_yaml_users_to_sqlite()
+                
+                if migration_success:
+                    logging.info("✅ Migration completed successfully")
+                else:
+                    logging.error("❌ Migration failed, falling back to YAML")
+                    return load_yaml_config()
+            
             # Use enhanced SQLite authentication
-            secure_auth = StreamlitSecureAuth('sqlite')
-            return secure_auth.get_config_for_streamlit_authenticator()
+            try:
+                secure_auth = StreamlitSecureAuth('sqlite')
+                config = secure_auth.get_config_for_streamlit_authenticator()
+                
+                # Validate config has users
+                if not config.get('credentials', {}).get('usernames'):
+                    logging.error("❌ No users found in SQLite, falling back to YAML")
+                    return load_yaml_config()
+                
+                logging.info(f"✅ SQLite config loaded with {len(config['credentials']['usernames'])} users")
+                return config
+                
+            except Exception as e:
+                logging.error(f"❌ SQLite authentication failed: {str(e)}")
+                logging.info("📋 Falling back to YAML authentication")
+                return load_yaml_config()
         else:
             logging.info("📋 Using YAML authentication")
-            # Fallback to YAML configuration
-            config_path = os.path.join('keys', 'config.yaml')
-            if not os.path.exists(config_path):
-                st.error("❌ Configuration file not found at keys/config.yaml")
-                st.info("Please run: python simple_generate_password.py")
-                st.stop()
-            
-            with open(config_path, 'r', encoding='utf-8') as file:
-                return yaml.load(file, Loader=SafeLoader)
+            return load_yaml_config()
                 
-    except FileNotFoundError:
-        st.error("❌ Configuration not found. Please check your setup.")
-        st.info("Run the password generation script: python simple_generate_password.py")
-        st.stop()
     except Exception as e:
-        st.error(f"❌ Error loading configuration: {str(e)}")
-        if "enhanced_security_config" in str(e):
-            st.info("💡 Enhanced security features not available. Using YAML authentication.")
-            # Force YAML fallback
-            try:
-                config_path = os.path.join('keys', 'config.yaml')
-                with open(config_path, 'r', encoding='utf-8') as file:
-                    return yaml.load(file, Loader=SafeLoader)
-            except Exception as fallback_error:
-                st.error(f"❌ YAML fallback also failed: {str(fallback_error)}")
-                st.stop()
-        else:
+        logging.error(f"❌ Error in load_config: {str(e)}")
+        return load_yaml_config()
+
+
+def should_migrate_users() -> bool:
+    """Check if users need to be migrated from YAML to SQLite."""
+    try:
+        sqlite_path = os.path.join('keys', 'users.db')
+        if not os.path.exists(sqlite_path):
+            return True
+        
+        import sqlite3
+        conn = sqlite3.connect(sqlite_path)
+        cursor = conn.cursor()
+        
+        # Check if any users exist
+        cursor.execute('SELECT COUNT(*) FROM users')
+        user_count = cursor.fetchone()[0]
+        
+        # Check if any users are marked as migrated
+        cursor.execute('SELECT COUNT(*) FROM users WHERE migrated_from_yaml = TRUE')
+        migrated_count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        # If no users or no migrated users, need migration
+        return user_count == 0 or migrated_count == 0
+        
+    except Exception as e:
+        logging.error(f"Error checking migration status: {str(e)}")
+        return True
+
+
+def load_yaml_config():
+    """Load YAML configuration as fallback."""
+    try:
+        config_path = os.path.join('keys', 'config.yaml')
+        if not os.path.exists(config_path):
+            st.error("❌ Configuration file not found at keys/config.yaml")
+            st.info("Please run: python simple_generate_password.py")
             st.stop()
+        
+        with open(config_path, 'r', encoding='utf-8') as file:
+            config = yaml.load(file, Loader=SafeLoader)
+            logging.info(f"✅ YAML config loaded with {len(config.get('credentials', {}).get('usernames', {}))} users")
+            return config
+            
+    except Exception as e:
+        st.error(f"❌ Error loading YAML configuration: {str(e)}")
+        st.stop()
 
 
 def initialize_authentication_state():
@@ -174,7 +182,7 @@ def initialize_authentication_state():
 
 
 def handle_authentication():
-    """Handle user authentication in the sidebar with enhanced user session management."""
+    """FIXED VERSION - Handle user authentication with proper SQLite integration."""
     try:
         # Load configuration
         config = load_config()
@@ -198,6 +206,13 @@ def handle_authentication():
         with st.sidebar:
             st.markdown("## 🔐 Authentication")
             
+            # Show current storage method
+            use_sqlite = os.getenv('USE_SQLITE', 'false').lower() == 'true'
+            if use_sqlite and ENHANCED_SECURITY_AVAILABLE:
+                st.info("🔒 SQLite Authentication Active")
+            else:
+                st.info("📋 YAML Authentication Active")
+            
             # Show login form or logout button based on authentication status
             if st.session_state["authentication_status"] is None:
                 # Show login form
@@ -205,9 +220,16 @@ def handle_authentication():
                     authenticator.login()
                 except Exception as e:
                     st.error(f"Authentication error: {str(e)}")
+                    logging.error(f"Authentication widget error: {str(e)}")
                     
                 if st.session_state["authentication_status"] is False:
                     st.error("❌ Username/password is incorrect")
+                    
+                    # Show debugging info for SQLite
+                    if use_sqlite and ENHANCED_SECURITY_AVAILABLE:
+                        with st.expander("🔧 SQLite Debug Info", expanded=False):
+                            show_sqlite_debug_info()
+                            
                 elif st.session_state["authentication_status"] is None:
                     st.warning("⚠️ Please enter your username and password")
                     
@@ -253,8 +275,62 @@ def handle_authentication():
         
     except Exception as e:
         st.error(f"❌ Authentication system error: {str(e)}")
+        logging.error(f"Authentication system error: {str(e)}")
         st.info("Please check your configuration and try again.")
         return None
+
+
+def show_sqlite_debug_info():
+    """Show SQLite debugging information."""
+    try:
+        from utils.enhanced_security_config import SecureUserStore
+        
+        store = SecureUserStore('sqlite')
+        
+        st.markdown("**SQLite Database Status:**")
+        
+        # Check if database exists
+        import sqlite3
+        db_path = store.db_path
+        if os.path.exists(db_path):
+            st.success("✅ Database file exists")
+            
+            # Get user count
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT COUNT(*) FROM users')
+            total_users = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM users WHERE is_admin = TRUE')
+            admin_users = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT username, email, is_admin FROM users LIMIT 5')
+            sample_users = cursor.fetchall()
+            
+            conn.close()
+            
+            st.info(f"👥 Total users: {total_users}")
+            st.info(f"👑 Admin users: {admin_users}")
+            
+            if sample_users:
+                st.markdown("**Sample Users:**")
+                for username, email, is_admin in sample_users:
+                    role = "👑 Admin" if is_admin else "👤 User"
+                    st.write(f"• {username} ({email}) - {role}")
+            
+            # Test password verification
+            if st.button("🧪 Test Admin Login"):
+                success, user_data, message = store.authenticate_user('admin', 'admin_password_change_immediately')
+                if success:
+                    st.success(f"✅ Direct auth successful: {user_data['name']}")
+                else:
+                    st.error(f"❌ Direct auth failed: {message}")
+        else:
+            st.error("❌ Database file not found")
+            
+    except Exception as e:
+        st.error(f"❌ Debug error: {str(e)}")
 
 
 def handle_authentication_state_change(prev_auth_status, current_auth_status, 
@@ -336,21 +412,6 @@ def show_authentication_required_message():
         
         ---
         
-        #### 🆕 Enhanced Features:
-        
-        **Improved Chat Interface:**
-        - Scrollable conversation area with better message styling
-        - Copy functionality for messages
-        - Tools information panel at the bottom
-        - Better visual distinction between user and assistant messages
-        
-        **User Session Management:**
-        - Complete isolation between different users
-        - Personal chat history that doesn't mix with other users
-        - Secure session handling with automatic cleanup
-        
-        ---
-        
         #### 🔑 Authentication
         
         Use the **Authentication** section in the sidebar to log in with your credentials.
@@ -359,38 +420,35 @@ def show_authentication_required_message():
         If you don't have access credentials, please contact your administrator.
         """)
         
-        # Add visual elements with updated info
-        st.info("👈 Use the sidebar to authenticate and start using the enhanced database platform")
+        # Add authentication troubleshooting
+        use_sqlite = os.getenv('USE_SQLITE', 'false').lower() == 'true'
+        if use_sqlite and ENHANCED_SECURITY_AVAILABLE:
+            with st.expander("🔧 SQLite Authentication Troubleshooting", expanded=False):
+                st.markdown("""
+                **If you're having trouble logging in with SQLite authentication:**
+                
+                1. **Default Admin Credentials:**
+                   - Username: `admin`
+                   - Password: `admin_password_change_immediately`
+                
+                2. **Check Migration Status:**
+                   - SQLite database should be automatically populated
+                   - Users are migrated from YAML config if it exists
+                
+                3. **Fallback to YAML:**
+                   - Set `USE_SQLITE=false` in your .env file
+                   - Restart the application
+                
+                4. **Manual User Creation:**
+                   - Run: `python promote_admin.py` 
+                   - Or check the User Management tab as admin
+                """)
         
-        # Add quick stats about the platform
-        with st.container():
-            st.markdown("#### 📈 Platform Overview")
-            col_a, col_b, col_c = st.columns(3)
-            
-            with col_a:
-                st.metric(
-                    label="🗃️ Database Types",
-                    value="1",
-                    help="MSSQL Server"
-                )
-            
-            with col_b:
-                st.metric(
-                    label="🧰 Tool Categories", 
-                    value="4+",
-                    help="SQL operations and management"
-                )
-            
-            with col_c:
-                st.metric(
-                    label="👥 User Isolation",
-                    value="✅ Secure",
-                    help="Complete session isolation between users"
-                )
+        st.info("👈 Use the sidebar to authenticate and start using the enhanced database platform")
 
 
 def main():
-    """Main application function with enhanced authentication and user session management."""
+    """FIXED VERSION - Main application function with enhanced authentication."""
     try:
         # Initialize session state for event loop
         if "loop" not in st.session_state:
@@ -443,5 +501,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
