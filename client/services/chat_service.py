@@ -105,7 +105,7 @@ def get_current_chat(chat_id: str, username: str = None) -> List[Dict]:
 
 
 def _append_message_to_session(msg: dict) -> None:
-    """Append message to the current user's chat session."""
+    """Append message to the current user's chat session with enhanced tool handling."""
     current_user = st.session_state.get('username')
     if not current_user:
         return
@@ -132,6 +132,13 @@ def _append_message_to_session(msg: dict) -> None:
     msg['timestamp'] = datetime.now().isoformat()
     msg['user'] = current_user
     
+    # Handle tool execution messages specially
+    if msg.get("role") == "tool":
+        msg['message_type'] = 'tool_execution'
+        # Ensure tool messages have required fields
+        if 'tool_name' not in msg:
+            msg['tool_name'] = msg.get('tool', 'Unknown Tool')
+    
     # Update user-specific messages
     user_messages.append(msg)
     st.session_state[user_messages_key] = user_messages
@@ -152,6 +159,19 @@ def _append_message_to_session(msg: dict) -> None:
     
     st.session_state[user_history_key] = user_chats
     st.session_state["history_chats"] = user_chats  # Update global reference
+
+
+def append_tool_execution_message(tool_name: str, tool_input: Dict, tool_output: str) -> None:
+    """Append a tool execution message to the chat history."""
+    tool_message = {
+        "role": "tool",
+        "tool_name": tool_name,
+        "tool_input": tool_input,
+        "content": tool_output,
+        "timestamp": datetime.now().isoformat(),
+        "message_type": "tool_execution"
+    }
+    _append_message_to_session(tool_message)
 
 
 def create_chat() -> Dict:
@@ -298,6 +318,9 @@ def get_conversation_summary(max_messages: int = 10) -> str:
             summary_parts.append(f"User: {msg['content'][:100]}...")
         elif msg["role"] == "assistant" and "content" in msg and msg["content"]:
             summary_parts.append(f"Assistant: {msg['content'][:100]}...")
+        elif msg["role"] == "tool":
+            tool_name = msg.get('tool_name', 'Unknown Tool')
+            summary_parts.append(f"Tool ({tool_name}): {msg['content'][:50]}...")
     
     return "\n".join(summary_parts)
 
@@ -322,8 +345,10 @@ def get_clean_conversation_memory() -> List:
                 elif (msg["role"] == "assistant" and 
                       "content" in msg and 
                       msg["content"] and 
-                      "tool" not in msg):  # Only regular assistant messages, not tool messages
+                      msg.get("message_type") != "tool_execution"):  # Exclude tool execution messages from LLM memory
                     conversation_messages.append(AIMessage(content=msg["content"]))
+                # Note: Tool messages are not included in LLM conversation memory
+                # but are stored separately in chat history for display purposes
     
     return conversation_messages
 
@@ -375,7 +400,7 @@ class ChatService:
             if not st.session_state.get("agent"):
                 return "❌ No MCP agent available. Please connect to MCP servers first."
             
-            # Get conversation history for current user
+            # Get conversation history for current user (excluding tool messages)
             conversation_messages = get_clean_conversation_memory()
             
             # Add the current user message
@@ -383,6 +408,9 @@ class ChatService:
             
             # Run the agent with conversation context
             response = run_async(self._run_agent_async(conversation_messages))
+            
+            # Handle tool executions in the response if any
+            self._process_tool_calls_in_response(response)
             
             # Extract the response content
             if hasattr(response, 'content'):
@@ -419,6 +447,46 @@ class ChatService:
         
         return result
     
+    def _process_tool_calls_in_response(self, response: Any) -> None:
+        """Process any tool calls that occurred during the agent response."""
+        try:
+            # Check if the response contains tool calls
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call.get('name', 'Unknown Tool')
+                    tool_input = tool_call.get('args', {})
+                    tool_output = tool_call.get('output', 'No output')
+                    
+                    # Log the tool execution
+                    append_tool_execution_message(tool_name, tool_input, str(tool_output))
+            
+            # Also check if response is a dict with tool execution info
+            elif isinstance(response, dict):
+                if 'tool_calls' in response:
+                    for tool_call in response['tool_calls']:
+                        tool_name = tool_call.get('name', 'Unknown Tool')
+                        tool_input = tool_call.get('args', {})
+                        tool_output = tool_call.get('output', 'No output')
+                        
+                        # Log the tool execution
+                        append_tool_execution_message(tool_name, tool_input, str(tool_output))
+                
+                # Check for messages with tool content
+                elif 'messages' in response:
+                    for msg in response['messages']:
+                        if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                            for tool_call in msg.tool_calls:
+                                tool_name = tool_call.get('name', 'Unknown Tool')
+                                tool_input = tool_call.get('args', {})
+                                tool_output = tool_call.get('output', 'No output')
+                                
+                                # Log the tool execution
+                                append_tool_execution_message(tool_name, tool_input, str(tool_output))
+        
+        except Exception as e:
+            # Don't fail the main response processing if tool logging fails
+            print(f"Warning: Error processing tool calls: {str(e)}")
+    
     def get_available_tools(self) -> List[str]:
         """Get list of available tool names."""
         tools = st.session_state.get("tools", [])
@@ -446,19 +514,51 @@ def get_user_chat_stats(username: str = None) -> Dict[str, int]:
         username = st.session_state.get('username')
     
     if not username:
-        return {"total_chats": 0, "total_messages": 0}
+        return {"total_chats": 0, "total_messages": 0, "tool_executions": 0}
     
     user_history_key = f"user_{username}_history_chats"
     user_chats = st.session_state.get(user_history_key, [])
     
     total_chats = len(user_chats)
-    total_messages = sum(len(chat.get('messages', [])) for chat in user_chats)
+    total_messages = 0
+    tool_executions = 0
+    
+    for chat in user_chats:
+        chat_messages = chat.get('messages', [])
+        total_messages += len(chat_messages)
+        
+        # Count tool executions
+        for msg in chat_messages:
+            if msg.get('role') == 'tool' or msg.get('message_type') == 'tool_execution':
+                tool_executions += 1
     
     return {
         "total_chats": total_chats,
         "total_messages": total_messages,
+        "tool_executions": tool_executions,
         "user": username
     }
+
+
+def get_messages_by_type(username: str = None) -> Dict[str, List]:
+    """Get messages categorized by type for a user."""
+    if not username:
+        username = st.session_state.get('username')
+    
+    if not username:
+        return {"user": [], "assistant": [], "tool": []}
+    
+    user_messages_key = f"user_{username}_messages"
+    messages = st.session_state.get(user_messages_key, [])
+    
+    categorized = {"user": [], "assistant": [], "tool": []}
+    
+    for msg in messages:
+        role = msg.get('role', 'unknown')
+        if role in categorized:
+            categorized[role].append(msg)
+    
+    return categorized
 
 
 # Authentication event handlers

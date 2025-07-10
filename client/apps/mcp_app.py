@@ -9,6 +9,7 @@ from utils.async_helpers import check_authentication
 from services.chat_service import ChatService, on_user_login, on_user_logout
 from ui_components.enhanced_chat_interface import create_enhanced_chat_interface
 import logging
+
 # Import user management with error handling
 try:
     from ui_components.user_management_tab import create_user_management_tab
@@ -67,16 +68,20 @@ def main():
             elif not USER_MANAGEMENT_AVAILABLE:
                 st.sidebar.error("👥 User Management: Module not available")
     
-    # Sidebar with chat history and user info
+    # Sidebar with chat history, user info, and chat settings
     with st.sidebar:
         # Show user info at the top
         sd_components.create_user_info_sidebar()
+        
+        # Chat settings section
+        from ui_components.chat_settings_component import create_chat_settings_sidebar
+        create_chat_settings_sidebar()
         
         # Chat history (only shown if authenticated)
         sd_components.create_history_chat_container()
         sd_components.create_sidebar_chat_buttons()
 
-    # Chat Tab - Enhanced conversation interface
+    # Chat Tab - Enhanced conversation interface with reverse order and tool toggles
     with tab1:
         # Show authentication status and enhanced chat interface
         if st.session_state.get("authentication_status"):
@@ -84,7 +89,7 @@ def main():
             if "chat_service" not in st.session_state:
                 st.session_state.chat_service = ChatService()
             
-            # Enhanced chat interface with better UI
+            # Enhanced chat interface with reverse order and tool output controls
             create_enhanced_chat_interface()
         else:
             st.warning("🔐 Please authenticate to access the chat interface")
@@ -168,6 +173,9 @@ def handle_authentication_changes():
         import datetime
         st.session_state["login_time"] = datetime.datetime.now()
         
+        # Initialize default chat settings for new user
+        initialize_user_chat_settings(current_user)
+        
         logging.info(f"User {current_user} logged in successfully")
     
     # Handle user logout
@@ -180,7 +188,51 @@ def handle_authentication_changes():
         if "login_time" in st.session_state:
             del st.session_state["login_time"]
         
+        # Clear chat settings
+        clear_user_chat_settings(previous_user)
+        
         logging.info(f"User {previous_user} logged out")
+
+
+def initialize_user_chat_settings(username: str):
+    """Initialize default chat settings for a user."""
+    default_settings = {
+        'show_tool_outputs': True,
+        'message_order': 'Latest First',
+        'auto_scroll_enabled': True,
+        'show_timestamps': True,
+        'show_mssql_outputs': True,
+        'show_general_outputs': True,
+        'max_message_length': 500,
+        'max_tool_output_length': 300,
+        'include_tool_outputs_in_export': True,
+        'include_timestamps_in_export': True
+    }
+    
+    # Only set defaults if not already set
+    for key, value in default_settings.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def clear_user_chat_settings(username: str):
+    """Clear chat settings when user logs out."""
+    settings_keys = [
+        'show_tool_outputs',
+        'message_order',
+        'auto_scroll_enabled',
+        'show_timestamps',
+        'show_mssql_outputs',
+        'show_general_outputs',
+        'max_message_length',
+        'max_tool_output_length',
+        'include_tool_outputs_in_export',
+        'include_timestamps_in_export'
+    ]
+    
+    for key in settings_keys:
+        if key in st.session_state:
+            del st.session_state[key]
 
 
 def show_debug_info():
@@ -200,7 +252,9 @@ def show_debug_info():
             "User Management Available": USER_MANAGEMENT_AVAILABLE,
             "MCP Agent": st.session_state.get("agent") is not None,
             "Tools Available": len(st.session_state.get("tools", [])),
-            "Servers Connected": len(st.session_state.get("servers", {}))
+            "Servers Connected": len(st.session_state.get("servers", {})),
+            "Tool Outputs Visible": st.session_state.get('show_tool_outputs', True),
+            "Message Order": st.session_state.get('message_order', 'Latest First')
         }
         
         # User-specific debug info
@@ -209,6 +263,11 @@ def show_debug_info():
             debug_info["User-specific Keys"] = len(user_keys)
             debug_info["User Chat History"] = len(st.session_state.get(f"user_{current_user}_history_chats", []))
             debug_info["User Messages"] = len(st.session_state.get(f"user_{current_user}_messages", []))
+            
+            # Count tool messages
+            user_messages = st.session_state.get(f"user_{current_user}_messages", [])
+            tool_messages = [msg for msg in user_messages if msg.get('role') == 'tool']
+            debug_info["Tool Messages"] = len(tool_messages)
         
         for key, value in debug_info.items():
             st.write(f"**{key}:** {value}")
@@ -220,6 +279,23 @@ def show_debug_info():
                         if k.startswith(f"user_{current_user}_")}
             for key, value_type in user_keys.items():
                 st.write(f"**{key}:** {value_type}")
+        
+        # Show chat settings
+        if st.checkbox("Show Chat Settings"):
+            st.markdown("### Current Chat Settings")
+            chat_settings = {
+                'show_tool_outputs': st.session_state.get('show_tool_outputs', True),
+                'message_order': st.session_state.get('message_order', 'Latest First'),
+                'auto_scroll_enabled': st.session_state.get('auto_scroll_enabled', True),
+                'show_timestamps': st.session_state.get('show_timestamps', True),
+                'show_mssql_outputs': st.session_state.get('show_mssql_outputs', True),
+                'show_general_outputs': st.session_state.get('show_general_outputs', True),
+                'max_message_length': st.session_state.get('max_message_length', 500),
+                'max_tool_output_length': st.session_state.get('max_tool_output_length', 300)
+            }
+            
+            for key, value in chat_settings.items():
+                st.write(f"**{key}:** {value}")
 
 
 def create_user_session_info():
@@ -243,24 +319,32 @@ def create_user_session_info():
             st.metric("Your Messages", stats["total_messages"])
         
         with col3:
-            # Session duration
-            import datetime
-            if "login_time" in st.session_state:
-                session_time = datetime.datetime.now() - st.session_state["login_time"]
-                hours, remainder = divmod(int(session_time.total_seconds()), 3600)
-                minutes, _ = divmod(remainder, 60)
-                st.metric("Session Time", f"{hours:02d}:{minutes:02d}")
+            st.metric("Tool Executions", stats.get("tool_executions", 0))
+        
+        # Session duration
+        import datetime
+        if "login_time" in st.session_state:
+            session_time = datetime.datetime.now() - st.session_state["login_time"]
+            hours, remainder = divmod(int(session_time.total_seconds()), 3600)
+            minutes, _ = divmod(remainder, 60)
+            st.metric("Session Time", f"{hours:02d}:{minutes:02d}")
+        
+        # Chat settings summary
+        st.markdown("**Current Settings:**")
+        st.write(f"Tool Outputs: {'Visible' if st.session_state.get('show_tool_outputs', True) else 'Hidden'}")
+        st.write(f"Message Order: {st.session_state.get('message_order', 'Latest First')}")
+        st.write(f"Timestamps: {'Shown' if st.session_state.get('show_timestamps', True) else 'Hidden'}")
         
         # User session controls
         st.markdown("**Session Controls:**")
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🔄 Clear My Data", help="Clear all your chat data"):
+            if st.button("🔄 Clear My Data", help="Clear all your chat data", key="session_clear_data"):
                 clear_user_data_confirmation()
         
         with col2:
-            if st.button("📊 Export My Data", help="Export all your chat data"):
+            if st.button("📊 Export My Data", help="Export all your chat data", key="session_export_data"):
                 export_user_data()
 
 
@@ -272,9 +356,10 @@ def clear_user_data_confirmation():
     
     st.warning(f"⚠️ This will delete ALL chat history for user: **{current_user}**")
     
-    if st.button("❌ Confirm Clear All My Data"):
+    if st.button("❌ Confirm Clear All My Data", key="confirm_clear_session_data"):
         from services.chat_service import clear_user_session_data
         clear_user_session_data(current_user)
+        clear_user_chat_settings(current_user)
         st.success("✅ All your data has been cleared!")
         st.rerun()
 
@@ -302,11 +387,24 @@ def export_user_data():
                 # If not serializable, convert to string
                 user_data[clean_key] = str(value)
     
+    # Add chat settings
+    chat_settings = {
+        'show_tool_outputs': st.session_state.get('show_tool_outputs', True),
+        'message_order': st.session_state.get('message_order', 'Latest First'),
+        'auto_scroll_enabled': st.session_state.get('auto_scroll_enabled', True),
+        'show_timestamps': st.session_state.get('show_timestamps', True),
+        'show_mssql_outputs': st.session_state.get('show_mssql_outputs', True),
+        'show_general_outputs': st.session_state.get('show_general_outputs', True),
+        'max_message_length': st.session_state.get('max_message_length', 500),
+        'max_tool_output_length': st.session_state.get('max_tool_output_length', 300)
+    }
+    
     export_data = {
         "user_data_export": {
             "username": current_user,
             "exported_at": datetime.now().isoformat(),
-            "data": user_data
+            "data": user_data,
+            "chat_settings": chat_settings
         }
     }
     
@@ -316,18 +414,28 @@ def export_user_data():
         label="💾 Download My Data",
         data=json_str,
         file_name=f"user_data_{current_user}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-        mime="application/json"
+        mime="application/json",
+        key="download_user_data"
     )
 
 
 # Additional sidebar components for user session management
 def enhanced_sidebar():
-    """Enhanced sidebar with user session management."""
+    """Enhanced sidebar with user session management and chat settings."""
     with st.sidebar:
         # Standard sidebar components
         sd_components.create_user_info_sidebar()
+        
+        # Chat settings
+        from ui_components.chat_settings_component import create_chat_settings_sidebar, create_advanced_chat_settings
+        create_chat_settings_sidebar()
+        
+        # Chat history
         sd_components.create_history_chat_container()
         sd_components.create_sidebar_chat_buttons()
+        
+        # Advanced settings
+        create_advanced_chat_settings()
         
         # Additional user session info
         create_user_session_info()
@@ -335,6 +443,40 @@ def enhanced_sidebar():
         # Debug information (for development)
         if st.checkbox("🔧 Debug Mode"):
             show_debug_info()
+
+
+def create_chat_metrics_display():
+    """Create a metrics display for chat statistics."""
+    current_user = st.session_state.get('username')
+    if not current_user:
+        return
+    
+    from services.chat_service import get_user_chat_stats, get_messages_by_type
+    
+    stats = get_user_chat_stats(current_user)
+    messages_by_type = get_messages_by_type(current_user)
+    
+    with st.container():
+        st.markdown("### 📊 Your Chat Statistics")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Chats", stats["total_chats"])
+        
+        with col2:
+            st.metric("Total Messages", stats["total_messages"])
+        
+        with col3:
+            st.metric("Tool Executions", stats.get("tool_executions", 0))
+        
+        with col4:
+            # Calculate efficiency metric
+            if stats["total_messages"] > 0:
+                tool_ratio = stats.get("tool_executions", 0) / stats["total_messages"]
+                st.metric("Tool Usage %", f"{tool_ratio:.1%}")
+            else:
+                st.metric("Tool Usage %", "0%")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,9 @@ def create_enhanced_chat_interface():
     st.markdown("### 💬 AI Chat Interface")
     st.markdown(f"Chat with AI agents - **Logged in as: {current_user}**")
     
+    # Create chat controls at the top
+    create_chat_controls()
+    
     # Create the main layout: Chat area at top, Tools at bottom
     create_chat_area()
     
@@ -41,24 +44,52 @@ def create_enhanced_chat_interface():
     create_tools_section()
 
 
+def create_chat_controls():
+    """Create chat control buttons and settings at the top."""
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+    
+    with col1:
+        if st.button("🆕 New Chat", help="Start a new conversation", key="chat_new_btn"):
+            from services.chat_service import create_chat
+            create_chat()
+            st.rerun()
+    
+    with col2:
+        if st.button("🗑️ Clear Chat", help="Clear current conversation", key="chat_clear_btn"):
+            clear_current_chat()
+            st.rerun()
+    
+    with col3:
+        # Toggle for showing tool outputs
+        show_tool_outputs = st.session_state.get('show_tool_outputs', True)
+        if st.checkbox("🔧 Show Tool Outputs", value=show_tool_outputs, key="tool_outputs_toggle"):
+            st.session_state['show_tool_outputs'] = True
+        else:
+            st.session_state['show_tool_outputs'] = False
+    
+    with col4:
+        if st.button("📤 Export Chat", help="Export conversation as JSON", key="chat_export_btn"):
+            export_current_chat()
+
+
 def create_chat_area():
-    """Create the main chat conversation area."""
+    """Create the main chat conversation area with messages in reverse order."""
     # Chat container with fixed height and scrolling
     chat_container = st.container()
     
     with chat_container:
-        # Chat messages area with scrolling
+        # Chat messages area with scrolling - REVERSED ORDER
         messages_container = st.container(height=500, border=True)
         
         with messages_container:
-            display_chat_messages()
+            display_chat_messages_reversed()
         
         # Chat input area
         create_chat_input()
 
 
-def display_chat_messages():
-    """Display chat messages with copy functionality."""
+def display_chat_messages_reversed():
+    """Display chat messages in reverse order (latest at top) with tool output toggle."""
     current_user = st.session_state.get('username')
     if not current_user:
         return
@@ -74,24 +105,34 @@ def display_chat_messages():
         st.markdown("- Count all records in the orders table")
         return
     
-    # Display messages in chronological order
-    for i, message in enumerate(messages):
+    # Get tool output visibility setting
+    show_tool_outputs = st.session_state.get('show_tool_outputs', True)
+    
+    # Display messages in REVERSE chronological order (latest first)
+    for i, message in enumerate(reversed(messages)):
         # Only show messages from the current user
         if message.get('user') != current_user:
             continue
-            
+        
+        # Calculate the original index for unique keys
+        original_index = len(messages) - 1 - i
+        
         message_container = st.container()
         
         with message_container:
             if message["role"] == "user":
-                display_user_message(message, i)
+                display_user_message_reversed(message, original_index)
             elif message["role"] == "assistant":
-                display_assistant_message(message, i)
+                display_assistant_message_reversed(message, original_index, show_tool_outputs)
+            elif message["role"] == "tool" and show_tool_outputs:
+                display_tool_message_reversed(message, original_index)
 
 
-def display_user_message(message: Dict, index: int):
+def display_user_message_reversed(message: Dict, index: int):
     """Display a user message with copy functionality."""
-    # User message styling
+    # User message styling with timestamp at top
+    timestamp = get_formatted_timestamp(message.get('timestamp', ''))
+    
     st.markdown(
         f"""
         <div style="
@@ -101,6 +142,7 @@ def display_user_message(message: Dict, index: int):
             margin: 5px 0 10px 20%;
             border-left: 4px solid #2196f3;
         ">
+            <div style="font-size: 0.8em; color: #666; margin-bottom: 5px;">{timestamp}</div>
             <strong>👤 You:</strong><br>
             {message['content']}
         </div>
@@ -114,23 +156,16 @@ def display_user_message(message: Dict, index: int):
         if st.button("📋 Copy", key=f"copy_user_{index}", help="Copy message"):
             copy_to_clipboard(message['content'])
             st.success("Copied!", icon="✅")
-    
-    with col3:
-        # Show timestamp
-        timestamp = message.get('timestamp', '')
-        if timestamp:
-            try:
-                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                time_str = dt.strftime('%H:%M')
-                st.caption(f"🕒 {time_str}")
-            except:
-                pass
 
 
-def display_assistant_message(message: Dict, index: int):
-    """Display an assistant message with copy functionality."""
-    # Assistant message styling
+def display_assistant_message_reversed(message: Dict, index: int, show_tool_outputs: bool):
+    """Display an assistant message with copy functionality and optional tool details."""
+    # Assistant message styling with timestamp at top
     content = message.get('content', '')
+    timestamp = get_formatted_timestamp(message.get('timestamp', ''))
+    
+    # Check if this message has tool execution
+    has_tool = 'tool' in message or 'tool_calls' in message
     
     st.markdown(
         f"""
@@ -141,6 +176,7 @@ def display_assistant_message(message: Dict, index: int):
             margin: 5px 20% 10px 0;
             border-left: 4px solid #9c27b0;
         ">
+            <div style="font-size: 0.8em; color: #666; margin-bottom: 5px;">{timestamp}</div>
             <strong>🤖 Assistant:</strong><br>
             {content}
         </div>
@@ -157,25 +193,68 @@ def display_assistant_message(message: Dict, index: int):
             st.success("Copied!", icon="✅")
     
     with col3:
-        # Show tool info if available
-        if 'tool' in message:
+        # Show tool info if available and tool outputs are enabled
+        if has_tool and show_tool_outputs:
             if st.button("🔧 Tool", key=f"tool_info_{index}", help="Show tool details"):
                 show_tool_details(message, index)
     
-    with col4:
-        # Show timestamp
-        timestamp = message.get('timestamp', '')
-        if timestamp:
-            try:
-                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                time_str = dt.strftime('%H:%M')
-                st.caption(f"🕒 {time_str}")
-            except:
-                pass
-    
-    # Show tool execution details if expanded
-    if f"show_tool_{index}" in st.session_state and st.session_state[f"show_tool_{index}"]:
+    # Show tool execution details if expanded and tool outputs are enabled
+    if show_tool_outputs and f"show_tool_{index}" in st.session_state and st.session_state[f"show_tool_{index}"]:
         display_tool_execution_details(message)
+
+
+def display_tool_message_reversed(message: Dict, index: int):
+    """Display a tool execution message when tool outputs are enabled."""
+    timestamp = get_formatted_timestamp(message.get('timestamp', ''))
+    tool_name = message.get('tool_name', 'Unknown Tool')
+    tool_output = message.get('content', '')
+    
+    # Truncate long outputs for display
+    display_output = tool_output[:300] + "..." if len(tool_output) > 300 else tool_output
+    
+    st.markdown(
+        f"""
+        <div style="
+            background-color: #fff3e0; 
+            padding: 8px 12px; 
+            border-radius: 8px; 
+            margin: 3px 10% 8px 10%;
+            border-left: 3px solid #ff9800;
+            font-size: 0.9em;
+        ">
+            <div style="font-size: 0.7em; color: #666; margin-bottom: 3px;">{timestamp}</div>
+            <strong>🔧 Tool: {tool_name}</strong><br>
+            <div style="font-family: monospace; white-space: pre-wrap; max-height: 100px; overflow-y: auto;">
+            {display_output}
+            </div>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
+    # Show full output button
+    col1, col2, col3 = st.columns([4, 1, 1])
+    with col2:
+        if st.button("📄 Full", key=f"tool_full_{index}", help="Show full tool output"):
+            st.session_state[f"show_full_tool_{index}"] = not st.session_state.get(f"show_full_tool_{index}", False)
+            st.rerun()
+    
+    # Show full output if requested
+    if st.session_state.get(f"show_full_tool_{index}", False):
+        with st.expander(f"Full Tool Output - {tool_name}", expanded=True):
+            st.code(tool_output, language="text")
+
+
+def get_formatted_timestamp(timestamp_str: str) -> str:
+    """Format timestamp for display."""
+    if not timestamp_str:
+        return ""
+    
+    try:
+        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+        return dt.strftime('%H:%M:%S')
+    except:
+        return ""
 
 
 def show_tool_details(message: Dict, index: int):
@@ -186,11 +265,11 @@ def show_tool_details(message: Dict, index: int):
 
 def display_tool_execution_details(message: Dict):
     """Display detailed tool execution information."""
-    if 'tool' not in message:
+    if 'tool' not in message and 'tool_calls' not in message:
         return
     
     with st.expander("🔧 Tool Execution Details", expanded=True):
-        tool_info = message['tool']
+        tool_info = message.get('tool') or message.get('tool_calls')
         
         if isinstance(tool_info, str):
             st.code(tool_info, language="text")
@@ -434,29 +513,6 @@ def display_tool_info_card(tool, category: str):
                     st.json(schema.schema() if hasattr(schema, 'schema') else str(schema))
             else:
                 st.info("No schema available for this tool")
-
-
-def create_conversation_controls():
-    """Create conversation control buttons."""
-    st.markdown("### 💬 Conversation Controls")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🆕 New Chat", help="Start a new conversation"):
-            from services.chat_service import create_chat
-            create_chat()
-            st.rerun()
-    
-    with col2:
-        if st.button("🗑️ Clear Current Chat", help="Clear current conversation"):
-            clear_current_chat()
-            st.rerun()
-    
-    with col3:
-        export_button = st.button("📤 Export Chat", help="Export conversation as JSON")
-        if export_button:
-            export_current_chat()
 
 
 def clear_current_chat():

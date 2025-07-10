@@ -1,8 +1,9 @@
-# Updated ui_components/sidebar_components.py with user session isolation
+# Updated ui_components/sidebar_components.py with user session isolation and chat settings
 
 import streamlit as st
 import os
 from services.chat_service import create_chat, delete_chat, switch_chat
+from ui_components.chat_settings_component import create_chat_settings_sidebar, create_advanced_chat_settings, create_chat_actions_panel
 
 
 def create_sidebar_header_with_icon():
@@ -340,6 +341,13 @@ def show_user_activity_summary():
     total_chats = len(user_owned_chats)
     total_messages = sum(len(chat.get('messages', [])) for chat in user_owned_chats)
     
+    # Count tool executions
+    total_tool_executions = 0
+    for chat in user_owned_chats:
+        for msg in chat.get('messages', []):
+            if msg.get('role') == 'tool' or msg.get('message_type') == 'tool_execution':
+                total_tool_executions += 1
+    
     # Recent activity (chats created today)
     from datetime import datetime, timedelta
     today = datetime.now().date()
@@ -365,16 +373,25 @@ def show_user_activity_summary():
         st.metric("Total Messages", total_messages)
     
     with col3:
+        st.metric("Tool Executions", total_tool_executions)
+    
+    # Additional metrics
+    col1, col2 = st.columns(2)
+    
+    with col1:
         st.metric("Today's Chats", recent_chats)
     
-    # Average messages per chat
-    if total_chats > 0:
-        avg_messages = total_messages / total_chats
-        st.info(f"📈 Average messages per chat: {avg_messages:.1f}")
+    with col2:
+        # Average messages per chat
+        if total_chats > 0:
+            avg_messages = total_messages / total_chats
+            st.metric("Avg Msg/Chat", f"{avg_messages:.1f}")
+        else:
+            st.metric("Avg Msg/Chat", "0")
 
 
 def create_complete_sidebar():
-    """Create the complete sidebar with all components including user session management."""
+    """Create the complete sidebar with all components including user session management and chat settings."""
     current_user = st.session_state.get('username')
     
     # Add the logo header at the top
@@ -384,9 +401,18 @@ def create_complete_sidebar():
     if current_user and st.session_state.get("authentication_status"):
         create_user_info_sidebar()
         
+        # Chat settings section
+        create_chat_settings_sidebar()
+        
         # Show chat history and controls
         create_history_chat_container()
         create_sidebar_chat_buttons()
+        
+        # Advanced chat settings
+        create_advanced_chat_settings()
+        
+        # Chat actions panel
+        create_chat_actions_panel()
         
         # Add user session controls
         create_user_session_controls()
@@ -423,6 +449,14 @@ def create_enhanced_user_info():
         user_chats = st.session_state.get(f"user_{current_user}_history_chats", [])
         user_owned_chats = [chat for chat in user_chats if chat.get('created_by') == current_user]
         st.markdown(f"• Isolated chats: {len(user_owned_chats)}")
+        
+        # Tool output settings
+        show_tools = st.session_state.get('show_tool_outputs', True)
+        st.markdown(f"• Tool outputs: {'Visible' if show_tools else 'Hidden'}")
+        
+        # Message order setting
+        message_order = st.session_state.get('message_order', 'Latest First')
+        st.markdown(f"• Message order: {message_order}")
         
         # Session security indicator
         st.success("✅ Your data is isolated from other users")
