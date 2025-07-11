@@ -8,9 +8,9 @@ import ui_components.sidebar_components as sd_components
 from utils.async_helpers import check_authentication
 from services.chat_service import ChatService, on_user_login, on_user_logout
 from ui_components.enhanced_chat_interface import create_enhanced_chat_interface
-# Add import at the top
-from ui_components.performance_dashboard import create_performance_dashboard, add_performance_dashboard_to_sidebar
 
+# ADDED: Import performance dashboard components
+from ui_components.performance_dashboard import create_performance_dashboard, add_performance_dashboard_to_sidebar
 
 import logging
 
@@ -27,7 +27,7 @@ except ImportError as e:
     logging.info(f"⚠️  User management module not available: {str(e)}")
 
 def main():
-    """Main application function with enhanced authentication and user session management."""
+    """Main application function with enhanced authentication, user session management, and performance dashboard."""
     # Check authentication before proceeding
     current_user = st.session_state.get('username')
     authentication_status = st.session_state.get("authentication_status")
@@ -37,6 +37,15 @@ def main():
     
     if not authentication_status:
         check_authentication()
+        return
+    
+    # ADDED: Check if user wants performance dashboard
+    if st.session_state.get('show_performance_dashboard'):
+        create_performance_dashboard()
+        
+        if st.button("← Back to Chat"):
+            st.session_state['show_performance_dashboard'] = False
+            st.rerun()
         return
     
     # Initialize the title
@@ -98,7 +107,7 @@ def main():
     elif not USER_MANAGEMENT_AVAILABLE:
         st.sidebar.error("👥 User Management: Module not available")
     
-    # Sidebar with chat history, user info, and chat settings
+    # Sidebar with chat history, user info, chat settings, and performance dashboard
     with st.sidebar:
         # Show user info at the top
         sd_components.create_user_info_sidebar()
@@ -110,6 +119,9 @@ def main():
         # Chat settings section
         from ui_components.chat_settings_component import create_chat_settings_sidebar
         create_chat_settings_sidebar()
+        
+        # ADDED: Performance dashboard to sidebar
+        add_performance_dashboard_to_sidebar()
         
         # Chat history (only shown if authenticated)
         sd_components.create_history_chat_container()
@@ -193,7 +205,7 @@ def main():
 
 
 def handle_authentication_changes():
-    """Handle authentication state changes and user switching."""
+    """Handle authentication state changes and user switching with performance monitoring initialization."""
     current_user = st.session_state.get('username')
     previous_user = st.session_state.get('_previous_user')
     authentication_status = st.session_state.get("authentication_status")
@@ -205,7 +217,7 @@ def handle_authentication_changes():
             # User switched - logout previous user
             on_user_logout(previous_user)
         
-        # Login new user
+        # Login new user with performance monitoring
         on_user_login(current_user)
         st.session_state['_previous_user'] = current_user
         
@@ -213,10 +225,10 @@ def handle_authentication_changes():
         import datetime
         st.session_state["login_time"] = datetime.datetime.now()
         
-        # Initialize default chat settings for new user
+        # ADDED: Initialize default chat settings for new user (including processing time settings)
         initialize_user_chat_settings(current_user)
         
-        logging.info(f"User {current_user} logged in successfully")
+        logging.info(f"User {current_user} logged in successfully with performance monitoring enabled")
     
     # Handle user logout
     elif not authentication_status and previous_user:
@@ -228,15 +240,16 @@ def handle_authentication_changes():
         if "login_time" in st.session_state:
             del st.session_state["login_time"]
         
-        # Clear chat settings
+        # ADDED: Clear user chat settings including performance settings
         clear_user_chat_settings(previous_user)
         
-        logging.info(f"User {previous_user} logged out")
+        logging.info(f"User {previous_user} logged out with performance data archived")
 
 
 def initialize_user_chat_settings(username: str):
-    """Initialize default chat settings for a user."""
+    """Initialize default chat settings for a user including processing time settings."""
     default_settings = {
+        # Original settings
         'show_tool_outputs': True,
         'message_order': 'Latest First',
         'auto_scroll_enabled': True,
@@ -246,7 +259,18 @@ def initialize_user_chat_settings(username: str):
         'max_message_length': 500,
         'max_tool_output_length': 300,
         'include_tool_outputs_in_export': True,
-        'include_timestamps_in_export': True
+        'include_timestamps_in_export': True,
+        
+        # ADDED: Processing time settings
+        'show_processing_times': True,
+        'color_processing_times': True,
+        'show_completion_notifications': True,
+        'fast_threshold': 2.0,      # seconds
+        'slow_threshold': 5.0,      # seconds  
+        'warning_threshold': 10.0,  # seconds
+        'enable_performance_warnings': True,
+        'log_processing_times': False,
+        'include_processing_times_in_export': True
     }
     
     # Only set defaults if not already set
@@ -256,8 +280,9 @@ def initialize_user_chat_settings(username: str):
 
 
 def clear_user_chat_settings(username: str):
-    """Clear chat settings when user logs out."""
+    """Clear chat settings when user logs out including processing time settings."""
     settings_keys = [
+        # Original settings
         'show_tool_outputs',
         'message_order',
         'auto_scroll_enabled',
@@ -267,7 +292,18 @@ def clear_user_chat_settings(username: str):
         'max_message_length',
         'max_tool_output_length',
         'include_tool_outputs_in_export',
-        'include_timestamps_in_export'
+        'include_timestamps_in_export',
+        
+        # ADDED: Processing time settings
+        'show_processing_times',
+        'color_processing_times', 
+        'show_completion_notifications',
+        'fast_threshold',
+        'slow_threshold',
+        'warning_threshold',
+        'enable_performance_warnings',
+        'log_processing_times',
+        'include_processing_times_in_export'
     ]
     
     for key in settings_keys:
@@ -276,7 +312,7 @@ def clear_user_chat_settings(username: str):
 
 
 def show_debug_info():
-    """Show debug information for troubleshooting."""
+    """Show debug information for troubleshooting including performance monitoring."""
     if st.checkbox("🐛 Show Debug Info"):
         st.markdown("### Debug Information")
         
@@ -295,10 +331,16 @@ def show_debug_info():
             "Servers Connected": len(st.session_state.get("servers", {})),
             "Tool Outputs Visible": st.session_state.get('show_tool_outputs', True),
             "Message Order": st.session_state.get('message_order', 'Latest First'),
-            "System Prompt Available": st.session_state.get('system_prompt') is not None
+            "System Prompt Available": st.session_state.get('system_prompt') is not None,
+            
+            # ADDED: Processing time debug info
+            "Processing Times Visible": st.session_state.get('show_processing_times', True),
+            "Performance Dashboard Available": st.session_state.get('show_performance_dashboard', False),
+            "Fast Threshold": f"{st.session_state.get('fast_threshold', 2.0)}s",
+            "Slow Threshold": f"{st.session_state.get('slow_threshold', 5.0)}s"
         }
         
-        # User-specific debug info
+        # User-specific debug info including performance monitoring
         if current_user:
             user_keys = [key for key in st.session_state.keys() if key.startswith(f"user_{current_user}_")]
             debug_info["User-specific Keys"] = len(user_keys)
@@ -309,6 +351,16 @@ def show_debug_info():
             user_messages = st.session_state.get(f"user_{current_user}_messages", [])
             tool_messages = [msg for msg in user_messages if msg.get('role') == 'tool']
             debug_info["Tool Messages"] = len(tool_messages)
+            
+            # ADDED: Performance monitoring debug info
+            performance_monitor = st.session_state.get(f"user_{current_user}_performance_monitor")
+            if performance_monitor:
+                debug_info["Performance Monitor Active"] = True
+                perf_summary = performance_monitor.get_performance_summary()
+                debug_info["Performance Grade"] = perf_summary.get('performance_grade', 'N/A')
+                debug_info["Average Processing Time"] = f"{perf_summary.get('average_processing_time', 0):.2f}s"
+            else:
+                debug_info["Performance Monitor Active"] = False
         
         for key, value in debug_info.items():
             st.write(f"**{key}:** {value}")
@@ -320,6 +372,23 @@ def show_debug_info():
                         if k.startswith(f"user_{current_user}_")}
             for key, value_type in user_keys.items():
                 st.write(f"**{key}:** {value_type}")
+        
+        # ADDED: Show performance settings
+        if st.checkbox("Show Performance Settings"):
+            st.markdown("### Performance Settings")
+            performance_settings = {
+                'show_processing_times': st.session_state.get('show_processing_times', True),
+                'color_processing_times': st.session_state.get('color_processing_times', True),
+                'show_completion_notifications': st.session_state.get('show_completion_notifications', True),
+                'fast_threshold': st.session_state.get('fast_threshold', 2.0),
+                'slow_threshold': st.session_state.get('slow_threshold', 5.0),
+                'warning_threshold': st.session_state.get('warning_threshold', 10.0),
+                'enable_performance_warnings': st.session_state.get('enable_performance_warnings', True),
+                'log_processing_times': st.session_state.get('log_processing_times', False)
+            }
+            
+            for key, value in performance_settings.items():
+                st.write(f"**{key}:** {value}")
         
         # Show chat settings
         if st.checkbox("Show Chat Settings"):
@@ -359,7 +428,7 @@ def show_debug_info():
 
 
 def create_user_session_info():
-    """Create a detailed user session information panel."""
+    """Create a detailed user session information panel with performance metrics."""
     current_user = st.session_state.get('username')
     if not current_user:
         return
@@ -381,6 +450,17 @@ def create_user_session_info():
         with col3:
             st.metric("Tool Executions", stats.get("tool_executions", 0))
         
+        # ADDED: Performance metrics
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            avg_time = stats.get("average_processing_time", 0)
+            st.metric("Avg Response Time", f"{avg_time:.2f}s")
+        
+        with col2:
+            success_rate = stats.get("success_rate", 100)
+            st.metric("Success Rate", f"{success_rate:.1f}%")
+        
         # Session duration
         import datetime
         if "login_time" in st.session_state:
@@ -394,6 +474,7 @@ def create_user_session_info():
         st.write(f"Tool Outputs: {'Visible' if st.session_state.get('show_tool_outputs', True) else 'Hidden'}")
         st.write(f"Message Order: {st.session_state.get('message_order', 'Latest First')}")
         st.write(f"Timestamps: {'Shown' if st.session_state.get('show_timestamps', True) else 'Hidden'}")
+        st.write(f"Processing Times: {'Shown' if st.session_state.get('show_processing_times', True) else 'Hidden'}")
         
         # System prompt info
         system_prompt = st.session_state.get('system_prompt')
@@ -432,7 +513,7 @@ def clear_user_data_confirmation():
 
 
 def export_user_data():
-    """Export all user data as JSON."""
+    """Export all user data as JSON including performance data."""
     current_user = st.session_state.get('username')
     if not current_user:
         return
@@ -454,7 +535,7 @@ def export_user_data():
                 # If not serializable, convert to string
                 user_data[clean_key] = str(value)
     
-    # Add chat settings
+    # Add chat settings including performance settings
     chat_settings = {
         'show_tool_outputs': st.session_state.get('show_tool_outputs', True),
         'message_order': st.session_state.get('message_order', 'Latest First'),
@@ -463,7 +544,13 @@ def export_user_data():
         'show_mssql_outputs': st.session_state.get('show_mssql_outputs', True),
         'show_general_outputs': st.session_state.get('show_general_outputs', True),
         'max_message_length': st.session_state.get('max_message_length', 500),
-        'max_tool_output_length': st.session_state.get('max_tool_output_length', 300)
+        'max_tool_output_length': st.session_state.get('max_tool_output_length', 300),
+        
+        # ADDED: Performance settings
+        'show_processing_times': st.session_state.get('show_processing_times', True),
+        'color_processing_times': st.session_state.get('color_processing_times', True),
+        'fast_threshold': st.session_state.get('fast_threshold', 2.0),
+        'slow_threshold': st.session_state.get('slow_threshold', 5.0)
     }
     
     # Add system prompt info
@@ -472,13 +559,21 @@ def export_user_data():
         'system_prompt_is_custom': st.session_state.get('system_prompt_is_custom', False)
     }
     
+    # ADDED: Get performance summary
+    performance_summary = {}
+    user_perf_key = f"user_{current_user}_performance_monitor"
+    performance_monitor = st.session_state.get(user_perf_key)
+    if performance_monitor:
+        performance_summary = performance_monitor.get_performance_summary()
+    
     export_data = {
         "user_data_export": {
             "username": current_user,
             "exported_at": datetime.now().isoformat(),
             "data": user_data,
             "chat_settings": chat_settings,
-            "system_prompt_info": system_prompt_info
+            "system_prompt_info": system_prompt_info,
+            "performance_summary": performance_summary  # ADDED
         }
     }
     
@@ -495,7 +590,7 @@ def export_user_data():
 
 # Additional sidebar components for user session management
 def enhanced_sidebar():
-    """Enhanced sidebar with user session management and chat settings."""
+    """Enhanced sidebar with user session management, chat settings, and performance dashboard."""
     with st.sidebar:
         # Standard sidebar components
         sd_components.create_user_info_sidebar()
@@ -503,6 +598,9 @@ def enhanced_sidebar():
         # Chat settings
         from ui_components.chat_settings_component import create_chat_settings_sidebar, create_advanced_chat_settings
         create_chat_settings_sidebar()
+        
+        # ADDED: Performance dashboard integration
+        add_performance_dashboard_to_sidebar()
         
         # Chat history
         sd_components.create_history_chat_container()
@@ -520,7 +618,7 @@ def enhanced_sidebar():
 
 
 def create_chat_metrics_display():
-    """Create a metrics display for chat statistics."""
+    """Create a metrics display for chat statistics including processing time metrics."""
     current_user = st.session_state.get('username')
     if not current_user:
         return
@@ -551,6 +649,34 @@ def create_chat_metrics_display():
                 st.metric("Tool Usage %", f"{tool_ratio:.1%}")
             else:
                 st.metric("Tool Usage %", "0%")
+        
+        # ADDED: Performance metrics display
+        if stats.get("average_processing_time", 0) > 0:
+            st.markdown("### ⏱️ Performance Metrics")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Avg Response Time", f"{stats['average_processing_time']:.2f}s")
+            
+            with col2:
+                st.metric("Success Rate", f"{stats.get('success_rate', 100):.1f}%")
+            
+            with col3:
+                st.metric("Total Processing", f"{stats.get('total_processing_time', 0):.1f}s")
+            
+            with col4:
+                # Performance grade based on average time
+                avg_time = stats['average_processing_time']
+                if avg_time < 2:
+                    grade = "A+"
+                elif avg_time < 3:
+                    grade = "A"
+                elif avg_time < 5:
+                    grade = "B"
+                else:
+                    grade = "C"
+                st.metric("Performance Grade", grade)
 
 
 if __name__ == "__main__":

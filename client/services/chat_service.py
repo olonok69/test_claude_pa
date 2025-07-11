@@ -18,39 +18,58 @@ from collections import deque, defaultdict
 
 # Advanced Performance Monitoring Classes
 class PerformanceMonitor:
-    """Advanced performance monitor with comprehensive analytics and real-time tracking."""
+    """Advanced performance monitor with comprehensive analytics and real-time tracking - FIXED VERSION."""
     
     def __init__(self, max_history: int = 1000):
         self.max_history = max_history
+        # FIXED: Ensure _lock is always initialized first
+        self._lock = threading.Lock()
         self.reset_metrics()
-        self._lock = threading.Lock()  # Thread safety for concurrent access
     
     def reset_metrics(self):
         """Reset all performance metrics."""
-        with self._lock:
-            self.processing_times = deque(maxlen=self.max_history)
-            self.tool_execution_times = deque(maxlen=self.max_history)
-            self.token_usage = deque(maxlen=self.max_history)
-            self.error_log = deque(maxlen=100)  # Keep last 100 errors
-            self.session_start = time.time()
-            self.total_messages = 0
-            self.total_tokens_estimated = 0
-            self.total_tool_executions = 0
-            self.successful_messages = 0
-            self.failed_messages = 0
-            self.performance_buckets = {
-                'fast': 0,    # < 2 seconds
-                'medium': 0,  # 2-5 seconds  
-                'slow': 0,    # 5-10 seconds
-                'very_slow': 0  # > 10 seconds
-            }
-            self.hourly_stats = defaultdict(list)  # Performance by hour
-            self.tool_performance = defaultdict(list)  # Performance by tool
+        # FIXED: Use getattr to safely check for _lock existence
+        if hasattr(self, '_lock'):
+            with self._lock:
+                self._reset_metrics_internal()
+        else:
+            # If _lock doesn't exist, create it and then reset
+            self._lock = threading.Lock()
+            with self._lock:
+                self._reset_metrics_internal()
+    
+    def _reset_metrics_internal(self):
+        """Internal method to reset metrics (called within lock)."""
+        self.processing_times = deque(maxlen=self.max_history)
+        self.tool_execution_times = deque(maxlen=self.max_history)
+        self.token_usage = deque(maxlen=self.max_history)
+        self.error_log = deque(maxlen=100)  # Keep last 100 errors
+        self.session_start = time.time()
+        self.total_messages = 0
+        self.total_tokens_estimated = 0
+        self.total_tool_executions = 0
+        self.successful_messages = 0
+        self.failed_messages = 0
+        self.performance_buckets = {
+            'fast': 0,    # < 2 seconds
+            'medium': 0,  # 2-5 seconds  
+            'slow': 0,    # 5-10 seconds
+            'very_slow': 0  # > 10 seconds
+        }
+        self.hourly_stats = defaultdict(list)  # Performance by hour
+        self.tool_performance = defaultdict(list)  # Performance by tool
+    
+    def _ensure_lock(self):
+        """Ensure the lock exists - safety method."""
+        if not hasattr(self, '_lock') or self._lock is None:
+            self._lock = threading.Lock()
     
     def record_processing_time(self, processing_time: float, message_length: int = 0, 
-                             token_count: Optional[int] = None, error_occurred: bool = False,
-                             tool_used: Optional[str] = None):
+                             token_count: int = None, error_occurred: bool = False,
+                             tool_used: str = None):
         """Record a comprehensive processing time measurement."""
+        self._ensure_lock()  # FIXED: Ensure lock exists
+        
         with self._lock:
             # Basic metrics
             self.processing_times.append({
@@ -94,6 +113,8 @@ class PerformanceMonitor:
     def record_tool_execution(self, tool_name: str, execution_time: float, 
                             success: bool = True, error_msg: str = None):
         """Record detailed tool execution metrics."""
+        self._ensure_lock()  # FIXED: Ensure lock exists
+        
         with self._lock:
             execution_record = {
                 'tool_name': tool_name,
@@ -114,8 +135,10 @@ class PerformanceMonitor:
                     'timestamp': time.time()
                 })
     
-    def record_error(self, error_type: str, error_msg: str, context: Dict = None):
+    def record_error(self, error_type: str, error_msg: str, context: dict = None):
         """Record detailed error information."""
+        self._ensure_lock()  # FIXED: Ensure lock exists
+        
         with self._lock:
             self.error_log.append({
                 'type': error_type,
@@ -124,8 +147,10 @@ class PerformanceMonitor:
                 'timestamp': time.time()
             })
     
-    def get_performance_summary(self) -> Dict[str, Any]:
+    def get_performance_summary(self) -> dict:
         """Get comprehensive performance summary with advanced analytics."""
+        self._ensure_lock()  # FIXED: Ensure lock exists
+        
         with self._lock:
             if not self.processing_times:
                 return {'status': 'no_data'}
@@ -185,23 +210,12 @@ class PerformanceMonitor:
                 'error_types': self._analyze_error_types()
             }
     
-    def _calculate_percentiles(self, times: List[float]) -> Dict[str, float]:
+    def _calculate_percentiles(self, times: list) -> dict:
         """Calculate performance percentiles."""
         if len(times) < 2:
             return {}
         
         try:
-            import numpy as np
-            return {
-                'p25': float(np.percentile(times, 25)),
-                'p50': float(np.percentile(times, 50)),  # median
-                'p75': float(np.percentile(times, 75)),
-                'p90': float(np.percentile(times, 90)),
-                'p95': float(np.percentile(times, 95)),
-                'p99': float(np.percentile(times, 99))
-            }
-        except ImportError:
-            # Fallback without numpy
             sorted_times = sorted(times)
             n = len(sorted_times)
             return {
@@ -212,8 +226,10 @@ class PerformanceMonitor:
                 'p95': sorted_times[int(0.95 * n)],
                 'p99': sorted_times[int(0.99 * n)]
             }
+        except Exception:
+            return {}
     
-    def _calculate_bucket_percentages(self) -> Dict[str, float]:
+    def _calculate_bucket_percentages(self) -> dict:
         """Calculate performance bucket percentages."""
         total = sum(self.performance_buckets.values())
         if total == 0:
@@ -224,7 +240,7 @@ class PerformanceMonitor:
             for k, v in self.performance_buckets.items()
         }
     
-    def _calculate_efficiency_metrics(self) -> Dict[str, float]:
+    def _calculate_efficiency_metrics(self) -> dict:
         """Calculate advanced efficiency metrics."""
         session_duration = time.time() - self.session_start
         
@@ -232,7 +248,11 @@ class PerformanceMonitor:
         avg_tokens_per_message = self.total_tokens_estimated / max(self.total_messages, 1)
         
         # Efficiency score based on multiple factors
-        time_efficiency = min(100, (2.0 / max(statistics.mean([r['time'] for r in self.processing_times]), 0.1)) * 100)
+        if self.processing_times:
+            time_efficiency = min(100, (2.0 / max(statistics.mean([r['time'] for r in self.processing_times]), 0.1)) * 100)
+        else:
+            time_efficiency = 0
+            
         token_efficiency = min(100, tokens_per_second * 10)  # Scale appropriately
         success_efficiency = (self.successful_messages / max(self.total_messages, 1)) * 100
         
@@ -278,8 +298,8 @@ class PerformanceMonitor:
         error_rate = (len(self.error_log) / self.total_messages) * 100
         
         # Factor in consistency (low standard deviation is good)
-        times = [record['time'] for record in self.processing_times]
-        if len(times) > 1:
+        if self.processing_times and len(self.processing_times) > 1:
+            times = [record['time'] for record in self.processing_times]
             consistency_factor = max(0, 100 - (statistics.stdev(times) * 10))
         else:
             consistency_factor = 100
@@ -287,7 +307,7 @@ class PerformanceMonitor:
         reliability_score = (success_rate * 0.5) + ((100 - error_rate) * 0.3) + (consistency_factor * 0.2)
         return min(100, max(0, reliability_score))
     
-    def _calculate_trends(self, window_size: int = 10) -> Dict[str, Any]:
+    def _calculate_trends(self, window_size: int = 10) -> dict:
         """Calculate performance trends with multiple window sizes."""
         if len(self.processing_times) < window_size:
             return {'status': 'insufficient_data'}
@@ -314,27 +334,9 @@ class PerformanceMonitor:
                 'previous_average': older_avg
             }
         
-        # Long-term trend (session-wide)
-        if len(times) >= 20:
-            first_quarter = times[:len(times)//4]
-            last_quarter = times[-len(times)//4:]
-            
-            first_avg = statistics.mean(first_quarter)
-            last_avg = statistics.mean(last_quarter)
-            
-            long_trend_direction = 'improving' if last_avg < first_avg else 'declining' if last_avg > first_avg else 'stable'
-            long_trend_magnitude = abs((last_avg - first_avg) / first_avg) * 100 if first_avg > 0 else 0
-            
-            trends['long_term'] = {
-                'direction': long_trend_direction,
-                'magnitude_percent': long_trend_magnitude,
-                'session_start_average': first_avg,
-                'session_end_average': last_avg
-            }
-        
         return trends
     
-    def _get_hourly_performance(self) -> Dict[int, Dict[str, float]]:
+    def _get_hourly_performance(self) -> dict:
         """Get performance statistics by hour."""
         hourly_perf = {}
         
@@ -358,7 +360,7 @@ class PerformanceMonitor:
         successful = sum(1 for record in self.tool_execution_times if record['success'])
         return (successful / len(self.tool_execution_times)) * 100
     
-    def _get_most_used_tools(self, limit: int = 5) -> List[Dict[str, Any]]:
+    def _get_most_used_tools(self, limit: int = 5) -> list:
         """Get most frequently used tools with performance metrics."""
         tool_stats = defaultdict(lambda: {'count': 0, 'times': [], 'successes': 0})
         
@@ -383,7 +385,7 @@ class PerformanceMonitor:
         
         return sorted(tool_list, key=lambda x: x['usage_count'], reverse=True)[:limit]
     
-    def _analyze_error_types(self) -> Dict[str, int]:
+    def _analyze_error_types(self) -> dict:
         """Analyze and categorize error types."""
         error_types = defaultdict(int)
         
@@ -391,50 +393,23 @@ class PerformanceMonitor:
             error_types[error['type']] += 1
         
         return dict(error_types)
-    
-    def get_performance_trends(self, window_size: int = 5) -> Dict[str, Any]:
-        """Get detailed performance trends analysis."""
-        return self._calculate_trends(window_size)
-    
-    def get_tool_performance_analysis(self) -> Dict[str, Any]:
-        """Get detailed tool performance analysis."""
-        if not self.tool_execution_times:
-            return {'status': 'no_tool_data'}
-        
-        tool_analysis = {}
-        tool_stats = defaultdict(lambda: {'times': [], 'successes': 0, 'failures': 0})
-        
-        for record in self.tool_execution_times:
-            tool_name = record['tool_name']
-            tool_stats[tool_name]['times'].append(record['execution_time'])
-            if record['success']:
-                tool_stats[tool_name]['successes'] += 1
-            else:
-                tool_stats[tool_name]['failures'] += 1
-        
-        for tool_name, stats in tool_stats.items():
-            if stats['times']:
-                total_executions = len(stats['times'])
-                tool_analysis[tool_name] = {
-                    'total_executions': total_executions,
-                    'average_time': statistics.mean(stats['times']),
-                    'median_time': statistics.median(stats['times']),
-                    'min_time': min(stats['times']),
-                    'max_time': max(stats['times']),
-                    'success_rate': (stats['successes'] / total_executions) * 100,
-                    'total_time': sum(stats['times']),
-                    'std_dev': statistics.stdev(stats['times']) if len(stats['times']) > 1 else 0
-                }
-        
-        return {
-            'status': 'success',
-            'tools': tool_analysis,
-            'summary': {
-                'total_tools_used': len(tool_analysis),
-                'total_executions': len(self.tool_execution_times),
-                'overall_success_rate': self._calculate_tool_success_rate()
-            }
-        }
+
+
+# FIXED: Safe initialization function for PerformanceMonitor
+def create_safe_performance_monitor() -> PerformanceMonitor:
+    """Create a PerformanceMonitor with proper error handling."""
+    try:
+        monitor = PerformanceMonitor()
+        # Verify lock is properly initialized
+        if not hasattr(monitor, '_lock'):
+            monitor._lock = threading.Lock()
+        return monitor
+    except Exception as e:
+        logging.error(f"Error creating PerformanceMonitor: {str(e)}")
+        # Return a minimal fallback monitor
+        monitor = PerformanceMonitor()
+        monitor._lock = threading.Lock()
+        return monitor
 
 class ChatPerformanceAnalyzer:
     """Advanced chat performance analyzer with predictive capabilities."""
@@ -703,7 +678,7 @@ class ChatPerformanceAnalyzer:
 
 # Enhanced session initialization with advanced performance monitoring
 def init_session():
-    """Initialize session with user-specific isolation and advanced performance monitoring."""
+    """Initialize session with user-specific isolation and advanced performance monitoring - FIXED VERSION."""
     current_user = st.session_state.get('username')
     
     if not current_user:
@@ -712,6 +687,15 @@ def init_session():
     # Create user-specific keys
     user_key_prefix = f"user_{current_user}_"
     
+    # FIXED: Create performance monitor safely
+    try:
+        performance_monitor = create_safe_performance_monitor()
+        logging.info(f"✅ Performance monitor created successfully for user {current_user}")
+    except Exception as e:
+        logging.error(f"❌ Error creating performance monitor: {str(e)}")
+        # Create a basic fallback
+        performance_monitor = None
+    
     defaults = {
         f"{user_key_prefix}params": {},
         f"{user_key_prefix}current_chat_id": None,
@@ -719,7 +703,7 @@ def init_session():
         f"{user_key_prefix}history_chats": get_user_history(current_user),
         f"{user_key_prefix}messages": [],
         f"{user_key_prefix}conversation_memory": [],
-        f"{user_key_prefix}performance_monitor": PerformanceMonitor(),
+        f"{user_key_prefix}performance_monitor": performance_monitor,  # FIXED: Use safe creation
         f"{user_key_prefix}chat_analyzer": ChatPerformanceAnalyzer(),
         "client": None,
         "agent": None,
@@ -810,7 +794,7 @@ def get_current_chat(chat_id: str, username: str = None) -> List[Dict]:
     return []
 
 def _append_message_to_session(msg: dict) -> None:
-    """Append message to the current user's chat session with comprehensive performance tracking."""
+    """Append message to the current user's chat session with comprehensive performance tracking - FIXED VERSION."""
     current_user = st.session_state.get('username')
     if not current_user:
         return
@@ -846,43 +830,49 @@ def _append_message_to_session(msg: dict) -> None:
         if 'tool_name' not in msg:
             msg['tool_name'] = msg.get('tool', 'Unknown Tool')
         
-        # Record tool execution time if available
+        # FIXED: Record tool execution time if available with error handling
         if 'execution_time' in msg:
             performance_monitor = st.session_state.get(user_perf_key)
-            if performance_monitor:
-                performance_monitor.record_tool_execution(
-                    msg['tool_name'], 
-                    msg['execution_time'],
-                    success=not msg.get('is_error', False),
-                    error_msg=msg.get('error_message')
-                )
+            if performance_monitor and hasattr(performance_monitor, 'record_tool_execution'):
+                try:
+                    performance_monitor.record_tool_execution(
+                        msg['tool_name'], 
+                        msg['execution_time'],
+                        success=not msg.get('is_error', False),
+                        error_msg=msg.get('error_message')
+                    )
+                except Exception as e:
+                    logging.error(f"Error recording tool execution: {str(e)}")
     
-    # Record processing time for performance monitoring
+    # FIXED: Record processing time for performance monitoring with error handling
     if msg.get("role") == "assistant" and msg.get('processing_time'):
         performance_monitor = st.session_state.get(user_perf_key)
-        if performance_monitor:
-            message_length = len(msg.get('content', ''))
-            token_count = msg.get('token_count')  # If available from AI service
-            tool_used = msg.get('tool_name') if msg.get('tool_name') else None
-            
-            performance_monitor.record_processing_time(
-                msg['processing_time'], 
-                message_length,
-                token_count,
-                error_occurred=msg.get('is_error', False),
-                tool_used=tool_used
-            )
-            
-            # Record error if this is an error message
-            if msg.get('is_error'):
-                performance_monitor.record_error(
-                    'processing_error',
-                    msg.get('error_message', 'Unknown processing error'),
-                    {
-                        'message_length': message_length,
-                        'processing_time': msg['processing_time']
-                    }
+        if performance_monitor and hasattr(performance_monitor, 'record_processing_time'):
+            try:
+                message_length = len(msg.get('content', ''))
+                token_count = msg.get('token_count')  # If available from AI service
+                tool_used = msg.get('tool_name') if msg.get('tool_name') else None
+                
+                performance_monitor.record_processing_time(
+                    msg['processing_time'], 
+                    message_length,
+                    token_count,
+                    error_occurred=msg.get('is_error', False),
+                    tool_used=tool_used
                 )
+                
+                # Record error if this is an error message
+                if msg.get('is_error'):
+                    performance_monitor.record_error(
+                        'processing_error',
+                        msg.get('error_message', 'Unknown processing error'),
+                        {
+                            'message_length': message_length,
+                            'processing_time': msg['processing_time']
+                        }
+                    )
+            except Exception as e:
+                logging.error(f"Error recording processing time: {str(e)}")
     
     # Update user-specific messages
     user_messages.append(msg)
@@ -1722,8 +1712,8 @@ class ChatService:
         return min(100, consistency_score)
 
 # Enhanced utility functions for performance analytics
-def get_user_performance_stats(username: str = None) -> Dict[str, Any]:
-    """Get comprehensive performance statistics for a user."""
+def get_user_performance_stats(username: str = None) -> dict:
+    """Get comprehensive performance statistics for a user - FIXED VERSION."""
     if not username:
         username = st.session_state.get('username')
     
@@ -1736,7 +1726,11 @@ def get_user_performance_stats(username: str = None) -> Dict[str, Any]:
     if not performance_monitor:
         return {"status": "no_monitor"}
     
-    return performance_monitor.get_performance_summary()
+    try:
+        return performance_monitor.get_performance_summary()
+    except Exception as e:
+        logging.error(f"Error getting performance summary for {username}: {str(e)}")
+        return {"status": "error", "error": str(e)}
 
 def get_user_performance_trends(username: str = None, window_size: int = 5) -> Dict[str, Any]:
     """Get performance trends for a user."""
@@ -2085,18 +2079,29 @@ def get_performance_suggestions(performance_stats: Dict[str, Any]) -> List[str]:
 
 # Authentication event handlers with comprehensive performance monitoring
 def on_user_login(username: str):
-    """Handle user login - initialize user-specific session with comprehensive performance monitoring."""
+    """Handle user login - initialize user-specific session with comprehensive performance monitoring - FIXED VERSION."""
     switch_user_context(username)
     
-    # Initialize performance monitor and analyzer for new session
+    # FIXED: Initialize performance monitor and analyzer for new session with error handling
     user_perf_key = f"user_{username}_performance_monitor"
     user_analyzer_key = f"user_{username}_chat_analyzer"
     
-    if user_perf_key not in st.session_state:
-        st.session_state[user_perf_key] = PerformanceMonitor()
+    try:
+        if user_perf_key not in st.session_state:
+            st.session_state[user_perf_key] = create_safe_performance_monitor()
+            logging.info(f"✅ Performance monitor created for user {username}")
+    except Exception as e:
+        logging.error(f"❌ Error creating performance monitor for {username}: {str(e)}")
+        # Set a None value to prevent errors
+        st.session_state[user_perf_key] = None
     
-    if user_analyzer_key not in st.session_state:
-        st.session_state[user_analyzer_key] = ChatPerformanceAnalyzer()
+    try:
+        if user_analyzer_key not in st.session_state:
+            st.session_state[user_analyzer_key] = ChatPerformanceAnalyzer()
+            logging.info(f"✅ Chat analyzer created for user {username}")
+    except Exception as e:
+        logging.error(f"❌ Error creating chat analyzer for {username}: {str(e)}")
+        st.session_state[user_analyzer_key] = None
     
     logging.info(f"✅ User {username} logged in with performance monitoring enabled")
 
