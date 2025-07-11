@@ -1,4 +1,4 @@
-# Enhanced ui_components/enhanced_config.py for mcp-chatbot
+# Fixed ui_components/enhanced_config.py for mcp-chatbot
 
 import streamlit as st
 import os
@@ -7,62 +7,110 @@ from datetime import datetime
 import traceback
 from utils.async_helpers import reset_connection_state
 
-# Enhanced model configuration with more providers
+# Enhanced model configuration with O3/O3-mini support
 EXTENDED_MODEL_OPTIONS = {
     'OpenAI': {
-        'models': ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+        'models': ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo', 'o3-mini', 'o1', 'o1-mini'],
         'default_model': 'gpt-4o',
         'required_env': ['OPENAI_API_KEY'],
         'optional_env': ['OPENAI_ORG_ID'],
         'base_url': 'https://api.openai.com/v1',
         'description': 'OpenAI GPT models with advanced reasoning capabilities',
-        'status_check': 'openai_status'
+        'status_check': 'openai_status',
+        'reasoning_models': ['o3-mini', 'o1', 'o1-mini']  # Models that use reasoning_effort
     },
     'Azure OpenAI': {
-        'models': ['gpt-4.1','gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+        'models': ['gpt-4.1','gpt-4o', 'gpt-4o-mini', 'o3-mini', 'o1', 'o1-mini'],
         'default_model': 'gpt-4.1',
         'required_env': ['AZURE_API_KEY', 'AZURE_ENDPOINT', 'AZURE_DEPLOYMENT', 'AZURE_API_VERSION'],
         'optional_env': [],
         'base_url': 'Custom Azure endpoint',
         'description': 'Azure-hosted OpenAI models with enterprise features',
-        'status_check': 'azure_status'
+        'status_check': 'azure_status',
+        'reasoning_models': ['o3-mini', 'o1', 'o1-mini']  # Models that use reasoning_effort
     }
 }
+
+def is_reasoning_model(model_name: str) -> bool:
+    """Check if a model is a reasoning model (O3/O1 series)."""
+    reasoning_models = ['o3-mini', 'o1', 'o1-mini', 'o3', 'o1-preview']
+    return any(rm in model_name.lower() for rm in reasoning_models)
+
+def get_model_supported_parameters(model_name: str) -> dict:
+    """Get supported parameters for a specific model."""
+    if is_reasoning_model(model_name):
+        return {
+            'max_completion_tokens': True,
+            'reasoning_effort': True,
+            'temperature': False,
+            'top_p': False,
+            'presence_penalty': False,
+            'frequency_penalty': False,
+            'max_tokens': False  # Use max_completion_tokens instead
+        }
+    else:
+        return {
+            'max_tokens': True,
+            'temperature': True,
+            'top_p': True,
+            'presence_penalty': True,
+            'frequency_penalty': True,
+            'max_completion_tokens': False,
+            'reasoning_effort': False
+        }
 
 def get_provider_status(provider_name, config):
     """Check if a provider is properly configured."""
     missing_vars = []
     configured_vars = []
     
-    for var in config['required_env']:
-        if os.getenv(var):
-            configured_vars.append(var)
-        else:
-            missing_vars.append(var)
-    
-    for var in config['optional_env']:
-        if os.getenv(var):
-            configured_vars.append(var)
-    
-    status = "✅ Configured" if not missing_vars else "❌ Missing Keys"
-    return status, configured_vars, missing_vars
+    try:
+        for var in config['required_env']:
+            if os.getenv(var):
+                configured_vars.append(var)
+            else:
+                missing_vars.append(var)
+        
+        for var in config['optional_env']:
+            if os.getenv(var):
+                configured_vars.append(var)
+        
+        status = "✅ Configured" if not missing_vars else "❌ Missing Keys"
+        return status, configured_vars, missing_vars
+    except Exception as e:
+        st.error(f"Error checking provider status: {str(e)}")
+        return "❌ Error", [], config.get('required_env', [])
 
 def test_model_connection(provider_name, model_name):
-    """Test connection to a specific model."""
+    """Test connection to a specific model with proper parameter handling."""
     try:
         # Import and test based on provider
         if provider_name == "OpenAI":
             try:
                 import openai
                 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                response = client.chat.completions.create(
-                    model=model_name,
-                    messages=[{"role": "user", "content": "Hello"}],
-                    max_tokens=5
-                )
+                
+                # Use appropriate parameters based on model type
+                if is_reasoning_model(model_name):
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=[{"role": "user", "content": "Hello"}],
+                        max_completion_tokens=5,
+                        reasoning_effort="low"
+                    )
+                else:
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=[{"role": "user", "content": "Hello"}],
+                        max_tokens=5
+                    )
                 return True, "Connection successful"
             except ImportError:
                 return False, "OpenAI library not installed. Run: pip install openai"
+            except Exception as e:
+                if "Unsupported parameter" in str(e):
+                    return False, f"Model {model_name} doesn't support the parameters used. Please check model configuration."
+                return False, str(e)
         
         elif provider_name == "Azure OpenAI":
             try:
@@ -72,77 +120,30 @@ def test_model_connection(provider_name, model_name):
                     azure_endpoint=os.getenv("AZURE_ENDPOINT"),
                     api_version=os.getenv("AZURE_API_VERSION")
                 )
-                response = client.chat.completions.create(
-                    model=os.getenv("AZURE_DEPLOYMENT"),
-                    messages=[{"role": "user", "content": "Hello"}],
-                    max_completion_tokens=5
-                )
+                
+                deployment_name = os.getenv("AZURE_DEPLOYMENT")
+                
+                # Use appropriate parameters based on model type
+                if is_reasoning_model(model_name):
+                    response = client.chat.completions.create(
+                        model=deployment_name,  # Use deployment name for Azure
+                        messages=[{"role": "user", "content": "Hello"}],
+                        max_completion_tokens=5,
+                        reasoning_effort="low"
+                    )
+                else:
+                    response = client.chat.completions.create(
+                        model=deployment_name,  # Use deployment name for Azure
+                        messages=[{"role": "user", "content": "Hello"}],
+                        max_tokens=5
+                    )
                 return True, "Connection successful"
             except ImportError:
                 return False, "OpenAI library not installed. Run: pip install openai"
-        
-        elif provider_name == "Anthropic":
-            try:
-                import anthropic
-                client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-                response = client.messages.create(
-                    model=model_name,
-                    max_tokens=5,
-                    messages=[{"role": "user", "content": "Hello"}]
-                )
-                return True, "Connection successful"
-            except ImportError:
-                return False, "Anthropic library not installed. Run: pip install anthropic"
-        
-        elif provider_name == "Google Gemini":
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content("Hello")
-                return True, "Connection successful"
-            except ImportError:
-                return False, "Google AI library not installed. Run: pip install google-generativeai"
-        
-        elif provider_name == "Cohere":
-            try:
-                import cohere
-                client = cohere.Client(os.getenv("COHERE_API_KEY"))
-                response = client.generate(model=model_name, prompt="Hello", max_tokens=5)
-                return True, "Connection successful"
-            except ImportError:
-                return False, "Cohere library not installed. Run: pip install cohere"
-        
-        elif provider_name == "Mistral AI":
-            try:
-                from mistralai.client import MistralClient
-                client = MistralClient(api_key=os.getenv("MISTRAL_API_KEY"))
-                response = client.chat(
-                    model=model_name,
-                    messages=[{"role": "user", "content": "Hello"}],
-                    max_tokens=5
-                )
-                return True, "Connection successful"
-            except ImportError:
-                return False, "Mistral AI library not installed. Run: pip install mistralai"
-        
-        elif provider_name == "Ollama (Local)":
-            try:
-                import requests
-                base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-                response = requests.post(
-                    f"{base_url}/api/generate",
-                    json={"model": model_name, "prompt": "Hello", "stream": False},
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    return True, "Connection successful"
-                else:
-                    return False, f"Server returned status {response.status_code}"
-            except requests.exceptions.ConnectionError:
-                return False, "Cannot connect to Ollama server. Is it running?"
             except Exception as e:
-                return False, f"Connection error: {str(e)}"
+                if "Unsupported parameter" in str(e):
+                    return False, f"Model {model_name} doesn't support the parameters used. Please check model configuration."
+                return False, str(e)
         
         else:
             return False, f"Testing not implemented for {provider_name}"
@@ -151,10 +152,14 @@ def test_model_connection(provider_name, model_name):
         return False, str(e)
 
 def save_model_configuration(config_data):
-    """Save model configuration to file."""
+    """Save model configuration to file with error handling."""
     try:
         config_path = "model_configs.json"
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        
+        # Validate config_data
+        if not isinstance(config_data, dict):
+            return False, "Invalid configuration data format"
         
         with open(config_path, 'w') as f:
             json.dump(config_data, f, indent=2)
@@ -170,15 +175,20 @@ def load_model_configuration():
             with open(config_path, 'r') as f:
                 return json.load(f)
         return {}
-    except Exception:
+    except Exception as e:
+        st.warning(f"Error loading model configuration: {str(e)}")
         return {}
 
 def create_enhanced_configuration_tab():
-    """Create the enhanced Configuration tab with model management."""
+    """Create the enhanced Configuration tab with model management and improved error handling."""
     st.markdown("Configure, test, and manage multiple AI model connections.")
     
-    # Load existing configurations
-    saved_configs = load_model_configuration()
+    # Load existing configurations with error handling
+    try:
+        saved_configs = load_model_configuration()
+    except Exception as e:
+        st.error(f"Error loading configurations: {str(e)}")
+        saved_configs = {}
     
     # Main configuration modes
     config_mode = st.radio(
@@ -196,7 +206,7 @@ def create_enhanced_configuration_tab():
         create_connection_management_section(saved_configs)
 
 def create_quick_setup_section(saved_configs):
-    """Create quick setup section for common providers."""
+    """Create quick setup section for common providers with improved error handling."""
     st.subheader("🚀 Quick Setup")
     st.markdown("Fast configuration for popular AI providers.")
     
@@ -229,11 +239,15 @@ def create_quick_setup_section(saved_configs):
         with col3:
             st.markdown(f"**Default Model:** `{provider_config['default_model']}`")
     
-    # Environment variables setup
+    # Environment variables setup with improved error handling
     st.subheader("🔐 Environment Variables")
     
     with st.container(border=True):
         st.markdown("**Required Variables:**")
+        
+        # Initialize session state for form data if not exists
+        if 'env_form_data' not in st.session_state:
+            st.session_state['env_form_data'] = {}
         
         env_changed = False
         for var in provider_config['required_env']:
@@ -249,8 +263,12 @@ def create_quick_setup_section(saved_configs):
                     help=f"Enter your {var}"
                 )
                 if new_value != current_value:
-                    os.environ[var] = new_value
-                    env_changed = True
+                    try:
+                        os.environ[var] = new_value
+                        st.session_state['env_form_data'][var] = new_value
+                        env_changed = True
+                    except Exception as e:
+                        st.error(f"Error setting {var}: {str(e)}")
             
             with col2:
                 if current_value:
@@ -271,10 +289,14 @@ def create_quick_setup_section(saved_configs):
                     help=f"Optional: {var}"
                 )
                 if new_value != current_value:
-                    os.environ[var] = new_value
-                    env_changed = True
+                    try:
+                        os.environ[var] = new_value
+                        st.session_state['env_form_data'][var] = new_value
+                        env_changed = True
+                    except Exception as e:
+                        st.error(f"Error setting {var}: {str(e)}")
     
-    # Model selection and testing
+    # Model selection and testing with reasoning model support
     st.subheader("🤖 Model Configuration")
     
     col1, col2 = st.columns(2)
@@ -287,154 +309,233 @@ def create_quick_setup_section(saved_configs):
             help="Select the specific model to use",
             key="quick_model_select"
         )
+        
+        # Show model type information
+        if is_reasoning_model(selected_model):
+            st.info("🧠 This is a reasoning model (O3/O1 series)")
+            st.markdown("**Reasoning models features:**")
+            st.markdown("- Use `reasoning_effort` instead of `temperature`")
+            st.markdown("- Use `max_completion_tokens` instead of `max_tokens`")
+            st.markdown("- Perform internal step-by-step thinking")
+            st.markdown("- Optimized for STEM, coding, and logical reasoning")
     
     with col2:
         if st.button("🧪 Test Connection", type="primary", use_container_width=True, key="quick_test"):
-            with st.spinner(f"Testing connection to {selected_provider}..."):
-                success, message = test_model_connection(selected_provider, selected_model)
-                if success:
-                    st.success(f"✅ {message}")
-                else:
-                    st.error(f"❌ {message}")
+            with st.spinner(f"Testing connection to {selected_provider} - {selected_model}..."):
+                try:
+                    success, message = test_model_connection(selected_provider, selected_model)
+                    if success:
+                        st.success(f"✅ {message}")
+                    else:
+                        st.error(f"❌ {message}")
+                except Exception as e:
+                    st.error(f"❌ Test failed: {str(e)}")
     
-    # Save configuration
+    # Model Parameters with reasoning model support
+    st.subheader("⚙️ Model Parameters")
+    
+    supported_params = get_model_supported_parameters(selected_model)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if supported_params.get('max_tokens'):
+            max_tokens_value = st.number_input(
+                "Max Tokens",
+                min_value=1,
+                max_value=32000,
+                value=4096,
+                step=256,
+                help="Maximum number of tokens in the response",
+                key="quick_max_tokens"
+            )
+        elif supported_params.get('max_completion_tokens'):
+            max_completion_tokens_value = st.number_input(
+                "Max Completion Tokens",
+                min_value=1,
+                max_value=32000,
+                value=4096,
+                step=256,
+                help="Maximum completion tokens for reasoning models",
+                key="quick_max_completion_tokens"
+            )
+    
+    with col2:
+        if supported_params.get('temperature'):
+            temperature_value = st.slider(
+                "Temperature", 
+                0.0, 
+                2.0, 
+                step=0.05, 
+                value=1.0,
+                help="Controls randomness: 0.0 = deterministic, 2.0 = very creative",
+                key="quick_temperature"
+            )
+        elif supported_params.get('reasoning_effort'):
+            reasoning_effort_value = st.selectbox(
+                "Reasoning Effort",
+                options=["low", "medium", "high"],
+                index=1,  # Default to medium
+                help="Controls thinking depth: low=faster, high=more thorough",
+                key="quick_reasoning_effort"
+            )
+    
+    # Save configuration with improved error handling
     col1, col2 = st.columns(2)
     with col1:
         if st.button("💾 Save Configuration", use_container_width=True, key="quick_save"):
-            config_data = {
-                "provider": selected_provider,
-                "model": selected_model,
-                "configured_at": datetime.now().isoformat(),
-                "environment_vars": {var: bool(os.getenv(var)) for var in provider_config['required_env'] + provider_config['optional_env']}
-            }
-            
-            all_configs = load_model_configuration()
-            all_configs[selected_provider] = config_data
-            
-            success, message = save_model_configuration(all_configs)
-            if success:
-                st.success(message)
-                # Update session state
-                st.session_state['params']['model_id'] = selected_provider
-                st.session_state['params']['selected_model'] = selected_model
-            else:
-                st.error(message)
+            try:
+                # Prepare configuration data
+                config_data = {
+                    "provider": selected_provider,
+                    "model": selected_model,
+                    "configured_at": datetime.now().isoformat(),
+                    "environment_vars": {var: bool(os.getenv(var)) for var in provider_config['required_env'] + provider_config['optional_env']},
+                    "is_reasoning_model": is_reasoning_model(selected_model),
+                    "supported_parameters": supported_params
+                }
+                
+                # Add model-specific parameters
+                if supported_params.get('max_tokens'):
+                    config_data["max_tokens"] = max_tokens_value
+                if supported_params.get('max_completion_tokens'):
+                    config_data["max_completion_tokens"] = max_completion_tokens_value
+                if supported_params.get('temperature'):
+                    config_data["temperature"] = temperature_value
+                if supported_params.get('reasoning_effort'):
+                    config_data["reasoning_effort"] = reasoning_effort_value
+                
+                all_configs = load_model_configuration()
+                all_configs[selected_provider] = config_data
+                
+                success, message = save_model_configuration(all_configs)
+                if success:
+                    st.success(message)
+                    # Update session state safely
+                    try:
+                        if 'params' not in st.session_state:
+                            st.session_state['params'] = {}
+                        st.session_state['params']['model_id'] = selected_provider
+                        st.session_state['params']['selected_model'] = selected_model
+                        
+                        # Add model-specific parameters to session state
+                        if supported_params.get('max_tokens'):
+                            st.session_state['params']['max_tokens'] = max_tokens_value
+                        if supported_params.get('max_completion_tokens'):
+                            st.session_state['params']['max_completion_tokens'] = max_completion_tokens_value
+                        if supported_params.get('temperature'):
+                            st.session_state['params']['temperature'] = temperature_value
+                        if supported_params.get('reasoning_effort'):
+                            st.session_state['params']['reasoning_effort'] = reasoning_effort_value
+                        
+                    except Exception as e:
+                        st.warning(f"Configuration saved but session update failed: {str(e)}")
+                else:
+                    st.error(message)
+            except Exception as e:
+                st.error(f"Failed to save configuration: {str(e)}")
+                st.info("Please check your inputs and try again.")
     
     with col2:
         if st.button("🔄 Set as Active", use_container_width=True, key="quick_activate"):
-            st.session_state['params']['model_id'] = selected_provider
-            st.session_state['params']['selected_model'] = selected_model
-            reset_connection_state()
-            st.success(f"Activated {selected_provider} - {selected_model}")
-            st.rerun()
+            try:
+                if 'params' not in st.session_state:
+                    st.session_state['params'] = {}
+                st.session_state['params']['model_id'] = selected_provider
+                st.session_state['params']['selected_model'] = selected_model
+                
+                # Add model-specific parameters
+                if supported_params.get('max_tokens') and 'max_tokens_value' in locals():
+                    st.session_state['params']['max_tokens'] = max_tokens_value
+                if supported_params.get('max_completion_tokens') and 'max_completion_tokens_value' in locals():
+                    st.session_state['params']['max_completion_tokens'] = max_completion_tokens_value
+                if supported_params.get('temperature') and 'temperature_value' in locals():
+                    st.session_state['params']['temperature'] = temperature_value
+                if supported_params.get('reasoning_effort') and 'reasoning_effort_value' in locals():
+                    st.session_state['params']['reasoning_effort'] = reasoning_effort_value
+                
+                reset_connection_state()
+                st.success(f"Activated {selected_provider} - {selected_model}")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to activate configuration: {str(e)}")
 
 def create_advanced_setup_section(saved_configs):
     """Create advanced setup section for custom configurations."""
     st.subheader("🔧 Advanced Setup")
     st.markdown("Custom configuration for specialized setups.")
     
-    # Custom provider setup - use checkbox instead of expander
-    show_custom_provider = st.checkbox("➕ Add Custom Provider", key="show_custom_provider")
-    if show_custom_provider:
-        st.markdown("Configure a custom AI provider or local model.")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            custom_name = st.text_input("Provider Name", placeholder="My Custom Provider", key="custom_name")
-            custom_base_url = st.text_input("Base URL", placeholder="https://api.example.com/v1", key="custom_url")
-            custom_api_key_name = st.text_input("API Key Environment Variable", placeholder="CUSTOM_API_KEY", key="custom_key")
-        
-        with col2:
-            custom_model = st.text_input("Model Name", placeholder="custom-model-v1", key="custom_model")
-            custom_description = st.text_area("Description", placeholder="Description of this provider...", key="custom_desc")
-        
-        if st.button("Add Custom Provider", key="add_custom"):
-            if all([custom_name, custom_base_url, custom_api_key_name, custom_model]):
-                # Add to extended options temporarily
-                EXTENDED_MODEL_OPTIONS[custom_name] = {
-                    'models': [custom_model],
-                    'default_model': custom_model,
-                    'required_env': [custom_api_key_name],
-                    'optional_env': [],
-                    'base_url': custom_base_url,
-                    'description': custom_description,
-                    'status_check': 'custom_status'
-                }
-                st.success(f"Added custom provider: {custom_name}")
-                st.rerun()
-            else:
-                st.error("Please fill in all required fields")
-    
-    # Bulk environment variable setup - use checkbox instead of expander
-    show_bulk_env = st.checkbox("🌍 Bulk Environment Setup", key="show_bulk_env")
-    if show_bulk_env:
-        st.markdown("Set multiple environment variables at once.")
-        
-        env_text = st.text_area(
-            "Environment Variables",
-            placeholder="""OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=AIza...""",
-            height=200,
-            help="Enter one variable per line in KEY=value format",
-            key="bulk_env"
-        )
-        
-        if st.button("Apply Environment Variables", key="apply_env"):
-            if env_text.strip():
-                applied = 0
-                errors = []
-                
-                for line in env_text.strip().split('\n'):
-                    if '=' in line:
-                        key, value = line.split('=', 1)
-                        key = key.strip()
-                        value = value.strip()
-                        
-                        if key and value:
-                            os.environ[key] = value
-                            applied += 1
-                        else:
-                            errors.append(f"Invalid format: {line}")
-                    else:
-                        errors.append(f"Missing '=' in: {line}")
-                
-                if applied > 0:
-                    st.success(f"Applied {applied} environment variables")
-                if errors:
-                    st.error("Errors:\n" + "\n".join(errors))
-            else:
-                st.warning("Please enter environment variables")
-    
-    # Model parameters configuration - use checkbox instead of expander
+    # Model parameters configuration with reasoning model support
     show_model_params = st.checkbox("⚙️ Model Parameters", key="show_model_params", value=True)
     if show_model_params:
         st.markdown("Configure default parameters for all models.")
         
+        # Get current session state parameters
+        current_params = st.session_state.get('params', {})
+        current_model = current_params.get('selected_model', 'gpt-4o')
+        supported_params = get_model_supported_parameters(current_model)
+        
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            default_max_tokens = st.number_input(
-                "Max Tokens",
-                min_value=1,
-                max_value=32000,
-                value=st.session_state.get('params', {}).get('max_tokens', 4096),
-                step=256,
-                help="Maximum tokens in response",
-                key="adv_max_tokens"
-            )
+            if supported_params.get('max_tokens'):
+                default_max_tokens = st.number_input(
+                    "Max Tokens",
+                    min_value=1,
+                    max_value=32000,
+                    value=current_params.get('max_tokens', 4096),
+                    step=256,
+                    help="Maximum tokens in response",
+                    key="adv_max_tokens"
+                )
+                # Update session state
+                if 'params' not in st.session_state:
+                    st.session_state['params'] = {}
+                st.session_state['params']['max_tokens'] = default_max_tokens
+            
+            elif supported_params.get('max_completion_tokens'):
+                default_max_completion_tokens = st.number_input(
+                    "Max Completion Tokens",
+                    min_value=1,
+                    max_value=32000,
+                    value=current_params.get('max_completion_tokens', 4096),
+                    step=256,
+                    help="Maximum completion tokens for reasoning models",
+                    key="adv_max_completion_tokens"
+                )
+                # Update session state
+                if 'params' not in st.session_state:
+                    st.session_state['params'] = {}
+                st.session_state['params']['max_completion_tokens'] = default_max_completion_tokens
         
         with col2:
-            default_temperature = st.slider(
-                "Temperature",
-                min_value=0.0,
-                max_value=2.0,
-                value=st.session_state.get('params', {}).get('temperature', 1.0),
-                step=0.1,
-                help="Creativity level (0=deterministic, 2=very creative)",
-                key="adv_temperature"
-            )
+            if supported_params.get('temperature'):
+                default_temperature = st.slider(
+                    "Temperature",
+                    min_value=0.0,
+                    max_value=2.0,
+                    value=current_params.get('temperature', 1.0),
+                    step=0.1,
+                    help="Creativity level (0=deterministic, 2=very creative)",
+                    key="adv_temperature"
+                )
+                # Update session state
+                if 'params' not in st.session_state:
+                    st.session_state['params'] = {}
+                st.session_state['params']['temperature'] = default_temperature
+            
+            elif supported_params.get('reasoning_effort'):
+                default_reasoning_effort = st.selectbox(
+                    "Reasoning Effort",
+                    options=["low", "medium", "high"],
+                    index=["low", "medium", "high"].index(current_params.get('reasoning_effort', 'medium')),
+                    help="Thinking depth (low=faster, high=more thorough)",
+                    key="adv_reasoning_effort"
+                )
+                # Update session state
+                if 'params' not in st.session_state:
+                    st.session_state['params'] = {}
+                st.session_state['params']['reasoning_effort'] = default_reasoning_effort
         
         with col3:
             default_timeout = st.number_input(
@@ -446,19 +547,17 @@ GOOGLE_API_KEY=AIza...""",
                 help="Request timeout duration",
                 key="adv_timeout"
             )
+            # Update session state
+            if 'params' not in st.session_state:
+                st.session_state['params'] = {}
+            st.session_state['params']['timeout'] = default_timeout
         
-        # Update session state
-        if 'params' not in st.session_state:
-            st.session_state['params'] = {}
-        
-        st.session_state['params'].update({
-            'max_tokens': default_max_tokens,
-            'temperature': default_temperature,
-            'timeout': default_timeout
-        })
+        # Show current model information
+        if current_model:
+            st.info(f"📝 Current model: **{current_model}** ({'Reasoning Model' if is_reasoning_model(current_model) else 'Standard Model'})")
 
 def create_connection_management_section(saved_configs):
-    """Create connection management section."""
+    """Create connection management section with improved error handling."""
     st.subheader("🔌 Connection Management")
     st.markdown("Manage and test existing AI model connections.")
     
@@ -469,33 +568,12 @@ def create_connection_management_section(saved_configs):
     if current_provider:
         st.success(f"**Active Provider:** {current_provider}")
         if current_model:
-            st.info(f"**Active Model:** {current_model}")
+            model_type = "🧠 Reasoning Model" if is_reasoning_model(current_model) else "🤖 Standard Model"
+            st.info(f"**Active Model:** {current_model} ({model_type})")
     else:
         st.warning("No active provider selected")
     
-    # Connection overview
-    with st.container(border=True):
-        st.markdown("### 📊 Provider Status Overview")
-        
-        # Display as metrics grid
-        providers = list(EXTENDED_MODEL_OPTIONS.keys())
-        rows = [providers[i:i+3] for i in range(0, len(providers), 3)]
-        
-        for row in rows:
-            cols = st.columns(len(row))
-            for i, provider_name in enumerate(row):
-                config = EXTENDED_MODEL_OPTIONS[provider_name]
-                status, configured_vars, missing_vars = get_provider_status(provider_name, config)
-                
-                with cols[i]:
-                    st.metric(
-                        provider_name,
-                        status,
-                        f"{len(configured_vars)} vars configured",
-                        delta_color="normal" if status.startswith("✅") else "inverse"
-                    )
-    
-    # Connection testing
+    # Connection testing with improved error handling
     st.markdown("### 🧪 Connection Testing")
     
     col1, col2, col3 = st.columns(3)
@@ -520,241 +598,32 @@ def create_connection_management_section(saved_configs):
         if st.button("🧪 Test Connection", use_container_width=True, key="test_connection"):
             if test_provider and test_model:
                 with st.spinner(f"Testing {test_provider} - {test_model}..."):
-                    success, message = test_model_connection(test_provider, test_model)
-                    if success:
-                        st.success(f"✅ {message}")
-                    else:
-                        st.error(f"❌ {message}")
-    
-    # Quick actions
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🔄 Set as Active Provider", use_container_width=True, key="set_active"):
-            if test_provider and test_model:
-                # Update session state and force reconnection
-                st.session_state['params']['model_id'] = test_provider
-                st.session_state['params']['selected_model'] = test_model
-                reset_connection_state()
-                st.success(f"Switched to {test_provider} - {test_model}")
-                st.rerun()
+                    try:
+                        success, message = test_model_connection(test_provider, test_model)
+                        if success:
+                            st.success(f"✅ {message}")
+                        else:
+                            st.error(f"❌ {message}")
+                    except Exception as e:
+                        st.error(f"❌ Test failed: {str(e)}")
             else:
-                st.warning("Please select provider and model first")
-    
-    with col2:
-        if st.button("💾 Save Current Config", use_container_width=True, key="save_current"):
-            if test_provider and test_model:
-                config_data = {
-                    "provider": test_provider,
-                    "model": test_model,
-                    "configured_at": datetime.now().isoformat(),
-                    "environment_vars": {var: bool(os.getenv(var)) for var in EXTENDED_MODEL_OPTIONS[test_provider]['required_env'] + EXTENDED_MODEL_OPTIONS[test_provider]['optional_env']}
-                }
-                
-                all_configs = load_model_configuration()
-                all_configs[test_provider] = config_data
-                
-                success, message = save_model_configuration(all_configs)
-                if success:
-                    st.success(message)
-                else:
-                    st.error(message)
-            else:
-                st.warning("Please select provider and model first")
-    
-    # Saved configurations
-    if saved_configs:
-        st.markdown("### 💾 Saved Configurations")
-        
-        for provider_name, config_data in saved_configs.items():
-            # Use container with checkbox instead of expander
-            show_config = st.checkbox(f"📋 Show {provider_name} Configuration", key=f"show_config_{provider_name}")
-            if show_config:
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.write(f"**Model:** {config_data.get('model', 'Unknown')}")
-                    st.write(f"**Configured:** {config_data.get('configured_at', 'Unknown')[:10]}")
-                
-                with col2:
-                    if st.button(f"Load {provider_name}", key=f"load_{provider_name}"):
-                        st.session_state['params']['model_id'] = provider_name
-                        st.session_state['params']['selected_model'] = config_data.get('model')
-                        st.success(f"Loaded configuration for {provider_name}")
-                        st.rerun()
-                
-                with col3:
-                    if st.button(f"Delete", key=f"delete_{provider_name}"):
-                        del saved_configs[provider_name]
-                        save_model_configuration(saved_configs)
-                        st.success(f"Deleted {provider_name} configuration")
-                        st.rerun()
-    
-    # Environment variable manager - use checkbox instead of expander
-    show_env_manager = st.checkbox("🌍 Environment Variable Manager", key="show_env_manager")
-    if show_env_manager:
-        st.markdown("View and manage current environment variables.")
-        
-        # Show relevant environment variables
-        env_vars = {}
-        for provider_config in EXTENDED_MODEL_OPTIONS.values():
-            for var in provider_config['required_env'] + provider_config['optional_env']:
-                if var not in env_vars:
-                    env_vars[var] = os.getenv(var, "")
-        
-        # Create editable environment variables
-        st.markdown("**Current Environment Variables:**")
-        
-        for var, value in env_vars.items():
-            col1, col2, col3 = st.columns([2, 2, 1])
-            
-            with col1:
-                st.text(var)
-            
-            with col2:
-                if value:
-                    masked_value = value[:8] + "..." if len(value) > 8 else "***"
-                    new_value = st.text_input(
-                        f"Edit {var}",
-                        value=value,
-                        type="password" if "KEY" in var else "default",
-                        key=f"env_{var}",
-                        label_visibility="collapsed"
-                    )
-                    if new_value != value:
-                        os.environ[var] = new_value
-                        st.success(f"Updated {var}")
-                else:
-                    new_value = st.text_input(
-                        f"Set {var}",
-                        placeholder="Enter value...",
-                        type="password" if "KEY" in var else "default",
-                        key=f"env_new_{var}",
-                        label_visibility="collapsed"
-                    )
-                    if new_value:
-                        os.environ[var] = new_value
-                        st.success(f"Set {var}")
-            
-            with col3:
-                if value:
-                    st.success("✅")
-                else:
-                    st.error("❌")
-    
-    # Export/Import configurations
-    st.markdown("### 📤 Export/Import")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("📤 Export Configuration", use_container_width=True, key="export_config"):
-            config_export = {
-                'providers': saved_configs,
-                'current_provider': current_provider,
-                'current_model': current_model,
-                'exported_at': datetime.now().isoformat(),
-                'app_version': '2.0.0'
-            }
-            st.download_button(
-                "💾 Download Config",
-                data=json.dumps(config_export, indent=2),
-                file_name=f"ai_config_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json",
-                key="download_config"
-            )
-    
-    with col2:
-        uploaded_config = st.file_uploader(
-            "📤 Import Configuration",
-            type=['json'],
-            help="Upload a previously exported configuration file",
-            key="import_config"
-        )
-        
-        if uploaded_config:
-            try:
-                imported_config = json.load(uploaded_config)
-                if 'providers' in imported_config:
-                    success, message = save_model_configuration(imported_config['providers'])
-                    if success:
-                        st.success("Configuration imported successfully!")
-                        # Auto-load the current provider if available
-                        if 'current_provider' in imported_config and imported_config['current_provider']:
-                            st.session_state['params']['model_id'] = imported_config['current_provider']
-                            if 'current_model' in imported_config:
-                                st.session_state['params']['selected_model'] = imported_config['current_model']
-                        st.rerun()
-                    else:
-                        st.error(f"Import failed: {message}")
-                else:
-                    st.error("Invalid configuration file format")
-            except Exception as e:
-                st.error(f"Failed to import configuration: {str(e)}")
-    
-    # Installation helper - use checkbox instead of expander
-    show_package_helper = st.checkbox("📦 Package Installation Helper", key="show_package_helper")
-    if show_package_helper:
-        st.markdown("Install required packages for different providers.")
-        
-        installation_commands = {
-            'OpenAI': 'pip install openai',
-            'Azure OpenAI': 'pip install openai',
-            'Anthropic': 'pip install anthropic',
-            'Google Gemini': 'pip install google-generativeai',
-            'Cohere': 'pip install cohere',
-            'Mistral AI': 'pip install mistralai',
-            'Ollama (Local)': 'pip install requests (built-in)'
-        }
-        
-        st.markdown("**Installation Commands:**")
-        for provider, command in installation_commands.items():
-            st.code(command, language="bash")
-        
-        # Bulk install command
-        st.markdown("**Install All Providers:**")
-        all_packages = "pip install openai anthropic google-generativeai cohere mistralai requests"
-        st.code(all_packages, language="bash")
-        
-        if st.button("🔍 Check Installed Packages", key="check_packages"):
-            installed_packages = {}
-            packages_to_check = ['openai', 'anthropic', 'google.generativeai', 'cohere', 'mistralai']
-            
-            for package in packages_to_check:
-                try:
-                    __import__(package)
-                    installed_packages[package] = "✅ Installed"
-                except ImportError:
-                    installed_packages[package] = "❌ Not installed"
-            
-            st.markdown("**Package Status:**")
-            for package, status in installed_packages.items():
-                st.write(f"{package}: {status}")
+                st.warning("Please select both provider and model")
 
-def create_provider_comparison_table():
-    """Create a comparison table of all providers."""
-    st.markdown("### 📊 Provider Comparison")
-    
-    comparison_data = []
-    for provider_name, config in EXTENDED_MODEL_OPTIONS.items():
-        status, configured_vars, missing_vars = get_provider_status(provider_name, config)
-        comparison_data.append({
-            'Provider': provider_name,
-            'Models': len(config['models']),
-            'Status': status,
-            'Base URL': config['base_url'][:30] + "..." if len(config['base_url']) > 30 else config['base_url'],
-            'Required Vars': len(config['required_env']),
-            'Optional Vars': len(config['optional_env'])
-        })
-    
-    # Display as a table
-    import pandas as pd
-    df = pd.DataFrame(comparison_data)
-    st.dataframe(df, use_container_width=True)
+# Error boundary decorator
+def with_error_boundary(func):
+    """Decorator to add error boundary to functions."""
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
+            with st.expander("🐛 Error Details"):
+                st.code(traceback.format_exc())
+            return None
+    return wrapper
 
-# Add this to the enhanced configuration tab
-def add_provider_comparison():
-    """Add provider comparison section."""
-    show_comparison = st.checkbox("📊 Show Provider Comparison", key="show_provider_comparison")
-    if show_comparison:
-        create_provider_comparison_table()
+# Apply error boundary to main functions
+create_enhanced_configuration_tab = with_error_boundary(create_enhanced_configuration_tab)
+create_quick_setup_section = with_error_boundary(create_quick_setup_section)
+create_advanced_setup_section = with_error_boundary(create_advanced_setup_section)
+create_connection_management_section = with_error_boundary(create_connection_management_section)
