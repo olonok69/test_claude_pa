@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 One-time script to delete and reload wheat_stocks table from Excel file
+This version properly handles the 2025/2026 data and updates the year configuration
 Place this script in: mcp-bot-ppf/client/database_setup/
 """
 
@@ -55,7 +56,7 @@ def delete_and_recreate_wheat_stocks_table(db_path="wheat_production.db"):
 
 
 def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
-    """Load wheat stocks data from Excel file"""
+    """Load wheat stocks data from Excel file including 2025/2026 data"""
 
     print(f"\n📊 Loading data from: {excel_path}")
 
@@ -111,7 +112,7 @@ def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
         print("❌ Could not find header row with years")
         return False
 
-    # Extract years from header
+    # Extract years from header - INCLUDING 2025/2026
     years_row = df.iloc[header_row]
     year_columns = {}
 
@@ -122,6 +123,17 @@ def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
                 year_columns[col_idx] = year
 
     print(f"✅ Found years: {list(year_columns.values())}")
+
+    # Verify 2025/2026 is included
+    if "2025/2026" not in year_columns.values():
+        print("⚠️ Warning: 2025/2026 not found in years. Checking adjacent cells...")
+        # Sometimes the year might be in a different format or adjacent cell
+        for col_idx in range(len(years_row)):
+            cell_str = str(years_row.iloc[col_idx])
+            if "2025" in cell_str and "2026" in cell_str:
+                year_columns[col_idx] = "2025/2026"
+                print(f"✅ Found 2025/2026 at column {col_idx}")
+                break
 
     # Connect to database
     conn = sqlite3.connect(db_path)
@@ -176,7 +188,9 @@ def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
 
                 all_data[country][year] = {"value": stock_value, "change": change_value}
 
-        # Calculate percentages and insert data
+                print(f"  - {year}: {stock_value:.1f} Mt")
+
+        # Insert data for all years including 2025/2026
         for year in year_columns.values():
             # Get WORLD total for this year
             world_total = None
@@ -190,12 +204,14 @@ def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
                 stock_value = data[year]["value"]
                 change_value = data[year]["change"]
 
-                # Determine status based on year
+                # Determine status based on year - UPDATED FOR NEW CONFIGURATION
                 if year in ["2021/2022", "2022/2023"]:
                     status = "actual"
                 elif year == "2023/2024":
-                    status = "estimate"
+                    status = "actual"  # Changed from estimate to actual
                 elif year == "2024/2025":
+                    status = "estimate"
+                elif year == "2025/2026":
                     status = "projection"
                 else:
                     status = "actual"
@@ -225,10 +241,9 @@ def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
                     ),
                 )
 
-                print(f"  ✅ {year}: {stock_value:.1f} Mt (status: {status})")
                 records_inserted += 1
 
-        # Update metadata
+        # Update metadata with NEW YEAR CONFIGURATION for 2025/2026
         cursor.execute(
             """
             INSERT OR REPLACE INTO metadata (key, value, created_at, updated_at)
@@ -242,7 +257,7 @@ def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
             ),
         )
 
-        # Update display years configuration
+        # Update display years configuration to include 2025/2026
         cursor.execute(
             """
             INSERT OR REPLACE INTO metadata (key, value, created_at, updated_at)
@@ -250,12 +265,13 @@ def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
         """,
             (
                 "stocks_display_years",
-                "2021/2022,2022/2023,2023/2024,2024/2025",
+                "2022/2023,2023/2024,2024/2025,2025/2026",
                 datetime.now().isoformat(),
                 datetime.now().isoformat(),
             ),
         )
 
+        # Update year status configuration
         cursor.execute(
             """
             INSERT OR REPLACE INTO metadata (key, value, created_at, updated_at)
@@ -263,7 +279,7 @@ def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
         """,
             (
                 "stocks_year_status",
-                '{"2021/2022": "actual", "2022/2023": "actual", "2023/2024": "estimate", "2024/2025": "projection"}',
+                '{"2022/2023": "actual", "2023/2024": "actual", "2024/2025": "estimate", "2025/2026": "projection"}',
                 datetime.now().isoformat(),
                 datetime.now().isoformat(),
             ),
@@ -279,10 +295,15 @@ def load_wheat_stocks_from_excel(excel_path, db_path="wheat_production.db"):
         cursor.execute("SELECT COUNT(DISTINCT year) FROM wheat_stocks")
         year_count = cursor.fetchone()[0]
 
+        # Verify 2025/2026 data
+        cursor.execute("SELECT COUNT(*) FROM wheat_stocks WHERE year = '2025/2026'")
+        count_2025 = cursor.fetchone()[0]
+
         print(f"\n📊 Summary:")
         print(f"  - Countries: {country_count}")
         print(f"  - Years: {year_count}")
         print(f"  - Total records: {records_inserted}")
+        print(f"  - 2025/2026 records: {count_2025}")
 
         return True
 
@@ -334,23 +355,24 @@ def parse_value_with_change(cell_value):
 
 
 def verify_data(db_path="wheat_production.db"):
-    """Verify the loaded data"""
+    """Verify the loaded data including 2025/2026"""
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     print("\n🔍 Verifying loaded data...")
 
-    # Show sample data
+    # Show sample data including 2025/2026
     cursor.execute(
         """
         SELECT country, year, stock_value, change_value, status 
         FROM wheat_stocks 
         WHERE country IN ('WORLD', 'China', 'United States')
+        AND year IN ('2023/2024', '2024/2025', '2025/2026')
         ORDER BY country, year
     """
     )
 
-    print("\n🏢 Sample Stock Data:")
+    print("\n🏢 Sample Stock Data (including 2025/2026):")
     for row in cursor.fetchall():
         country, year, value, change, status = row
         change_str = f"({change:.1f})" if change else ""
@@ -360,6 +382,11 @@ def verify_data(db_path="wheat_production.db"):
     cursor.execute("SELECT DISTINCT country FROM wheat_stocks ORDER BY country")
     countries = [row[0] for row in cursor.fetchall()]
     print(f"\n📍 Countries in database: {', '.join(countries)}")
+
+    # Show all years
+    cursor.execute("SELECT DISTINCT year FROM wheat_stocks ORDER BY year")
+    years = [row[0] for row in cursor.fetchall()]
+    print(f"\n📅 Years in database: {', '.join(years)}")
 
     conn.close()
 

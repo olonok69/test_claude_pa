@@ -181,15 +181,15 @@ def load_stocks_data():
         # Get metadata
         metadata = db.get_metadata()
 
-        # Get current year configuration
+        # Get current year configuration - NOW WITH 2025/2026
         current_config = {
             "display_years": metadata.get(
-                "stocks_display_years", "2021/2022,2022/2023,2023/2024,2024/2025"
+                "stocks_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
             ).split(","),
             "year_status": json.loads(
                 metadata.get(
                     "stocks_year_status",
-                    '{"2021/2022": "actual", "2022/2023": "actual", "2023/2024": "estimate", "2024/2025": "projection"}',
+                    '{"2022/2023": "actual", "2023/2024": "actual", "2024/2025": "estimate", "2025/2026": "projection"}',
                 )
             ),
         }
@@ -265,7 +265,7 @@ def initialize_new_year():
         # Get current configuration from metadata
         metadata = db.get_metadata()
         current_display_years = metadata.get(
-            "stocks_display_years", "2021/2022,2022/2023,2023/2024,2024/2025"
+            "stocks_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
         ).split(",")
 
         # Check what years actually exist in the database
@@ -399,12 +399,12 @@ def initialize_session_state():
             st.session_state.stocks_data = {}
             st.session_state.stocks_metadata = {}
             st.session_state.stocks_current_config = {
-                "display_years": ["2021/2022", "2022/2023", "2023/2024", "2024/2025"],
+                "display_years": ["2022/2023", "2023/2024", "2024/2025", "2025/2026"],
                 "year_status": {
-                    "2021/2022": "actual",
                     "2022/2023": "actual",
-                    "2023/2024": "estimate",
-                    "2024/2025": "projection",
+                    "2023/2024": "actual",
+                    "2024/2025": "estimate",
+                    "2025/2026": "projection",
                 },
             }
             st.session_state.stocks_data_loaded = False
@@ -496,7 +496,7 @@ with tab1:
 
     # Get display years from configuration
     display_years = st.session_state.stocks_current_config.get(
-        "display_years", ["2021/2022", "2022/2023", "2023/2024", "2024/2025"]
+        "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
     # Create the data table with proper formatting and change calculations
@@ -625,7 +625,7 @@ with tab1:
 with tab2:
     # Get the projection year (last year in display_years)
     display_years = st.session_state.stocks_current_config.get(
-        "display_years", ["2021/2022", "2022/2023", "2023/2024", "2024/2025"]
+        "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
     projection_year = display_years[-1]
     estimate_year = display_years[-2]
@@ -748,7 +748,7 @@ with tab3:
 
     # Get display years from configuration
     display_years = st.session_state.stocks_current_config.get(
-        "display_years", ["2021/2022", "2022/2023", "2023/2024", "2024/2025"]
+        "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
     # Time series plot
@@ -896,7 +896,7 @@ with tab4:
 
     # Get display years from configuration
     display_years = st.session_state.stocks_current_config.get(
-        "display_years", ["2021/2022", "2022/2023", "2023/2024", "2024/2025"]
+        "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
     latest_year = display_years[-1]
 
