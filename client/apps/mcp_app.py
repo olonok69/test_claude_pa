@@ -8,6 +8,10 @@ import ui_components.sidebar_components as sd_components
 from utils.async_helpers import check_authentication
 from services.chat_service import ChatService, on_user_login, on_user_logout
 from ui_components.enhanced_chat_interface import create_enhanced_chat_interface
+# Add import at the top
+from ui_components.performance_dashboard import create_performance_dashboard, add_performance_dashboard_to_sidebar
+
+
 import logging
 
 from ui_components.logout_warning import show_mcp_logout_warning, show_connection_status_on_logout
