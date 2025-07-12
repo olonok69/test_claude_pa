@@ -1,10 +1,9 @@
-streamlit
+detectaicore
 google-cloud-aiplatform
 pandas
 numpy
 python-dotenv
 PyMuPDF
-streamlit_pdf_viewer
 ipython
 langchain 
 langchain-community
@@ -12,14 +11,9 @@ langchain-experimental
 xmltodict
 pymupdf4llm
 langchain-google-genai
-pypdf
-langchainhub 
 google-generativeai
 langchain-google-community
-tavily-python
-streamlit-authenticator
 pymupdf4llm
-detectaicore
 langchain-google-vertexai
 langgraph
 langchain-openai
@@ -29,4 +23,3 @@ jupyterlab
 matplotlib
 plotly
 openai
-
