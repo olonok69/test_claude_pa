@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1600 1000" xmlns="http://www.w3.org/2000/svg">
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2d3436"/>
+    </marker>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1600" height="1000" fill="#f8f9fa"/>
+  
+  <!-- Title -->
+  <text x="800" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#2c3e50">
+    CSM MCP Server - AI-Powered MSSQL Database Integration Platform
+  </text>
+  
+  <!-- USER LAYER -->
+  <rect x="50" y="80" width="1500" height="80" rx="10" fill="#6c5ce7" stroke="#5a4fcf" stroke-width="2"/>
+  <text x="800" y="105" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">
+    USER LAYER
+  </text>
+  <text x="800" y="125" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">
+    Streamlit Interface • Authentication • Session Management • SSL/HTTPS Support
+  </text>
+  
+  <!-- User Interface Components -->
+  <g transform="translate(80, 180)">
+    <!-- Authentication -->
+    <rect x="0" y="0" width="200" height="120" rx="8" fill="#74b9ff" stroke="#0984e3" stroke-width="2"/>
+    <text x="100" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      🔐 Authentication
+    </text>
+    <text x="10" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • User Login System
+    </text>
+    <text x="10" y="60" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • bcrypt Hashing
+    </text>
+    <text x="10" y="75" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Session Management
+    </text>
+    <text x="10" y="90" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Role-Based Access
+    </text>
+    <text x="10" y="105" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Secure Cookies
+    </text>
+    
+    <!-- Streamlit Client -->
+    <rect x="230" y="0" width="200" height="120" rx="8" fill="#00b894" stroke="#00a085" stroke-width="2"/>
+    <text x="330" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      🖥️ Streamlit Client
+    </text>
+    <text x="240" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • AI Chat Interface
+    </text>
+    <text x="240" y="60" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Multi-Provider Support
+    </text>
+    <text x="240" y="75" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Conversation History
+    </text>
+    <text x="240" y="90" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Tool Management
+    </text>
+    <text x="240" y="105" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Real-time Updates
+    </text>
+    
+    <!-- Chat Memory -->
+    <rect x="460" y="0" width="200" height="120" rx="8" fill="#00cec9" stroke="#00b3b3" stroke-width="2"/>
+    <text x="560" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      💬 Chat Memory
+    </text>
+    <text x="470" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Conversation Storage
+    </text>
+    <text x="470" y="60" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Context Management
+    </text>
+    <text x="470" y="75" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • User Isolation
+    </text>
+    <text x="470" y="90" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Session Persistence
+    </text>
+    
+    <!-- AI Providers -->
+    <rect x="690" y="0" width="200" height="120" rx="8" fill="#a29bfe" stroke="#6c5ce7" stroke-width="2"/>
+    <text x="790" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      🤖 AI Providers
+    </text>
+    <text x="700" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • OpenAI GPT-4
+    </text>
+    <text x="700" y="60" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Azure OpenAI
+    </text>
+    <text x="700" y="75" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Dynamic Switching
+    </text>
+    <text x="700" y="90" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Parameter Control
+    </text>
+    
+    <!-- MSSQL Information Flow -->
+    <rect x="920" y="0" width="250" height="120" rx="8" fill="#fd79a8" stroke="#e84393" stroke-width="2"/>
+    <text x="1045" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      ℹ️ SQL Data Flow
+    </text>
+    <g fill="white" font-family="Arial, sans-serif" font-size="11">
+      <circle cx="940" cy="45" r="4" fill="#e17055"/>
+      <text x="950" y="49">1. User SQL Query</text>
+      <circle cx="940" cy="60" r="4" fill="#00b894"/>
+      <text x="950" y="64">2. AI Processing</text>
+      <circle cx="940" cy="75" r="4" fill="#fdcb6e"/>
+      <text x="950" y="79">3. SQL Tool Selection</text>
+      <circle cx="940" cy="90" r="4" fill="#6c5ce7"/>
+      <text x="950" y="94">4. Database Query</text>
+      <circle cx="940" cy="105" r="4" fill="#fd79a8"/>
+      <text x="950" y="109">5. SQL Response</text>
+    </g>
+    
+    <!-- Technology Stack -->
+    <rect x="1200" y="0" width="200" height="120" rx="8" fill="#636e72" stroke="#2d3436" stroke-width="2"/>
+    <text x="1300" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      🛠️ Tech Stack
+    </text>
+    <text x="1210" y="45" font-family="Arial, sans-serif" font-size="10" fill="white">
+      Frontend: Streamlit
+    </text>
+    <text x="1210" y="58" font-family="Arial, sans-serif" font-size="10" fill="white">
+      Backend: FastAPI
+    </text>
+    <text x="1210" y="71" font-family="Arial, sans-serif" font-size="10" fill="white">
+      AI: LangChain + OpenAI/Azure
+    </text>
+    <text x="1210" y="84" font-family="Arial, sans-serif" font-size="10" fill="white">
+      Protocol: MCP via SSE
+    </text>
+    <text x="1210" y="97" font-family="Arial, sans-serif" font-size="10" fill="white">
+      Container: Docker Compose
+    </text>
+    <text x="1210" y="110" font-family="Arial, sans-serif" font-size="10" fill="white">
+      Security: SSL/HTTPS + ODBC
+    </text>
+  </g>
+  
+  <!-- AI ORCHESTRATION LAYER -->
+  <rect x="50" y="340" width="1500" height="80" rx="10" fill="#2d3436" stroke="#636e72" stroke-width="2"/>
+  <text x="800" y="365" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">
+    AI ORCHESTRATION LAYER
+  </text>
+  <text x="800" y="385" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">
+    LangChain Agent • SQL Tool Selection • Context Processing • Response Generation
+  </text>
+  
+  <!-- Connection Lines from User Layer components to AI Layer -->
+  <line x1="180" y1="300" x2="180" y2="340" stroke="#2d3436" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="330" y1="300" x2="330" y2="340" stroke="#2d3436" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="560" y1="300" x2="560" y2="340" stroke="#2d3436" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="790" y1="300" x2="790" y2="340" stroke="#2d3436" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="1045" y1="300" x2="1045" y2="340" stroke="#2d3436" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="1300" y1="300" x2="1300" y2="340" stroke="#2d3436" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- AI Components -->
+  <g transform="translate(150, 440)">
+    <!-- LangChain Agent -->
+    <rect x="0" y="0" width="200" height="100" rx="8" fill="#fd79a8" stroke="#e84393" stroke-width="2"/>
+    <text x="100" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      🧠 LangChain Agent
+    </text>
+    <text x="10" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • ReAct Architecture
+    </text>
+    <text x="10" y="60" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • SQL Tool Routing
+    </text>
+    <text x="10" y="75" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Context Memory
+    </text>
+    <text x="10" y="90" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Chain of Thought
+    </text>
+    
+    <!-- SQL Tool Selector -->
+    <rect x="230" y="0" width="200" height="100" rx="8" fill="#fdcb6e" stroke="#e17055" stroke-width="2"/>
+    <text x="330" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      🔧 SQL Tool Selector
+    </text>
+    <text x="240" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Query Classification
+    </text>
+    <text x="240" y="60" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • SQL Server Syntax
+    </text>
+    <text x="240" y="75" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Schema Validation
+    </text>
+    <text x="240" y="90" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Error Recovery
+    </text>
+    
+    <!-- SQL Prompt Engine -->
+    <rect x="460" y="0" width="200" height="100" rx="8" fill="#e17055" stroke="#d63031" stroke-width="2"/>
+    <text x="560" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      📝 SQL Prompt Engine
+    </text>
+    <text x="470" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • SQL System Prompts
+    </text>
+    <text x="470" y="60" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Context Enhancement
+    </text>
+    <text x="470" y="75" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Memory Integration
+    </text>
+    <text x="470" y="90" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • SQL Response Format
+    </text>
+    
+    <!-- SQL Response Handler -->
+    <rect x="690" y="0" width="200" height="100" rx="8" fill="#00b894" stroke="#00a085" stroke-width="2"/>
+    <text x="790" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      📊 SQL Response Handler
+    </text>
+    <text x="700" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Stream Processing
+    </text>
+    <text x="700" y="60" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • SQL Results Format
+    </text>
+    <text x="700" y="75" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Error Handling
+    </text>
+    <text x="700" y="90" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • JSON Conversion
+    </text>
+    
+    <!-- Database Security Layer -->
+    <rect x="920" y="0" width="280" height="100" rx="8" fill="#a29bfe" stroke="#6c5ce7" stroke-width="2"/>
+    <text x="1060" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white">
+      🔒 Database Security Layer
+    </text>
+    <text x="930" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • SQL Injection Prevention • Authentication Validation • Rate Limiting
+    </text>
+    <text x="930" y="60" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Permission Checks • Audit Logging • Session Management
+    </text>
+    <text x="930" y="75" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • ODBC Security • Token Validation • Data Privacy
+    </text>
+    <text x="930" y="90" font-family="Arial, sans-serif" font-size="11" fill="white">
+      • Error Masking • Secure Logging • Access Control
+    </text>
+  </g>
+  
+  <!-- Connection Lines to MCP Protocol -->
+  <line x1="800" y1="540" x2="800" y2="580" stroke="#2d3436" stroke-width="3" marker-end="url(#arrowhead)"/>
+  
+  <!-- MCP PROTOCOL LAYER -->
+  <rect x="50" y="580" width="1500" height="50" rx="10" fill="#e17055" stroke="#d63031" stroke-width="2"/>
+  <text x="800" y="605" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">
+    MCP PROTOCOL (MODEL CONTEXT PROTOCOL)
+  </text>
+  <text x="800" y="620" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">
+    Server-Sent Events • SQL Tool Discovery • Schema Validation • Real-time Communication
+  </text>
+  
+  <!-- Single MCP Server Instance -->
+  <g transform="translate(550, 650)">
+    <!-- MSSQL MCP Server - Centered and larger -->
+    <rect x="0" y="0" width="500" height="140" rx="8" fill="#e17055" stroke="#d63031" stroke-width="3"/>
+    <text x="250" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">
+      🗃️ MSSQL MCP Server
+    </text>
+    <text x="20" y="55" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">
+      Port: 8008 | Transport: SSE | Protocol: MCP
+    </text>
+    
+    <!-- Two columns for features -->
+    <g transform="translate(20, 70)">
+      <!-- Left column -->
+      <text x="0" y="0" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • Table Operations &amp; Listing
+      </text>
+      <text x="0" y="15" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • SQL Query Execution
+      </text>
+      <text x="0" y="30" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • ODBC Driver Integration
+      </text>
+      <text x="0" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • Data Sampling &amp; Analysis
+      </text>
+      
+      <!-- Right column -->
+      <text x="240" y="0" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • Schema Discovery &amp; Validation
+      </text>
+      <text x="240" y="15" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • CRUD Operations (Create/Read/Update/Delete)
+      </text>
+      <text x="240" y="30" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • Query Optimization &amp; Performance
+      </text>
+      <text x="240" y="45" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • Health Monitoring &amp; Error Handling
+      </text>
+    </g>
+  </g>
+  
+  <!-- Connection Line to External Source -->
+  <line x1="800" y1="790" x2="800" y2="820" stroke="#2d3436" stroke-width="3" marker-end="url(#arrowhead)"/>
+  
+  <!-- EXTERNAL DATA SOURCE -->
+  <rect x="50" y="820" width="1500" height="50" rx="10" fill="#8b4513" stroke="#5d2f0a" stroke-width="2"/>
+  <text x="800" y="845" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">
+    EXTERNAL DATA SOURCE
+  </text>
+  <text x="800" y="860" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">
+    Microsoft SQL Server Database
+  </text>
+  
+  <!-- Single External Source -->
+  <g transform="translate(550, 890)">
+    <!-- MSSQL Database - Centered and larger -->
+    <rect x="0" y="0" width="500" height="100" rx="8" fill="#cd853f" stroke="#8b4513" stroke-width="3"/>
+    <text x="250" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">
+      🗄️ Microsoft SQL Server Database
+    </text>
+    <text x="20" y="55" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">
+      Enterprise SQL Server Platform
+    </text>
+    
+    <!-- Features in two columns -->
+    <g transform="translate(20, 70)">
+      <!-- Left column -->
+      <text x="0" y="0" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • Relational Tables &amp; Indexes
+      </text>
+      <text x="0" y="15" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • Stored Procedures &amp; Functions
+      </text>
+      
+      <!-- Right column -->
+      <text x="240" y="0" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • ODBC Driver 18 &amp; SSL/TLS Support
+      </text>
+      <text x="240" y="15" font-family="Arial, sans-serif" font-size="11" fill="white">
+        • Enterprise Features &amp; High Availability
+      </text>
+    </g>
+  </g>
+  
+  <!-- Version and footer -->
+  <text x="1550" y="990" text-anchor="end" font-family="Arial, sans-serif" font-size="10" fill="#636e72">
+    CSM MCP Server v3.0.0 - AI-Powered MSSQL Database Integration Platform
+  </text>
+</svg>

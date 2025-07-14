@@ -5,7 +5,8 @@
 
 # Authentication and security files
 keys/
-
+*.yaml
+*.yml
 config.yaml
 config.yml
 
@@ -81,7 +82,7 @@ temp/
 *.sqlite
 *.sqlite3
 
-# Node modules (for Google Search MCP Server)
+# Node modules (if any)
 node_modules/
 
 # Coverage reports

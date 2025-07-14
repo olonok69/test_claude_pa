@@ -1,220 +1,571 @@
-# AI & ML Repository - Comprehensive Guide
+# AI-Powered MSSQL Database Integration Platform
 
-A comprehensive collection of AI/ML projects showcasing cutting-edge implementations across computer vision, natural language processing, financial analysis, distributed systems, and modern AI integration patterns.
+A comprehensive full-stack application that provides AI-powered interactions with Microsoft SQL Server databases through Model Context Protocol (MCP) servers. This platform enables seamless data analysis, management, and automation of your MSSQL database infrastructure with optional HTTPS security and advanced user authentication.
 
-## 📋 Table of Contents
+## 🚀 System Overview
 
-| Category | Project | Description | Documentation |
-|----------|---------|-------------|---------------|
-| **Medical AI** | DICOM Anonymization | DICOM medical image anonymization using Microsoft Presidio | [📖 English](DICOM_FHIR/Readme_en.md) |
-| **Google AI** | Video Summarizer | AI-powered video transcription and summarization with Gemini Pro | [📖 English](Google_AI/Video_summarizer/Readme.md) |
-| **Google AI** | Content Caching | Google AI Context Caching optimization with Gemini API | [📖 English](Google_AI/content_caching/Readme_en.md) |
-| **Distributed OCR** | NATS OCR System | Distributed OCR system with NATS messaging and RapidOCR | [📖 English](Nats/Readme_en.md) |
-| **Financial RAG** | Financial Analysis | RAG system for fundamental financial analysis with real-time data | [📖 English](RAG/Intro/Readme.md) |
-| **Trading Strategy** | Bollinger RSI Strategy | Trading strategy combining Bollinger Bands and RSI crossover | [📖 English](RAG/bollinger%20z-score%20rsi%20startegy/Readme.md) |
-| **Trading Analysis** | Bollinger Z-Score | Financial trading analysis with Bollinger Bands and Z-Score | [📖 English](RAG/bollinger%20z-score/Readme.md) |
-| **Trading Strategy** | Bollinger Fibonacci | Advanced strategy combining Bollinger Bands and Fibonacci retracements | [📖 English](RAG/bollinger-fibonacci_retracements/Readme.md) |
-| **Trading Strategy** | Connors RSI Strategy | Advanced momentum oscillator with LangGraph integration for enhanced mean reversion signals | [📖 English](RAG/connor-rsi/Readme.md) |
-| **Trading Strategy** | MACD Donchian | Combined MACD and Donchian Channels trading strategy | [📖 English](RAG/macd_downchain%20startegy/Readme.md) |
-| **Graph Database** | Neo4j RAG System | Natural language interface for Neo4j graph databases | [📖 English](RAG/speak%20with%20your%20Graph%20Database/Readme.md) |
-| **MCP Integration** | MCP Servers | Model Context Protocol servers for Claude AI integration | [📖 English](mcp/mcp_server/readme_en.md) |
-| **MCP Development** | Python MCP Client/Server | Python-based MCP financial analysis server with SSE transport | [📖 English](mcp/python_client_server/README.md) |
-| **MCP Client** | Multi-Language MCP Client | Comprehensive MCP client with financial analysis tools and multi-server support | [📖 English](mcp/mcp-client/README.md) |
-| **MCP Chatbot** | Chainlit MCP Bot | Conversational AI chatbot integrating Neo4j and HubSpot through MCP protocol | [📖 English](mcp/chainlit_bot/README.md) |
-| **MCP Platform** | Streamlit CRM & Graph Platform | Full-stack AI-powered platform integrating Neo4j, HubSpot CRM, and Yahoo Finance with enterprise authentication | [📖 English](mcp/Streamlit_chatbot/README.md) |
-| **MCP Development** | Build MCP with LLMs | Comprehensive guide to accelerate MCP server development using language models like Claude, with practical PDF document processor example | [📖 English](mcp/Build%20MCP%20with%20LLMs/README.md) |
-| **Claude Desktop** | Claude Desktop Setup Guide | Complete guide for Claude Desktop installation and MCP configuration | [📖 English](mcp/claude_desktop/Readme.md) |
+This application consists of two integrated components:
 
-## 🌟 Repository Overview
+1. **Streamlit Client** - AI chat interface with multi-provider support, authentication, and SSL support
+2. **MSSQL MCP Server** - SQL Server database operations with full CRUD support
 
-This repository represents a comprehensive exploration of modern AI/ML technologies, demonstrating practical implementations across multiple domains:
+## 🏗️ System Architecture
 
-### 🏥 Medical AI & Computer Vision
-- **DICOM Anonymization**: Advanced medical image processing system that automatically detects and redacts Personal Health Information (PHI) in DICOM medical images using Microsoft's Presidio framework, ensuring HIPAA compliance.
+![CSM MCP Servers Architecture](docs/csm_diagram.svg)
 
-### 🤖 Google AI Ecosystem
-- **Video Summarizer**: Leverage Google's Gemini 2.0 Flash model for intelligent video content analysis, providing structured summaries and complete transcriptions with cloud integration.
-- **Content Caching**: Optimize token usage and reduce costs through Google's Context Caching feature, demonstrating 99.5% token reduction and 12-18x speed improvements.
+The diagram above shows the complete architecture of our AI-powered MSSQL database integration platform.
 
-### ⚡ Distributed Systems
-- **NATS OCR System**: High-performance distributed OCR processing using NATS JetStream for reliable message delivery and RapidOCR for text extraction, perfect for microservice architectures.
+## ⚡ Quick Start
 
-### 💰 Financial Analysis & Trading
-- **Comprehensive RAG System**: Fundamental financial analysis combining traditional techniques with modern AI/ML, featuring real-time data integration and intelligent insights.
-- **Multiple Trading Strategies**: Implementation of sophisticated trading algorithms including:
-  - **Bollinger Bands with RSI crossover analysis**: Multi-indicator confirmation for trending markets
-  - **Z-Score statistical analysis**: Market positioning and mean reversion signals
-  - **Fibonacci retracement integration**: Precise entry/exit points with advanced scoring systems
-  - **Connors RSI Strategy**: Advanced momentum oscillator developed by Larry Connors combining three distinct components:
-    - **Price RSI (33.33%)**: 3-day RSI for recent price momentum
-    - **Streak RSI (33.33%)**: RSI applied to consecutive up/down movements
-    - **Percent Rank (33.33%)**: Percentile ranking over 100-day rolling window
-    - **Enhanced Features**: Z-Score integration, combined scoring system (-100 to +100), LangGraph agent integration
-  - **MACD and Donchian Channels combination**: Momentum analysis with volatility indicators
+### Prerequisites
+- Docker & Docker Compose
+- Microsoft SQL Server database
+- OpenAI API key or Azure OpenAI configuration
+- ODBC Driver 18 for SQL Server
 
-### 🔗 Graph Databases & Knowledge Systems
-- **Neo4j RAG Integration**: Natural language interface for complex graph database interactions, enabling conversational queries across interconnected data structures.
+### 1. Environment Setup
 
-### 🔌 Model Context Protocol (MCP)
-- **MCP Server Ecosystem**: Complete implementation of Anthropic's MCP standard, demonstrating the "USB-C for AI integrations" with multiple server configurations.
-- **Python MCP Framework**: Advanced financial analysis server with Server-Sent Events transport, showcasing real-time AI-tool integration.
-- **Multi-Language MCP Client**: Comprehensive client implementation bridging Claude AI with external tools, featuring specialized financial analysis capabilities across Python and Node.js servers.
-- **Chainlit MCP Chatbot**: Sophisticated conversational AI application that seamlessly connects Neo4j graph databases and HubSpot CRM through the Model Context Protocol, built with Chainlit for an intuitive chat interface. Features intelligent data exploration, cross-system analysis, and natural language querying across multiple data sources.
-- **Streamlit CRM & Graph Platform**: Enterprise-grade full-stack application providing AI-powered interactions with Neo4j graph databases, HubSpot CRM systems, and Yahoo Finance data through MCP servers. Features comprehensive authentication, multi-provider AI support, and production-ready architecture with 25+ specialized tools for complete data analysis, management, and automation across database, CRM, and financial data infrastructure.
-- **Build MCP with LLMs**: Comprehensive guide demonstrating how to accelerate MCP server development using language models like Claude. Includes a complete practical example of a PDF document processor with OCR capabilities, custom prompts, and markdown output generation, showcasing how AI can significantly speed up MCP development workflows.
-- **Claude Desktop Integration**: Complete setup guide for Claude Desktop application with MCP server configuration, enabling seamless AI-tool interactions on your desktop.
+Create a `.env` file in the project root:
 
-## 🛠️ Technology Stack
+```env
+# AI Provider Configuration (choose one)
+OPENAI_API_KEY=your_openai_api_key_here
 
-### Core AI/ML Frameworks
-- **LangChain & LangGraph**: Advanced AI orchestration and agent workflows
-- **Google Gemini Pro**: State-of-the-art language models for various applications
-- **OpenAI GPT Models**: Integration with OpenAI's API for intelligent processing
-- **Microsoft Presidio**: Privacy protection and PII detection framework
-- **Chainlit**: Python framework for building conversational AI applications
-- **Streamlit**: Python framework for building interactive web applications and data dashboards
+# OR Azure OpenAI Configuration
+AZURE_API_KEY=your_azure_api_key
+AZURE_ENDPOINT=https://your-endpoint.openai.azure.com/
+AZURE_DEPLOYMENT=your_deployment_name
+AZURE_API_VERSION=2023-12-01-preview
 
-### Data Processing & Analytics
-- **Yahoo Finance & Financial APIs**: Real-time and historical financial data
-- **PyDICOM**: Medical image processing and DICOM standard compliance
-- **Pandas & NumPy**: Comprehensive data manipulation and analysis
-- **Plotly & Matplotlib**: Advanced data visualization and interactive charts
+# MSSQL Configuration
+MSSQL_HOST=host.docker.internal
+MSSQL_USER=your_mssql_username
+MSSQL_PASSWORD=your_mssql_password
+MSSQL_DATABASE=your_database_name
+MSSQL_DRIVER=ODBC Driver 18 for SQL Server
+TrustServerCertificate=yes
+Trusted_Connection=no
 
-### Distributed Systems & Messaging
-- **NATS JetStream**: High-performance distributed messaging system
-- **FastAPI**: Modern, fast web framework for building APIs
-- **Docker**: Containerization for scalable deployment
-- **Server-Sent Events (SSE)**: Real-time bidirectional communication
+# SSL Configuration (Optional)
+SSL_ENABLED=true              # Enable HTTPS with self-signed certificates
 
-### Databases & Storage
-- **Neo4j**: Graph database for complex relationship modeling
-- **HubSpot CRM**: Customer relationship management and sales pipeline tracking
-- **Qdrant**: Vector database for similarity search and RAG applications
-- **Google Cloud Storage**: Scalable cloud storage integration
-
-#### **MCP Development**
-```yaml
-Framework: Model Context Protocol (Anthropic)
-Languages: Python, Node.js, TypeScript
-Transport: STDIO, SSE, HTTP
-Tools: FastMCP, PDF processing, OCR
-Development Acceleration: LLM-assisted development
+# Enhanced Security (Optional)
+USE_SQLITE=true              # Enable SQLite authentication
+SESSION_TIMEOUT_HOURS=24     # Session timeout
+MAX_LOGIN_ATTEMPTS=5         # Maximum login attempts
 ```
 
-### Development Tools
-- **UV Package Manager**: Fast Python package management
-- **Jupyter Notebooks**: Interactive development and documentation
-- **Environment Management**: Secure configuration with environment variables
+### 2. User Authentication Setup
 
-## 🚀 Key Features & Innovations
+Generate user credentials for the application:
 
-### 🔥 Advanced AI Integration Patterns
-- **Retrieval-Augmented Generation (RAG)**: Multiple implementations showing different approaches to combining retrieval with generation
-- **Multi-Modal AI**: Integration of text, image, and video processing capabilities
-- **Agent-Based Systems**: Intelligent agents that can discover and use tools dynamically
-- **Model Context Protocol**: Standardized AI-tool integration across multiple languages and platforms
-- **Conversational AI**: Interactive chatbot interfaces for natural language data exploration
-- **Enterprise Web Applications**: Production-ready web platforms with comprehensive authentication and multi-user support
-- **LLM-Accelerated Development**: Using language models to significantly speed up MCP server development and reduce boilerplate code
+```bash
+cd client
+python simple_generate_password.py
+```
 
-### 📊 Sophisticated Financial Analysis
-- **Multi-Indicator Strategies**: Complex trading strategies combining 3-4 technical indicators
-- **Advanced Momentum Analysis**: Connors RSI implementation with component analysis and AI-powered recommendations
-- **Scoring Systems**: Standardized (-100 to +100) scoring for consistent signal interpretation
-- **Real-Time Processing**: Live market data integration with intelligent analysis
-- **Cross-Platform Integration**: Financial tools accessible via multiple transport mechanisms
-- **Enterprise Financial Platform**: Full-stack financial analysis with CRM integration and graph database connectivity
+This will create `keys/config.yaml` with default users. You can modify the user credentials as needed.
 
-### 🏗️ Production-Ready Architecture
-- **Microservice Design**: Distributed systems with clear separation of concerns
-- **Security Best Practices**: Proper authentication, authorization, and data protection
-- **Scalable Infrastructure**: Cloud-native designs with containerization support
-- **Multi-Transport Support**: STDIO, SSE, and HTTP transport mechanisms for flexible deployment
-- **Conversational Interfaces**: User-friendly chat interfaces for complex data interactions
-- **Enterprise Authentication**: Advanced user management with bcrypt encryption, session management, and SSL/TLS support
-- **LLM-Assisted Development**: Accelerated development workflows using language models to generate MCP servers, reducing development time from days to hours
+### 3. SSL Certificate Setup (Optional)
 
-### 🔧 Developer Experience
-- **Comprehensive Documentation**: Detailed READMEs with setup instructions and examples
-- **Interactive Notebooks**: Jupyter notebooks for learning and experimentation
-- **Type Safety**: Python type hints and schema validation throughout
-- **Tool Discovery**: Automatic discovery and orchestration of available capabilities
-- **Chat-Based Development**: Natural language interfaces for data exploration and analysis
-- **Web-Based Interfaces**: Modern, tabbed interfaces for comprehensive system management
+For HTTPS support, set up SSL certificates:
 
-## 🎯 Use Cases & Applications
+#### Option A: Automatic Generation (Recommended)
+```bash
+# Enable SSL in environment - certificates will be generated automatically
+echo "SSL_ENABLED=true" >> .env
+```
 
-### Healthcare & Medical
-- **Medical Image Anonymization**: HIPAA-compliant processing of medical images
-- **Clinical Workflow Integration**: Seamless integration with existing medical systems
+#### Option B: Manual Generation
+```bash
+cd client
 
-### Financial Services
-- **Algorithmic Trading**: Automated trading signal generation and analysis including advanced momentum strategies
-- **Mean Reversion Analysis**: Connors RSI and Z-Score based strategies for overbought/oversold conditions
-- **Risk Assessment**: Advanced risk metrics and portfolio analysis
-- **Market Research**: Intelligent analysis of financial trends and patterns
-- **Multi-Platform Access**: Financial analysis accessible through web, desktop, and API interfaces
-- **Enterprise Financial Management**: Comprehensive platform combining technical analysis, CRM integration, and graph database insights
+# Create required startup scripts
+cat > startup_ssl.sh << 'EOF'
+#!/bin/bash
+echo "🚀 MSSQL MCP Platform - Starting Application..."
 
-### Enterprise AI
-- **Document Processing**: Automated extraction and analysis of business documents
-- **Knowledge Management**: Graph-based knowledge systems for complex data relationships
-- **AI-Powered Analytics**: Integration of AI capabilities into existing business workflows
-- **Tool Orchestration**: Intelligent discovery and coordination of external services
-- **Desktop AI Integration**: Native Claude Desktop application with MCP protocol support for enhanced productivity
-- **Conversational CRM**: Chat-based interfaces for customer relationship management and data exploration
-- **Full-Stack AI Platforms**: Enterprise-grade web applications with comprehensive authentication, multi-user support, and cross-system data integration
+if [ "$SSL_ENABLED" = "true" ]; then
+    echo "🔒 SSL mode enabled"
+    
+    if [ ! -f "ssl/cert.pem" ] || [ ! -f "ssl/private.key" ]; then
+        echo "📝 Generating SSL certificates..."
+        mkdir -p ssl
+        
+        if [ -f "generate_ssl_certificate.sh" ]; then
+            chmod +x generate_ssl_certificate.sh
+            ./generate_ssl_certificate.sh
+        else
+            echo "❌ Certificate generation script not found"
+            SSL_ENABLED="false"
+        fi
+    fi
+    
+    if [ "$SSL_ENABLED" = "true" ] && [ -f "ssl/cert.pem" ] && [ -f "ssl/private.key" ]; then
+        echo "🔒 Starting Streamlit with HTTPS on port 8502..."
+        echo "📱 Access URL: https://localhost:8502"
+        
+        exec streamlit run app.py \
+            --server.port=8502 \
+            --server.address=0.0.0.0 \
+            --server.enableCORS=false \
+            --server.enableXsrfProtection=false \
+            --server.sslCertFile=ssl/cert.pem \
+            --server.sslKeyFile=ssl/private.key
+    fi
+fi
 
-### Media & Content
-- **Video Analysis**: Automated transcription, summarization, and content analysis
-- **Real-Time Processing**: Live content analysis and intelligent insights
+echo "🌐 Starting Streamlit with HTTP on port 8501..."
+exec streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+EOF
 
-### Data Integration & Analysis
-- **Cross-System Connectivity**: Seamless integration between Neo4j graph databases and HubSpot CRM
-- **Natural Language Querying**: Chat-based interfaces for complex data exploration
-- **Multi-Source Analytics**: Intelligent correlation and analysis across different data platforms
-- **Enterprise Data Management**: Comprehensive platforms for managing and analyzing data across multiple sources with AI-powered insights
+chmod +x startup_ssl.sh
 
-## 🚦 Getting Started
+# Generate certificates manually (if needed)
+python generate_ssl_certificate.py
+# OR (Linux/Mac only)
+./generate_ssl_certificate.sh
+```
 
-### Quick Setup
-1. **Choose Your Domain**: Select a project from the table above based on your interests
-2. **Follow Documentation**: Each project has comprehensive setup instructions
-3. **Environment Setup**: Most projects use Python with specific dependency management
-4. **API Keys**: Secure your API keys in environment variables
+### 4. Launch the Platform
 
-### Recommended Learning Path
-1. **Start with RAG Systems**: Begin with the Financial Analysis RAG for foundational concepts
-2. **Progress through the different trading algorithm implementations
-   - Begin with basic Bollinger Z-Score analysis
-   - Advance to Connors RSI for sophisticated momentum analysis
-   - Explore combined strategies like Bollinger-Fibonacci
-3. **Advanced Integration**: Move to MCP servers for understanding modern AI integration patterns
-4. **Multi-Platform Development**: Explore the MCP client for cross-language tool orchestration
-5. **LLM-Accelerated Development**: Learn how to use Claude and other LLMs to rapidly develop custom MCP servers with the comprehensive PDF processor example
-6. **Conversational AI**: Set up the Chainlit MCP chatbot for natural language data interaction
-7. **Enterprise Platforms**: Deploy the Streamlit CRM & Graph Platform for full-stack enterprise AI application experience
-8. **Desktop AI Integration**: Set up Claude Desktop with MCP servers for native AI-tool interactions
-9. **Specialized Applications**: Dive into domain-specific applications like medical AI or distributed OCR
+```bash
+# Build and start all services
+docker-compose up --build
 
-### Research Areas
-- **Multimodal AI**: Advanced integration of different AI modalities
-- **Federated Learning**: Distributed machine learning implementations
-- **Edge Computing**: Edge-deployed AI processing capabilities
-- **Quantum Computing**: Quantum-enhanced algorithms for optimization
-- **Conversational Data Science**: Natural language interfaces for complex data analysis
-- **Enterprise AI Platforms**: Full-stack applications combining multiple AI services and data sources
-- **Rapid MCP Development**: LLM-assisted development patterns for accelerating AI integration projects
+# Or start individual services
+docker-compose up mcpserver3  # MSSQL MCP Server
+docker-compose up hostclient  # Streamlit Client
+```
 
-## ⚖️ License & Disclaimer
+### 5. Access the Application
 
-This repository contains educational and research implementations. Individual projects may have specific licensing terms. Please review each project's documentation for:
+#### HTTPS Mode (Recommended)
+- **Main Interface**: https://localhost:8502
+- **Security**: Self-signed certificate (accept browser warning)
 
-- **Usage Rights**: Appropriate use cases and restrictions
-- **API Terms**: Third-party service terms and conditions
-- **Financial Disclaimer**: Investment and trading risk warnings
-- **Medical Disclaimer**: Healthcare application limitations
+#### HTTP Mode (Default)
+- **Main Interface**: http://localhost:8501
+- **Alternative**: http://127.0.0.1:8501
+
+#### Health Checks
+- **MSSQL Server Health**: http://localhost:8008/health
+
+#### Authentication
+Use the credentials generated in step 2 (default: admin/very_Secure_p@ssword_123!)
+
+## 🎯 Key Features
+
+### **AI-Powered Interactions**
+- Multi-provider AI support (OpenAI, Azure OpenAI)
+- Natural language queries for database operations
+- Intelligent tool selection and execution
+- Conversation history and context management
+- User authentication and session management
+
+### **Security & Authentication**
+- **User Authentication System**: Secure login with bcrypt password hashing
+- **Session Management**: Persistent user sessions with configurable expiry
+- **SSL/HTTPS Support**: Optional encrypted connections with self-signed certificates
+- **Role-Based Access**: Pre-authorized email domains and user management
+- **Secure Cookies**: Configurable authentication cookies with custom keys
+- **Enhanced SQLite Authentication**: Modern database-backed user management
+
+### **Database Support**
+- **SQL Database Operations**: Full MSSQL Server support with ODBC
+- **Schema Discovery**: Automatic table and column information retrieval
+- **Visual Results**: Structured data presentation
+- **CRUD Operations**: Complete Create, Read, Update, Delete support
+
+### **Complete Database Operations**
+- **MSSQL**: Table listing, SQL execution, CRUD operations, metadata queries
+- **Data Exploration**: Sample data retrieval with configurable limits
+- **Query Optimization**: SQL Server syntax support and performance optimization
+
+### **Technical Excellence**
+- **Docker Containerization**: Easy deployment and scaling
+- **SSL/HTTPS Support**: Secure connections with automatic certificate generation
+- **Real-time Communication**: Server-Sent Events (SSE) for MCP
+- **Schema Validation**: Comprehensive input validation
+- **Error Handling**: Robust error management and debugging
+- **Health Monitoring**: Built-in health checks and monitoring
+
+## 📚 Usage Examples
+
+### **Authentication Workflow**
+
+```
+1. Navigate to https://localhost:8502 (SSL) or http://localhost:8501 (HTTP)
+2. Use the sidebar authentication panel
+3. Login with generated credentials:
+   - Username: admin, Password: very_Secure_p@ssword_123!
+   - Username: demo_user, Password: strong_password_123!
+4. Access the full application features
+```
+
+### **Database Analysis Workflows**
+
+```
+"Show me all tables in the MSSQL database"
+"Describe the structure of the customers table"
+"List all tables and their row counts"
+"Execute a SQL query to find top customers by revenue"
+"Get 5 sample records from the orders table"
+"Count the total number of products in inventory"
+```
+
+### **MSSQL Database Workflows**
+
+```
+"Show me all tables in the database"
+"Describe the structure of the customers table"
+"Get 5 sample records from the orders table"
+"Find all customers with orders over $1000"
+"Count the total number of products in inventory"
+"Show me the top 10 best-selling products"
+"Update customer information for CustomerID 123"
+"Insert a new customer record"
+"Delete inactive customers from last year"
+```
+
+### **Advanced SQL Operations**
+
+```
+"Show me monthly sales trends for the last year"
+"Find customers who haven't placed orders in 6 months"
+"Calculate average order value by customer segment"
+"Generate a report of top-selling products by category"
+"Analyze customer purchase patterns"
+"Create a summary of order statuses"
+```
+
+## 🔧 Component Documentation
+
+Each component has detailed documentation for advanced configuration and development:
+
+### [🖥️ Streamlit Client Documentation](./client/Readme.md)
+- **Authentication System**: Enhanced SQLite authentication, bcrypt password hashing, user session isolation
+- **SSL/HTTPS Configuration**: Certificate management, secure connections, automatic generation
+- **UI Configuration**: Modern tabbed interface, responsive design, user management panel
+- **AI Provider Setup**: OpenAI and Azure OpenAI configuration, model parameter control
+- **Tool Execution Monitoring**: Real-time tool usage tracking, execution history
+- **Conversation Management**: Create, switch, delete, and export chat sessions
+- **Docker Deployment**: Containerized deployment with SSL support and health monitoring
+
+### [🗃️ MSSQL MCP Server Documentation](./servers/server3/Readme.md)
+- **Connection Configuration**: ODBC Driver 18 setup, connection string management
+- **SQL Operations**: Complete CRUD support, query execution, schema discovery
+- **Tool Reference**: Detailed documentation of all available database tools
+- **Security Considerations**: SQL injection prevention, access control, audit logging
+- **Performance Optimization**: Query optimization, connection pooling, monitoring
+- **Troubleshooting Guide**: Common issues, debugging steps, health checks
+
+### [📊 System Architecture](./docs/csm_diagram.svg)
+Visual representation of the complete platform architecture showing:
+- User authentication and session management layer
+- AI orchestration with LangChain agent
+- MCP protocol communication
+- MSSQL database integration
+- Security and data flow patterns
+
+### [🔧 Development Setup](./client/Readme.md#local-development-setup)
+Comprehensive development environment setup including:
+- Local installation and configuration
+- Environment variable management
+- SSL certificate generation
+- User authentication setup
+- Database connection testing
+
+### [🔒 Security Documentation](./client/Readme.md#security-features)
+Complete security implementation guide covering:
+- Multi-backend authentication (SQLite, YAML, encrypted JSON)
+- Session management and user isolation
+- SSL/HTTPS implementation
+- Database security best practices
+- Audit logging and monitoring
+
+### [🐛 Troubleshooting Guides](./servers/server3/readme.md#troubleshooting)
+Detailed troubleshooting documentation for:
+- **MSSQL Connection Issues**: ODBC driver problems, connectivity testing
+- **Authentication Problems**: User management, credential verification
+- **SSL Certificate Issues**: Certificate generation, validation, deployment
+- **Performance Problems**: Query optimization, connection pooling
+- **Docker Deployment**: Container configuration, health checks
+
+## 🛠️ Development & Customization
+
+### **Local Development Setup**
+
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd <project-directory>
+
+# Install dependencies for each component
+cd client && pip install -r requirements.txt
+cd ../servers/server3 && pip install -r requirements.txt
+```
+
+**Detailed Setup Guide**: See [Client Development Setup](./client/Readme.md#local-development-setup) for comprehensive installation instructions.
+
+### **MSSQL Server Setup**
+
+For MSSQL integration, ensure you have:
+- MSSQL Server instance running
+- ODBC Driver 18 for SQL Server installed
+- Appropriate database permissions
+- Network connectivity to the database
+
+**Complete Setup Guide**: See [MSSQL Server Documentation](./servers/server3/readme.md#installation--setup) for detailed configuration steps.
+
+### **Authentication Configuration**
+
+**Enhanced SQLite Authentication**:
+```bash
+# Enable SQLite authentication
+echo "USE_SQLITE=true" >> .env
+
+# Migrate existing users
+cd client
+python migration_scripts/migrate_users_to_sqlite.py
+```
+
+**User Management**: See [Authentication Documentation](./client/Readme.md#user-management-admin-only) for complete user management features.
+
+### **SSL/HTTPS Setup**
+
+**Automatic Certificate Generation**:
+```bash
+# Enable SSL mode
+echo "SSL_ENABLED=true" >> .env
+
+# Certificates will be generated automatically on startup
+```
+
+**Manual Setup**: See [SSL Configuration Guide](./client/Readme.md#sslhttps-setup) for detailed SSL implementation.
+
+### **Adding Custom Tools**
+
+1. **MSSQL Tools**: Add custom SQL operations and stored procedures
+   - See [Custom Tool Development](./servers/server3/readme.md#development--extensions)
+2. **Client Tools**: Integrate additional services via MCP protocol
+   - See [Client Extensions](./client/Readme.md#advanced-configuration)
+
+### **Configuration Management**
+
+**Environment Variables**: All configuration is managed through `.env` files
+- See [Configuration Guide](./client/Readme.md#configuration) for complete variable reference
+
+**Server Configuration**: MCP server endpoints are defined in `servers_config.json`
+- See [MCP Configuration](./client/Readme.md#mcp-server-configuration) for endpoint management
+
+## 🔒 Security & Best Practices
+
+### **Database Security**
+- Use secure connection strings with proper authentication
+- Implement least-privilege access for database users
+- Enable SSL/TLS for database connections where possible
+- Regularly update ODBC drivers and database clients
+
+### **Application Security**
+- **Enhanced User Authentication**: SQLite-backed user management with bcrypt hashing
+- **Session Security**: Configurable session timeouts and secure token management
+- **SSL/HTTPS Support**: Optional encrypted web connections
+- **Input Validation**: SQL injection protection and input sanitization
+
+## 📊 Monitoring & Debugging
+
+### **Health Checks**
+- **Overall System**: Streamlit interface status indicators
+- **MSSQL Server**: http://localhost:8008/health
+
+### **Database Monitoring**
+- Connection pool status
+- Query execution timing and performance metrics
+- Error rates and connection failures
+- Resource usage tracking
+
+## 🚀 Deployment Options
+
+### **Development Deployment**
+```bash
+# HTTP mode (default)
+docker-compose up --build
+
+# HTTPS mode
+echo "SSL_ENABLED=true" >> .env
+docker-compose up --build
+```
+
+### **Production Deployment**
+- Use environment-specific `.env` files
+- Configure proper SSL certificates for database connections
+- Implement proper secret management
+- Set up monitoring and alerting
+- Use connection pooling for high-traffic scenarios
+
+## 🐛 Troubleshooting
+
+### **Common Issues**
+
+**MSSQL Connection Problems**
+- Verify ODBC driver installation: `odbcinst -j`
+- Check SQL Server connectivity: `telnet [host] 1433`
+- Verify database permissions and user access
+- Check firewall settings and network connectivity
+
+**Detailed Guide**: See [MSSQL Troubleshooting](./servers/server3/readme.md#troubleshooting) for comprehensive connection solutions.
+
+**Authentication Issues**
+- Verify `keys/config.yaml` exists and is properly formatted
+- Check user credentials match the generated passwords
+- For SQLite: ensure `USE_SQLITE=true` in `.env`
+- Clear browser cookies if experiencing login issues
+
+**Authentication Debugging**: See [Client Authentication Guide](./client/Readme.md#troubleshooting) for detailed debugging steps.
+
+**SSL Certificate Issues**
+- Run certificate generation script: `python generate_ssl_certificate.py`
+- Check file permissions on `ssl/` directory
+- Verify certificate and key files exist in `ssl/` folder
+
+**SSL Debugging**: See [SSL Setup Guide](./client/Readme.md#sslhttps-setup) for certificate troubleshooting.
+
+**Performance Issues**
+- Monitor query execution times
+- Implement connection pooling
+- Use appropriate indexes in SQL databases
+- Optimize SQL queries for better performance
+
+**Performance Optimization**: See [MSSQL Performance Guide](./servers/server3/readme.md#monitoring--logging) for detailed optimization strategies.
+
+### **Debug Tools and Scripts**
+
+**Authentication Debugging**:
+```bash
+# Test SQLite authentication
+cd client
+python migration_scripts/sqlite_auth_debug.py
+
+# Verify user migration
+python migration_scripts/simple_verification_script.py
+
+# Check password issues
+python one_time/password_debug.py
+```
+
+**SSL Debugging**:
+```bash
+# Debug SSL configuration
+cd client
+./one_time/debug_ssl.sh
+
+# Test certificate generation
+python generate_ssl_certificate.py
+```
+
+**Database Debugging**:
+```bash
+# Test MSSQL connection
+cd servers/server3
+python test_connection.py
+
+# Health check
+curl http://localhost:8008/health
+```
+
+**Complete Debugging Guide**: See [Client Troubleshooting](./client/Readme.md#troubleshooting) for all available debug tools and procedures.
+
+## 🤝 Contributing
+
+### **Development Workflow**
+1. Fork the repository
+2. Create feature branches for each component
+3. Test authentication and security features
+4. Test database connections and operations
+5. Submit pull requests with comprehensive testing
+
+### **Database Testing**
+- Test database connections in different environments
+- Verify SQL query functionality
+- Test failover and recovery scenarios
+- Validate data consistency and integrity
+
+## 🔄 Migration from Previous Versions
+
+If you're upgrading from a previous version that included Neo4j and HubSpot:
+
+### **Configuration Updates**
+1. Remove Neo4j and HubSpot configuration from `.env`
+2. Update `docker-compose.yml` to only include MSSQL services
+3. Update client configuration to remove unused MCP servers
+
+### **User Authentication Migration**
+```bash
+# Migrate to enhanced SQLite authentication
+cd client
+python migration_scripts/migrate_users_to_sqlite.py
+
+# Verify migration
+python migration_scripts/simple_verification_script.py
+```
+
+**Complete Migration Guide**: See [Migration Documentation](./client/Readme.md#migration-and-setup) for detailed migration procedures and troubleshooting.
+
+### **Docker Configuration Updates**
+Update your `docker-compose.yml` to remove legacy services:
+```yaml
+# Remove these services if present:
+# - mcpserver4 (Neo4j)
+# - mcpserver5 (HubSpot)
+
+# Keep only:
+services:
+  mcpserver3:    # MSSQL MCP Server
+  hostclient:    # Streamlit Client
+```
+
+### **Environment Variable Cleanup**
+Remove these variables from your `.env` file:
+```env
+# Remove Neo4j variables
+NEO4J_URI=
+NEO4J_USERNAME=
+NEO4J_PASSWORD=
+NEO4J_DATABASE=
+
+# Remove HubSpot variables
+PRIVATE_APP_ACCESS_TOKEN=
+```
+
+**Configuration Reference**: See [Environment Setup](./client/Readme.md#installation) for current configuration requirements.
+
+## 📚 Additional Resources
+
+### **API Documentation**
+- [MSSQL MCP Server API](./servers/server3/readme.md#api-endpoints) - Complete API reference
+- [Health Check Endpoints](./servers/server3/readme.md#health-check) - Monitoring and status endpoints
+- [Tool Reference](./servers/server3/readme.md#available-tools) - All available database tools
+
+### **Configuration References**
+- [Client Configuration](./client/Readme.md#configuration) - Complete client setup guide
+- [Security Configuration](./client/Readme.md#security-features) - Authentication and SSL setup
+- [Database Configuration](./servers/server3/readme.md#installation--setup) - MSSQL connection setup
+
+### **Examples and Tutorials**
+- [Usage Examples](./client/Readme.md#usage) - Step-by-step usage guide
+- [SQL Query Examples](./servers/server3/readme.md#sql-server-syntax-support) - Database operation examples
+- [Authentication Examples](./client/Readme.md#getting-started) - User management examples
+
+### **Development Guides**
+- [Local Development](./client/Readme.md#local-development-setup) - Development environment setup
+- [Custom Tool Development](./servers/server3/readme.md#development--extensions) - Extending functionality
+- [Docker Development](./client/Readme.md#docker-deployment) - Containerized development
 
 ---
 
-**This repository represents the convergence of traditional domain expertise with cutting-edge AI capabilities, demonstrating how modern AI systems can be integrated into real-world applications while maintaining production-quality standards and best practices.**
+**Version**: 3.0.0  
+**Last Updated**: July 2025  
+**Compatibility**: Docker 20+, Python 3.11+, MSSQL Server 2019+  
+**Security**: Streamlit Authenticator 0.3.2, bcrypt password hashing, SSL/HTTPS support, ODBC 18+  
+**Focus**: Streamlined MSSQL database integration with enhanced security and authentication
