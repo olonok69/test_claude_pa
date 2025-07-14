@@ -13,18 +13,17 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 import traceback
-import importlib.util
 
 # Add the client directory to the path so we can import existing modules
 sys.path.insert(0, str(Path(__file__).parent / "client"))
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
-from services.ai_service import create_llm_model
-from services.mcp_service import setup_mcp_client, get_tools_from_client, prepare_server_config
-from services.chat_service import get_clean_conversation_memory
+from langchain_core.messages import HumanMessage, AIMessage
+from client.services.ai_service import create_llm_model
+from client.services.mcp_service import setup_mcp_client, get_tools_from_client, prepare_server_config
 from langgraph.prebuilt import create_react_agent
-from config import SERVER_CONFIG, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS
+from client.config import SERVER_CONFIG, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS
+
 
 # Load environment variables
 load_dotenv()
@@ -32,7 +31,8 @@ load_dotenv()
 class CompanyClassificationCLI:
     def __init__(self, config_path: Optional[str] = None):
         """Initialize the CLI tool with configuration."""
-        self.config_path = config_path or os.path.join( "cli_servers_config.json")
+        # Default to CLI-specific config file with localhost URLs
+        self.config_path = config_path or "cli_servers_config.json"
         self.client = None
         self.agent = None
         self.tools = []
@@ -71,7 +71,18 @@ class CompanyClassificationCLI:
             prepared_servers = prepare_server_config(servers)
             print(f"🔌 Prepared {len(prepared_servers)} server configurations")
             
+            # Debug: Print server configurations
+            for name, config in prepared_servers.items():
+                transport = config.get('transport', 'unknown')
+                if transport == 'sse':
+                    print(f"  - {name}: SSE server at {config.get('url', 'no url')}")
+                elif transport == 'stdio':
+                    print(f"  - {name}: stdio server with command: {config.get('command')} {config.get('args', [])}")
+                else:
+                    print(f"  - {name}: {transport} transport")
+            
             # Setup MCP client
+            print("🔗 Attempting to connect to MCP servers...")
             self.client = await setup_mcp_client(prepared_servers)
             self.tools = await get_tools_from_client(self.client)
             
@@ -82,6 +93,18 @@ class CompanyClassificationCLI:
             self._print_available_tools()
             
         except Exception as e:
+            print(f"❌ MCP Connection Error Details:")
+            print(f"   Error type: {type(e).__name__}")
+            print(f"   Error message: {str(e)}")
+            
+            # Print more specific error information
+            if hasattr(e, '__cause__') and e.__cause__:
+                print(f"   Caused by: {e.__cause__}")
+            
+            # Check if servers are accessible
+            print("\n🔍 Checking server accessibility...")
+            await self._check_server_accessibility(prepared_servers)
+            
             raise ValueError(f"Failed to setup MCP connections: {e}")
     
     def _validate_environment(self) -> bool:
@@ -224,53 +247,32 @@ class CompanyClassificationCLI:
             raise ValueError(f"Error reading CSV file: {e}")
     
     def format_companies_for_analysis(self, companies: List[Dict]) -> str:
-        """Format companies data for the analysis prompt."""
+        """Format companies data for the analysis prompt - EXACT UI format."""
         formatted_lines = []
         
         for company in companies:
-            # Create the formatted line similar to the UI example
-            parts = []
+            # Create the formatted block exactly like the UI
+            company_block = []
             
-            if company.get('Account Name'):
-                parts.append(f"Account Name = {company['Account Name']}")
+            # Each field on its own line, exactly like UI
+            company_block.append(f"Account Name = {company.get('Account Name', '')}")
+            company_block.append(f"Trading Name = {company.get('Trading Name', '')}")
+            company_block.append(f"Domain = {company.get('Domain', '')}")
+            # company_block.append(f"Product/Service Type = {company.get('Product/Service Type', '')}")
+            # company_block.append(f"Industry = {company.get('Industry', '')}")
+            company_block.append(f"Event = {company.get('Event', '')}")
             
-            if company.get('Trading Name'):
-                parts.append(f"Trading Name = {company['Trading Name']}")
-            else:
-                parts.append("Trading Name = ")
-            
-            if company.get('Domain'):
-                parts.append(f"Domain = {company['Domain']}")
-            else:
-                parts.append("Domain = ")
-            
-            if company.get('Product/Service Type'):
-                parts.append(f"Product/Service Type = {company['Product/Service Type']}")
-            else:
-                parts.append("Product/Service Type = ")
-            
-            if company.get('Industry'):
-                parts.append(f"Industry = {company['Industry']}")
-            else:
-                parts.append("Industry = ")
-            
-            if company.get('Event'):
-                parts.append(f"Event = {company['Event']}")
-            else:
-                parts.append("Event = ")
-            
-            formatted_lines.append(" ".join(parts))
+            formatted_lines.append('\n'.join(company_block))
         
-        return "\n".join(formatted_lines)
+        # Join companies with blank line separation (exactly like UI)
+        return '\n\n'.join(formatted_lines)
     
     async def classify_companies(self, companies: List[Dict]) -> str:
-        """Classify companies using the MCP server infrastructure."""
+        """Classify companies using the MCP server infrastructure - same as UI."""
         print(f"🔍 Classifying {len(companies)} companies...")
         
-        # Format companies for analysis
+        # Format companies for analysis (same as UI)
         company_data = self.format_companies_for_analysis(companies)
-        
-        # Create the company tagging prompt (similar to the UI implementation)
         company_tagging_prompt = f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
 
 COMPANY DATA TO ANALYZE:
@@ -283,8 +285,8 @@ MANDATORY RESEARCH PROCESS:
 
 2. **For EACH Company - Research Phase:**
    - Choose research name: Domain > Trading Name > Company Name
-   - Use google-search tool: "site:[domain] products services" 
    - Use perplexity_search_web tool: "[company name] products services technology offerings"
+   - Use google-search tool: "site:[domain] products services" 
    - Identify what the company actually sells/offers
 
 3. **Analysis Phase:**
@@ -294,11 +296,11 @@ MANDATORY RESEARCH PROCESS:
    - Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
 
 4. **Output Requirements:**
-   - Generate ONLY a markdown table with these columns:
-   | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
+   - Generate  a markdown table with these columns:
+   | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |, including the pair obtained in the analysis phase, max 4 pairs
    - Do NOT provide any additional text, explanations, or context
    - Do NOT show research details or tool executions
-   - ONLY the markdown table
+   - ONLY the markdown table 
 
 CRITICAL RULES:
 - MUST use both google-search AND perplexity_search_web for each company
@@ -308,24 +310,40 @@ CRITICAL RULES:
 
 Begin the systematic analysis now."""
         
+        
+        print(f"📝 Formatted company data (first 500 chars):")
+        print(f"   {company_tagging_prompt[:500]}...")
+        
+        # This is EXACTLY what the UI does - simple instruction with company data
+        # Note: "Companies" with capital C to match UI exactly
+        user_instruction = f"tag the following Companies\n{company_data}"
+        
+        print(f"📤 Full instruction preview (first 300 chars):")
+        print(f"   {user_instruction[:300]}...")
+        
+        print(f"📤 Sending instruction to MCP servers (same as UI)...")
+        
         try:
-            # Create conversation memory
+            # Create conversation memory (same as UI)
             conversation_memory = []
             conversation_memory.append(HumanMessage(content=company_tagging_prompt))
             
-            # Run the agent
-            print("🤖 Running AI agent for company classification...")
+            # Run the agent (same as UI) - let the MCP server handle everything
+            print("🤖 Running AI agent with MCP servers...")
             response = await self.agent.ainvoke({"messages": conversation_memory})
             
-            # Extract response
+            print(f"📥 Response received from MCP servers")
+            
+            # Extract the response (same logic as UI)
             assistant_response = None
             if "messages" in response:
                 for msg in response["messages"]:
-                    if hasattr(msg, "content") and msg.content:
+                    if isinstance(msg, AIMessage) and hasattr(msg, "content") and msg.content:
                         assistant_response = str(msg.content)
+                        print(f"   Content length: {len(assistant_response)}")
                         # Look for markdown table in the response
                         if "|" in assistant_response and "Company Name" in assistant_response:
-                            # Extract just the table part
+                            # Extract just the table part (same as UI)
                             lines = assistant_response.split('\n')
                             table_lines = []
                             in_table = False
@@ -341,13 +359,19 @@ Begin the systematic analysis now."""
                             
                             if table_lines:
                                 assistant_response = '\n'.join(table_lines)
-                        break
+                                break
             
-            if assistant_response:
+            if assistant_response and "|" in assistant_response:
                 print("✅ Company classification completed!")
                 return assistant_response
             else:
-                raise ValueError("No response generated from the agent")
+                # Return whatever we got for debugging
+                if "messages" in response and response["messages"]:
+                    last_msg = response["messages"][-1]
+                    if hasattr(last_msg, "content") and last_msg.content:
+                        return str(last_msg.content)
+                
+                return "No response generated from MCP servers"
                 
         except Exception as e:
             raise ValueError(f"Error during company classification: {e}")

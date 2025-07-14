@@ -87,11 +87,12 @@ cat > cli_servers_config.json << 'EOF'
     "Company Tagging": {
       "transport": "stdio",
       "command": "python",
-      "args": ["-m", "mcp_servers.company_tagging.server"],
+      "args": ["-m", "client.mcp_servers.company_tagging.server"],
       "env": {
         "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}",
         "PERPLEXITY_MODEL": "${PERPLEXITY_MODEL}"
-      }
+      },
+      "cwd": "."
     }
   }
 }

@@ -7,13 +7,13 @@ env = os.getenv
 
 # Model mapping - only OpenAI and Azure OpenAI
 MODEL_OPTIONS = {
+    'Azure OpenAI': 'gpt-4.1',  # Using the deployment from .env
     'OpenAI': 'gpt-4o',
-    'Azure OpenAI': 'o3-mini',  # Using the deployment from .env
 }
 
 # Streamlit defaults
 DEFAULT_MAX_TOKENS = 4096
-DEFAULT_TEMPERATURE = 1.0
+DEFAULT_TEMPERATURE = 0.2
 
 # UI Configuration
 TAB_CONFIG = {
