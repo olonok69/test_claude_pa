@@ -1,10 +1,10 @@
 #!/bin/bash
-# Setup script for Company Classification CLI Tool
+# Setup script for Company Classification CLI Tool - Batch Processing Version
 
 set -e
 
-echo "🚀 Setting up Company Classification CLI Tool"
-echo "============================================="
+echo "🚀 Setting up Company Classification CLI Tool - Batch Processing"
+echo "============================================================="
 
 # Check if we're in the right directory
 if [ ! -d "client" ]; then
@@ -105,7 +105,7 @@ python3 -c "
 import sys
 sys.path.append('.')
 from csv_processor_utility import CSVProcessor
-CSVProcessor.generate_sample_csv('sample_companies.csv', 3)
+CSVProcessor.generate_sample_csv('sample_companies.csv', 10)
 "
 
 # Create batch processing script
@@ -142,18 +142,30 @@ echo "   (or pip3 install -r client/requirements.txt if available)"
 echo "2. Edit the .env file and add your API keys"
 echo "3. Start the MCP servers: docker-compose up mcpserver1 mcpserver2 -d"
 echo "4. Test the CLI tool with the sample CSV:"
-echo "   python3 company_cli.py --input sample_companies.csv --output results.md"
+echo "   python3 company_cli.py --input sample_companies.csv --output test_results"
 echo ""
-echo "📖 Usage examples:"
-echo "   python3 company_cli.py --input companies.csv --output results.md"
-echo "   python3 csv_processor_utility.py --validate companies.csv"
-echo "   python3 csv_processor_utility.py --preview companies.csv"
-echo "   ./batch_process.sh large_companies.csv output_directory"
+echo "📖 Usage examples - Batch Processing:"
+echo "   # Process with default batch size (10)"
+echo "   python3 company_cli.py --input companies.csv --output results"
+echo ""
+echo "   # Process with custom batch size"
+echo "   python3 company_cli.py --input companies.csv --output results --batch-size 5"
+echo ""
+echo "   # Get batch processing info"
+echo "   python3 csv_processor_utility.py --batch-info companies.csv --batch-size 10"
+echo ""
+echo "   # Use the batch script"
+echo "   ./batch_process.sh companies.csv results 10"
 echo ""
 echo "🔧 Available utilities:"
-echo "   - company_cli.py: Main classification tool"
-echo "   - csv_processor_utility.py: CSV processing utilities"
-echo "   - batch_process.sh: Batch processing for large files"
-echo "   - sample_companies.csv: Sample data for testing"
+echo "   - company_cli.py: Main classification tool with batch processing"
+echo "   - csv_processor_utility.py: CSV processing and validation utilities"
+echo "   - batch_process.sh: Simple batch processing wrapper script"
+echo "   - sample_companies.csv: Sample data for testing (10 companies)"
+echo ""
+echo "📊 Output files created:"
+echo "   Each run creates TWO files:"
+echo "   - [output_name].md: Markdown table format"
+echo "   - [output_name].csv: CSV format ready for Excel/analysis"
 echo ""
 echo "For more information, run: python3 company_cli.py --help"

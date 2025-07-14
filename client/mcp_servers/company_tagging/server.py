@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Company Tagging MCP Server with stdio transport.
-Provides category taxonomy resources and company tagging prompts for trade show exhibitor categorization.
+FIXED VERSION: Provides category taxonomy resources and company tagging prompts with strict taxonomy enforcement.
 """
 
 import os
@@ -51,44 +51,60 @@ def load_csv_data() -> List[Dict[str, str]]:
         return []
 
 def format_categories_for_analysis() -> str:
-    """Format categories data for company analysis and tagging."""
+    """Format categories data for company analysis and tagging with STRICT taxonomy enforcement."""
     csv_data = load_csv_data()
     
     if not csv_data:
         return "No category data available."
     
-    # Group by show for better organization
-    shows_data = {}
+    # Create the complete list of EXACT pairs
+    exact_pairs = []
     for row in csv_data:
-        show = row.get('Show', '').strip()
         industry = row.get('Industry', '').strip()
         product = row.get('Product', '').strip()
+        show = row.get('Show', '').strip()
         
-        if show and industry and product:
-            if show not in shows_data:
-                shows_data[show] = []
-            shows_data[show].append(f"{industry} | {product}")
+        if industry and product and show:
+            exact_pairs.append(f"{industry} | {product}")
     
-    # Format for analysis
-    formatted_output = "TAXONOMY CATEGORIES - Industry and Product Pairs by Show:\n\n"
+    # Remove duplicates and sort
+    unique_pairs = sorted(list(set(exact_pairs)))
     
-    show_names = {
-        'CAI': 'Cloud and AI Infrastructure',
-        'DOL': 'DevOps Live', 
-        'CCSE': 'Cloud and Cyber Security Expo',
-        'BDAIW': 'Big Data and AI World',
-        'DCW': 'Data Centre World'
-    }
+    # Format for analysis with VERY CLEAR instructions
+    formatted_output = f"""COMPLETE TAXONOMY - EXACT Industry | Product Pairs (USE THESE EXACTLY):
+
+CRITICAL: You MUST use these pairs EXACTLY as written. Do NOT create new pairs or modify existing ones.
+
+Total available pairs: {len(unique_pairs)}
+
+EXACT PAIRS TO USE (copy these exactly, including all punctuation, spacing, and special characters):
+
+"""
     
-    for show_code, full_name in show_names.items():
-        if show_code in shows_data:
-            formatted_output += f"**{show_code} ({full_name}):**\n"
-            for category in shows_data[show_code]:
-                formatted_output += f"- {category}\n"
-            formatted_output += "\n"
+    # Add each pair with clear formatting
+    for i, pair in enumerate(unique_pairs, 1):
+        formatted_output += f"{i:2d}. {pair}\n"
     
-    formatted_output += f"Total categories available: {len(csv_data)}\n"
-    formatted_output += "\nIMPORTANT: Use industry and product pairs EXACTLY as shown above. Do not modify spelling, spacing, or characters (for example, do not replace & with 'and')."
+    formatted_output += f"""
+
+MANDATORY RULES:
+1. Use ONLY the {len(unique_pairs)} pairs listed above
+2. Copy the industry and product names EXACTLY as shown (including punctuation like &, /, commas)
+3. Do NOT create new industry or product names
+4. Do NOT modify spelling, spacing, or characters
+5. If a company doesn't fit any existing pair, leave those columns empty
+6. Maximum 4 pairs per company
+
+EXAMPLES OF CORRECT USAGE:
+- "Platforms & Software | AI Applications" ✓
+- "Cloud and AI Infrastructure Services | Network-as-a-service" ✓
+- "Data, Development & Platforms Security | Data Encryption & Security" ✓
+
+EXAMPLES OF INCORRECT USAGE (DO NOT DO THIS):
+- "Platforms & Software | Freight Management" ✗ (not in taxonomy)
+- "Platforms and Software | AI Applications" ✗ (changed & to "and")
+- "Data Development Platforms Security | Data Encryption Security" ✗ (removed punctuation)
+"""
     
     return formatted_output
 
@@ -117,13 +133,19 @@ async def handle_list_resources() -> list[Resource]:
         Resource(
             uri="categories://for-analysis",
             name="Categories for Analysis",
-            description="Categories formatted for company analysis and tagging",
+            description="Categories formatted for company analysis and tagging with strict enforcement",
+            mimeType="text/plain",
+        ),
+        Resource(
+            uri="categories://exact-pairs",
+            name="Exact Industry Product Pairs",
+            description="Complete list of exact industry|product pairs that MUST be used",
             mimeType="text/plain",
         ),
         Resource(
             uri="categories://system-prompt",
             name="System Prompt for Company Tagging",
-            description="Detailed system prompt with instructions for company categorization",
+            description="Detailed system prompt with strict instructions for company categorization",
             mimeType="text/plain",
         ),
     ]
@@ -217,26 +239,45 @@ async def handle_read_resource(uri: str) -> str:
     elif uri == "categories://for-analysis":
         return format_categories_for_analysis()
     
+    elif uri == "categories://exact-pairs":
+        # Return just the exact pairs in a simple format
+        csv_data = load_csv_data()
+        exact_pairs = []
+        for row in csv_data:
+            industry = row.get('Industry', '').strip()
+            product = row.get('Product', '').strip()
+            if industry and product:
+                exact_pairs.append(f"{industry} | {product}")
+        
+        unique_pairs = sorted(list(set(exact_pairs)))
+        return "\n".join(unique_pairs)
+    
     elif uri == "categories://system-prompt":
         return """You are a data analyst tasked with tagging exhibitor companies with the most accurate tags from an industry and product taxonomy structure. Your goal is accuracy and consistency.
 
 TAXONOMY CONTEXT:
 The taxonomy consists of pairs of (Industry and Product) connected with show codes for companies that might exhibit at technology shows: Big Data and AI World (BDAIW), DevOps Live (DOL), Data Centre World (DCW), Cloud and Cyber Security Expo (CCSE), and CAI (Cloud and AI Infrastructure).
 
+CRITICAL TAXONOMY ENFORCEMENT:
+1. You MUST use search_show_categories tool FIRST to get the complete list of exact pairs
+2. You can ONLY use pairs that exist in the taxonomy - NO EXCEPTIONS
+3. Copy industry and product names EXACTLY (including punctuation, spacing, special characters)
+4. If a company doesn't match any existing pair, leave those columns empty
+5. Do NOT create new industry or product names
+
 IMPORTANT INSTRUCTIONS:
 1. Focus only on products/services relevant to the target shows
 2. Use web sources (Google and Perplexity tools) to research company offerings
 3. Name priority: Domain > Trading Name > Company Name
-4. Do NOT add new industries or products - use only existing taxonomy
-5. Select up to 4 pairs of (Industry and Product)
-6. Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
+4. Select up to 4 pairs of (Industry and Product)
+5. Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
 
 PROCESS:
-1. Retrieve all available categories (once)
+1. Use search_show_categories tool to retrieve all available exact pairs (MANDATORY FIRST STEP)
 2. Choose research name (Domain > Trading Name > Company Name)
 3. Research company using web tools to identify products/services
 4. Check relevant shows from Event attribute
-5. Match findings to existing taxonomy pairs
+5. Match findings to EXISTING taxonomy pairs ONLY
 6. Generate structured output table
 
 OUTPUT FORMAT:
@@ -278,7 +319,7 @@ async def handle_list_prompts() -> list[Prompt]:
     return [
         Prompt(
             name="tag_companies",
-            description="Professional data analyst prompt for systematic company categorization using taxonomy",
+            description="Professional data analyst prompt for systematic company categorization using EXACT taxonomy pairs",
             arguments=[
                 {
                     "name": "company_data",
@@ -306,10 +347,10 @@ async def handle_get_prompt(name: str, arguments: Optional[Dict[str, str]] = Non
     company_data = arguments.get("company_data", "")
     target_shows = arguments.get("target_shows", "")
     
-    # Get the taxonomy data
+    # Get the taxonomy data with strict enforcement
     taxonomy_data = format_categories_for_analysis()
     
-    # Create the comprehensive prompt
+    # Create the comprehensive prompt with MUCH STRICTER language
     prompt_content = f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
 
 COMPANY DATA TO ANALYZE:
@@ -317,13 +358,11 @@ COMPANY DATA TO ANALYZE:
 
 TARGET SHOWS: {target_shows if target_shows else "All relevant shows (CAI, DOL, CCSE, BDAIW, DCW)"}
 
-AVAILABLE TAXONOMY:
-{taxonomy_data}
-
 MANDATORY RESEARCH PROCESS:
 
-1. **Retrieve Complete Taxonomy** (ONCE ONLY):
-   - Use search_show_categories tool without any filters to get all available categories
+1. **Retrieve Complete Taxonomy** (ABSOLUTE REQUIREMENT):
+   - Use search_show_categories tool without any filters to get ALL available exact pairs
+   - You MUST see the complete list before proceeding - this is NON-NEGOTIABLE
 
 2. **For EACH Company - Research Phase:**
    - Choose research name: Domain > Trading Name > Company Name
@@ -331,29 +370,38 @@ MANDATORY RESEARCH PROCESS:
    - Use perplexity_search_web tool: "[company name] products services technology offerings"
    - Identify what the company actually sells/offers
 
-3. **Analysis Phase:**
+3. **Analysis Phase - STRICT TAXONOMY MATCHING:**
    - Map company offerings to relevant shows (CAI, DOL, CCSE, BDAIW, DCW)
-   - Match findings to EXACT taxonomy pairs from step 1
-   - Select up to 4 (Industry | Product) pairs per company
-   - Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
+   - Match findings to EXACT taxonomy pairs from step 1 ONLY
+   - NEVER create new industry or product names
+   - NEVER modify existing industry or product names (not even small changes like & to "and")
+   - If no exact match exists, leave those columns EMPTY
+   - Select up to 4 exact pairs per company
 
 4. **Output Requirements:**
    - Generate ONLY a markdown table with these columns:
    | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
+   - Use ONLY the exact industry|product pairs from the taxonomy
    - Do NOT provide any additional text, explanations, or context
    - Do NOT show research details or tool executions
    - ONLY the markdown table
 
-CRITICAL RULES:
+CRITICAL RULES - ABSOLUTE REQUIREMENTS:
+- MUST use search_show_categories to get exact taxonomy pairs before starting
 - MUST use both google-search AND perplexity_search_web for each company
-- MUST use search_show_categories to get taxonomy before starting
-- Use taxonomy pairs EXACTLY as written
+- MUST use taxonomy pairs EXACTLY as written (copy/paste accuracy required)
+- MUST NOT create new industry or product names under any circumstances
+- MUST NOT modify existing names (including punctuation, spacing, capitalization)
+- If no exact match exists, leave columns empty rather than inventing names
 - Output ONLY the markdown table, nothing else
+
+VALIDATION CHECK:
+Before outputting any industry|product pair, verify it exists in the taxonomy retrieved in step 1.
 
 Begin the systematic analysis now."""
 
     return types.GetPromptResult(
-        description="Company tagging analysis prompt with systematic research process",
+        description="Company tagging analysis prompt with STRICT taxonomy enforcement",
         messages=[
             PromptMessage(
                 role="user",
@@ -371,7 +419,7 @@ async def handle_list_tools() -> list[Tool]:
     return [
         Tool(
             name="search_show_categories",
-            description="Search and filter show categories from the CSV data",
+            description="Search and filter show categories from the CSV data - MUST be used to get exact taxonomy pairs",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -386,6 +434,11 @@ async def handle_list_tools() -> list[Tool]:
                     "product_filter": {
                         "type": "string",
                         "description": "Filter by product name (partial match)",
+                    },
+                    "return_exact_pairs": {
+                        "type": "boolean",
+                        "description": "Return formatted exact pairs for taxonomy validation (default: true)",
+                        "default": True
                     },
                 },
             },
@@ -404,7 +457,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
         raise ValueError(f"Unknown tool: {name}")
 
 async def search_show_categories(arguments: dict[str, Any]) -> list[types.TextContent]:
-    """Search and filter show categories from the CSV data."""
+    """Search and filter show categories from the CSV data with exact pairs formatting."""
     csv_data = load_csv_data()
     
     if not csv_data:
@@ -413,6 +466,7 @@ async def search_show_categories(arguments: dict[str, Any]) -> list[types.TextCo
     show_name = arguments.get("show_name")
     industry_filter = arguments.get("industry_filter")
     product_filter = arguments.get("product_filter")
+    return_exact_pairs = arguments.get("return_exact_pairs", True)
     
     filtered_data = csv_data.copy()
     filters_applied = []
@@ -438,19 +492,56 @@ async def search_show_categories(arguments: dict[str, Any]) -> list[types.TextCo
                         if product_lower in row.get('Product', '').lower()]
         filters_applied.append(f"Product contains: {product_filter}")
     
-    # Organize results
-    result = {
-        "filters_applied": filters_applied,
-        "total_matches": len(filtered_data),
-        "original_total": len(csv_data),
-        "matches": filtered_data
-    }
+    # Create exact pairs from filtered data
+    exact_pairs = []
+    for row in filtered_data:
+        industry = row.get('Industry', '').strip()
+        product = row.get('Product', '').strip()
+        if industry and product:
+            exact_pairs.append(f"{industry} | {product}")
     
-    if not filtered_data:
-        result["message"] = "No categories match the specified filters."
-        result["available_shows"] = list(set(row.get('Show', '') for row in csv_data if row.get('Show')))
+    # Remove duplicates and sort
+    unique_pairs = sorted(list(set(exact_pairs)))
     
-    return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+    if return_exact_pairs:
+        # Return formatted exact pairs for easy copy-paste validation
+        result_text = f"""EXACT INDUSTRY | PRODUCT PAIRS ({len(unique_pairs)} total):
+
+USE THESE PAIRS EXACTLY AS WRITTEN (copy/paste accuracy required):
+
+"""
+        for i, pair in enumerate(unique_pairs, 1):
+            result_text += f"{i:2d}. {pair}\n"
+        
+        result_text += f"""
+
+CRITICAL REMINDERS:
+- Use ONLY the {len(unique_pairs)} pairs listed above
+- Copy industry and product names EXACTLY (including all punctuation, spacing, special characters)
+- Do NOT create new pairs or modify existing ones
+- If no exact match exists, leave columns empty
+
+Filters applied: {', '.join(filters_applied) if filters_applied else 'None (all categories)'}
+"""
+        
+        return [types.TextContent(type="text", text=result_text)]
+    
+    else:
+        # Return structured JSON format
+        result = {
+            "filters_applied": filters_applied,
+            "total_matches": len(filtered_data),
+            "unique_pairs": len(unique_pairs),
+            "original_total": len(csv_data),
+            "exact_pairs": unique_pairs,
+            "raw_matches": filtered_data
+        }
+        
+        if not filtered_data:
+            result["message"] = "No categories match the specified filters."
+            result["available_shows"] = list(set(row.get('Show', '') for row in csv_data if row.get('Show')))
+        
+        return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
 async def main():
     """Main entry point for the server."""
@@ -461,7 +552,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="company-tagging-mcp",
-                server_version="0.2.0",
+                server_version="0.3.0",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={},

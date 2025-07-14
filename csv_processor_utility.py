@@ -1,5 +1,5 @@
 """
-CSV Processor Utility Functions
+CSV Processor Utility Functions - Updated for Batch Processing
 Additional utilities for the Company Classification CLI Tool
 """
 
@@ -50,8 +50,8 @@ class CSVProcessor:
             return False, [f"Error reading CSV: {e}"]
     
     @staticmethod
-    def preview_csv(csv_path: str, num_rows: int = 5) -> Dict:
-        """Preview the first few rows of a CSV file."""
+    def count_valid_companies(csv_path: str) -> int:
+        """Count valid companies in CSV file."""
         try:
             with open(csv_path, 'r', encoding='utf-8', newline='') as csvfile:
                 sample = csvfile.read(1024)
@@ -61,89 +61,74 @@ class CSVProcessor:
                 
                 reader = csv.DictReader(csvfile, delimiter=delimiter)
                 
-                preview_data = {
-                    'headers': reader.fieldnames,
-                    'delimiter': delimiter,
-                    'rows': []
-                }
+                count = 0
+                for row in reader:
+                    cleaned_row = {k.strip(): v.strip() if v else "" for k, v in row.items()}
+                    if cleaned_row.get('Account Name'):
+                        count += 1
                 
-                for i, row in enumerate(reader):
-                    if i >= num_rows:
-                        break
-                    preview_data['rows'].append(row)
-                
-                return preview_data
+                return count
                 
         except Exception as e:
-            return {'error': f"Error previewing CSV: {e}"}
+            return 0
     
     @staticmethod
-    def split_csv_into_batches(csv_path: str, batch_size: int = 10) -> List[str]:
-        """Split a large CSV file into smaller batches for processing."""
-        batch_files = []
-        
+    def merge_csv_results(result_files: List[str], output_path: str):
+        """Merge multiple CSV result files into one."""
         try:
-            with open(csv_path, 'r', encoding='utf-8', newline='') as csvfile:
-                sample = csvfile.read(1024)
-                csvfile.seek(0)
-                sniffer = csv.Sniffer()
-                delimiter = sniffer.sniff(sample).delimiter
-                
-                reader = csv.DictReader(csvfile, delimiter=delimiter)
-                headers = reader.fieldnames
-                
-                batch_num = 1
-                current_batch = []
-                
-                for row in reader:
-                    current_batch.append(row)
-                    
-                    if len(current_batch) >= batch_size:
-                        # Save current batch
-                        batch_filename = f"batch_{batch_num}_{Path(csv_path).stem}.csv"
-                        batch_path = Path(csv_path).parent / batch_filename
+            all_rows = []
+            header_added = False
+            
+            for result_file in result_files:
+                if os.path.exists(result_file) and result_file.endswith('.csv'):
+                    with open(result_file, 'r', encoding='utf-8', newline='') as f:
+                        reader = csv.reader(f)
+                        rows = list(reader)
                         
-                        with open(batch_path, 'w', encoding='utf-8', newline='') as batch_file:
-                            writer = csv.DictWriter(batch_file, fieldnames=headers, delimiter=delimiter)
-                            writer.writeheader()
-                            writer.writerows(current_batch)
-                        
-                        batch_files.append(str(batch_path))
-                        current_batch = []
-                        batch_num += 1
+                        if rows:
+                            if not header_added:
+                                # Add header from first file
+                                all_rows.append(rows[0])
+                                header_added = True
+                            
+                            # Add data rows (skip header)
+                            if len(rows) > 1:
+                                all_rows.extend(rows[1:])
+            
+            # Write merged results
+            if all_rows:
+                with open(output_path, 'w', encoding='utf-8', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(all_rows)
                 
-                # Save remaining rows
-                if current_batch:
-                    batch_filename = f"batch_{batch_num}_{Path(csv_path).stem}.csv"
-                    batch_path = Path(csv_path).parent / batch_filename
-                    
-                    with open(batch_path, 'w', encoding='utf-8', newline='') as batch_file:
-                        writer = csv.DictWriter(batch_file, fieldnames=headers, delimiter=delimiter)
-                        writer.writeheader()
-                        writer.writerows(current_batch)
-                    
-                    batch_files.append(str(batch_path))
-                
-                return batch_files
-                
+                print(f"✅ Merged {len(result_files)} CSV files into {output_path}")
+                print(f"   Total rows (including header): {len(all_rows)}")
+            else:
+                print("❌ No valid CSV data found to merge")
+            
         except Exception as e:
-            raise ValueError(f"Error splitting CSV into batches: {e}")
+            raise ValueError(f"Error merging CSV results: {e}")
     
     @staticmethod
     def merge_markdown_results(result_files: List[str], output_path: str):
         """Merge multiple markdown result files into one."""
         try:
             all_tables = []
+            header_added = False
             
             for result_file in result_files:
-                if os.path.exists(result_file):
+                if os.path.exists(result_file) and result_file.endswith('.md'):
                     with open(result_file, 'r', encoding='utf-8') as f:
                         content = f.read().strip()
                         if content and "|" in content:
                             lines = content.split('\n')
-                            # Skip header for subsequent files
-                            if all_tables:
-                                # Find the first data row (skip header and separator)
+                            
+                            if not header_added:
+                                # Add everything from first file
+                                all_tables.extend(lines)
+                                header_added = True
+                            else:
+                                # Skip header and separator for subsequent files
                                 data_start = 0
                                 for i, line in enumerate(lines):
                                     if "|" in line and "Company Name" in line:
@@ -151,17 +136,18 @@ class CSVProcessor:
                                         break
                                 if data_start < len(lines):
                                     all_tables.extend(lines[data_start:])
-                            else:
-                                all_tables.extend(lines)
             
             # Write merged results
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(all_tables))
-            
-            print(f"✅ Merged {len(result_files)} result files into {output_path}")
+            if all_tables:
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(all_tables))
+                
+                print(f"✅ Merged {len(result_files)} markdown files into {output_path}")
+            else:
+                print("❌ No valid markdown data found to merge")
             
         except Exception as e:
-            raise ValueError(f"Error merging results: {e}")
+            raise ValueError(f"Error merging markdown results: {e}")
     
     @staticmethod
     def convert_markdown_to_csv(markdown_path: str, csv_path: str):
@@ -193,6 +179,7 @@ class CSVProcessor:
                     writer.writerows(csv_rows)
                 
                 print(f"✅ Converted markdown to CSV: {csv_path}")
+                print(f"   Rows converted: {len(csv_rows)}")
             else:
                 raise ValueError("No valid table data found in markdown")
                 
@@ -200,7 +187,55 @@ class CSVProcessor:
             raise ValueError(f"Error converting markdown to CSV: {e}")
     
     @staticmethod
-    def generate_sample_csv(output_path: str, num_samples: int = 3):
+    def validate_output_results(base_path: str) -> Dict[str, bool]:
+        """Validate that both MD and CSV output files exist and have content."""
+        results = {}
+        
+        md_path = Path(base_path).with_suffix('.md')
+        csv_path = Path(base_path).with_suffix('.csv')
+        
+        # Check markdown file
+        if md_path.exists():
+            try:
+                with open(md_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                results['markdown_exists'] = bool(content and "|" in content)
+            except:
+                results['markdown_exists'] = False
+        else:
+            results['markdown_exists'] = False
+        
+        # Check CSV file
+        if csv_path.exists():
+            try:
+                with open(csv_path, 'r', encoding='utf-8', newline='') as f:
+                    reader = csv.reader(f)
+                    rows = list(reader)
+                results['csv_exists'] = bool(rows and len(rows) > 1)  # Header + at least one data row
+                results['csv_row_count'] = len(rows) - 1 if rows else 0  # Exclude header
+            except:
+                results['csv_exists'] = False
+                results['csv_row_count'] = 0
+        else:
+            results['csv_exists'] = False
+            results['csv_row_count'] = 0
+        
+        return results
+    
+    @staticmethod
+    def calculate_batch_info(total_companies: int, batch_size: int) -> Dict[str, int]:
+        """Calculate batch processing information."""
+        total_batches = (total_companies + batch_size - 1) // batch_size  # Ceiling division
+        
+        return {
+            'total_companies': total_companies,
+            'batch_size': batch_size,
+            'total_batches': total_batches,
+            'last_batch_size': total_companies % batch_size or batch_size
+        }
+    
+    @staticmethod
+    def generate_sample_csv(output_path: str, num_samples: int = 10):
         """Generate a sample CSV file with the expected structure."""
         sample_data = [
             {
@@ -210,7 +245,7 @@ class CSVProcessor:
                 'Domain': 'gmv.com',
                 'Industry': '',
                 'Product/Service Type': '',
-                'Event': '100 Optical; ADAS and Autonomous Vehicle Technology Expo Europe; ADAS and Autonomous Vehicle Technology Expo USA; Cloud Security London'
+                'Event': 'Cloud Security London; Big Data Expo'
             },
             {
                 'CASEACCID': 'CASE002',
@@ -219,7 +254,7 @@ class CSVProcessor:
                 'Domain': 'iqvia.com',
                 'Industry': '',
                 'Product/Service Type': '',
-                'Event': '100 Optical; Best Practice; Big Data Expo; Clinical Pharmacy Congress; Digital Health Intelligence Networks; Genomics and Precision Medicine Expo; Oncology Professional Care'
+                'Event': 'Big Data Expo; Digital Health Intelligence Networks'
             },
             {
                 'CASEACCID': 'CASE003',
@@ -228,7 +263,70 @@ class CSVProcessor:
                 'Domain': 'keepler.io',
                 'Industry': '',
                 'Product/Service Type': '',
-                'Event': '100 Optical; Best Practice; Big Data Expo; Clinical Pharmacy Congress; Digital Health Intelligence Networks; Genomics and Precision Medicine Expo; Oncology Professional Care'
+                'Event': 'Big Data Expo; Cloud Security London'
+            },
+            {
+                'CASEACCID': 'CASE004',
+                'Account Name': 'Microsoft',
+                'Trading Name': 'Microsoft',
+                'Domain': 'microsoft.com',
+                'Industry': '',
+                'Product/Service Type': '',
+                'Event': 'Cloud and AI Infrastructure; DevOps Live'
+            },
+            {
+                'CASEACCID': 'CASE005',
+                'Account Name': 'Amazon Web Services',
+                'Trading Name': 'AWS',
+                'Domain': 'aws.amazon.com',
+                'Industry': '',
+                'Product/Service Type': '',
+                'Event': 'Cloud and AI Infrastructure; Data Centre World'
+            },
+            {
+                'CASEACCID': 'CASE006',
+                'Account Name': 'NVIDIA Corporation',
+                'Trading Name': 'NVIDIA',
+                'Domain': 'nvidia.com',
+                'Industry': '',
+                'Product/Service Type': '',
+                'Event': 'Big Data and AI World; Cloud and AI Infrastructure'
+            },
+            {
+                'CASEACCID': 'CASE007',
+                'Account Name': 'Palantir Technologies',
+                'Trading Name': 'Palantir',
+                'Domain': 'palantir.com',
+                'Industry': '',
+                'Product/Service Type': '',
+                'Event': 'Big Data and AI World; Cloud and Cyber Security Expo'
+            },
+            {
+                'CASEACCID': 'CASE008',
+                'Account Name': 'Snowflake Inc.',
+                'Trading Name': 'Snowflake',
+                'Domain': 'snowflake.com',
+                'Industry': '',
+                'Product/Service Type': '',
+                'Event': 'Big Data and AI World; Cloud and AI Infrastructure'
+            },
+            {
+                'CASEACCID': 'CASE009',
+                'Account Name': 'HashiCorp',
+                'Trading Name': 'HashiCorp',
+                'Domain': 'hashicorp.com',
+                'Industry': '',
+                'Product/Service Type': '',
+                'Event': 'DevOps Live; Cloud and Cyber Security Expo'
+            },
+            {
+                'CASEACCID': 'CASE010',
+                'Account Name': 'Datadog',
+                'Trading Name': 'Datadog',
+                'Domain': 'datadoghq.com',
+                'Industry': '',
+                'Product/Service Type': '',
+                'Event': 'DevOps Live; Cloud and AI Infrastructure'
             }
         ]
         
@@ -252,57 +350,46 @@ def create_batch_script():
     batch_script = """#!/bin/bash
 # Batch processing script for company classification
 
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 <input_csv> <output_directory>"
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 <input_csv> <output_base_name> [batch_size]"
+    echo "Example: $0 companies.csv results 10"
     exit 1
 fi
 
 INPUT_CSV="$1"
-OUTPUT_DIR="$2"
-BATCH_SIZE=10
+OUTPUT_BASE="$2"
+BATCH_SIZE="${3:-10}"
 
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
+echo "🚀 Starting batch processing..."
+echo "   Input: $INPUT_CSV"
+echo "   Output base: $OUTPUT_BASE"
+echo "   Batch size: $BATCH_SIZE"
 
-# Run the batch processing
-python -c "
-import sys
-sys.path.append('.')
-from csv_processor_utility import CSVProcessor
+# Run the classification with batch processing
+python3 company_cli.py --input "$INPUT_CSV" --output "$OUTPUT_BASE" --batch-size "$BATCH_SIZE"
 
-# Split CSV into batches
-csv_path = '$INPUT_CSV'
-batch_files = CSVProcessor.split_csv_into_batches(csv_path, $BATCH_SIZE)
-
-print(f'Created {len(batch_files)} batch files')
-for i, batch_file in enumerate(batch_files):
-    print(f'Batch {i+1}: {batch_file}')
-"
-
-# Process each batch
-for batch_file in batch_*.csv; do
-    if [ -f "$batch_file" ]; then
-        echo "Processing $batch_file..."
-        python company_cli.py --input "$batch_file" --output "$OUTPUT_DIR/result_$batch_file.md"
+# Check if processing was successful
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "✅ Batch processing completed successfully!"
+    echo "📄 Output files created:"
+    echo "   - ${OUTPUT_BASE}.md (Markdown table)"
+    echo "   - ${OUTPUT_BASE}.csv (CSV format)"
+    
+    # Show file sizes
+    if [ -f "${OUTPUT_BASE}.md" ]; then
+        MD_SIZE=$(wc -l < "${OUTPUT_BASE}.md")
+        echo "   - Markdown file: $MD_SIZE lines"
     fi
-done
-
-# Merge results
-python -c "
-import glob
-import sys
-sys.path.append('.')
-from csv_processor_utility import CSVProcessor
-
-result_files = glob.glob('$OUTPUT_DIR/result_*.md')
-if result_files:
-    CSVProcessor.merge_markdown_results(result_files, '$OUTPUT_DIR/final_results.md')
-    CSVProcessor.convert_markdown_to_csv('$OUTPUT_DIR/final_results.md', '$OUTPUT_DIR/final_results.csv')
-    print('Batch processing complete!')
-"
-
-# Clean up batch files
-rm -f batch_*.csv
+    
+    if [ -f "${OUTPUT_BASE}.csv" ]; then
+        CSV_SIZE=$(tail -n +2 "${OUTPUT_BASE}.csv" | wc -l)
+        echo "   - CSV file: $CSV_SIZE data rows"
+    fi
+else
+    echo "❌ Batch processing failed!"
+    exit 1
+fi
 """
     
     with open('batch_process.sh', 'w') as f:
@@ -317,13 +404,16 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="CSV Processing Utilities")
     parser.add_argument("--validate", help="Validate CSV structure")
-    parser.add_argument("--preview", help="Preview CSV file")
+    parser.add_argument("--count", help="Count valid companies in CSV")
+    parser.add_argument("--batch-info", help="Calculate batch processing info for CSV")
+    parser.add_argument("--batch-size", type=int, default=10, help="Batch size for calculations")
     parser.add_argument("--generate-sample", help="Generate sample CSV file")
-    parser.add_argument("--split", help="Split CSV into batches")
-    parser.add_argument("--batch-size", type=int, default=10, help="Batch size for splitting")
-    parser.add_argument("--merge", nargs='+', help="Merge multiple result files")
+    parser.add_argument("--sample-size", type=int, default=10, help="Number of sample companies")
+    parser.add_argument("--merge-csv", nargs='+', help="Merge multiple CSV result files")
+    parser.add_argument("--merge-md", nargs='+', help="Merge multiple markdown result files")
     parser.add_argument("--output", help="Output file path")
     parser.add_argument("--to-csv", help="Convert markdown results to CSV")
+    parser.add_argument("--validate-output", help="Validate output files exist and have content")
     parser.add_argument("--create-batch-script", action="store_true", help="Create batch processing script")
     
     args = parser.parse_args()
@@ -336,37 +426,49 @@ if __name__ == "__main__":
             else:
                 print(f"❌ CSV validation failed: {issues}")
         
-        elif args.preview:
-            preview = CSVProcessor.preview_csv(args.preview)
-            if 'error' in preview:
-                print(f"❌ {preview['error']}")
+        elif args.count:
+            count = CSVProcessor.count_valid_companies(args.count)
+            print(f"📊 Valid companies in file: {count}")
+        
+        elif args.batch_info:
+            count = CSVProcessor.count_valid_companies(args.batch_info)
+            if count > 0:
+                info = CSVProcessor.calculate_batch_info(count, args.batch_size)
+                print(f"📊 Batch Processing Info:")
+                print(f"   Total companies: {info['total_companies']}")
+                print(f"   Batch size: {info['batch_size']}")
+                print(f"   Total batches: {info['total_batches']}")
+                print(f"   Last batch size: {info['last_batch_size']}")
             else:
-                print(f"Headers: {preview['headers']}")
-                print(f"Delimiter: '{preview['delimiter']}'")
-                print("Sample rows:")
-                for i, row in enumerate(preview['rows']):
-                    print(f"  Row {i+1}: {row}")
+                print("❌ No valid companies found in CSV")
         
         elif args.generate_sample:
-            CSVProcessor.generate_sample_csv(args.generate_sample)
+            CSVProcessor.generate_sample_csv(args.generate_sample, args.sample_size)
         
-        elif args.split:
-            batch_files = CSVProcessor.split_csv_into_batches(args.split, args.batch_size)
-            print(f"✅ Created {len(batch_files)} batch files")
-            for batch_file in batch_files:
-                print(f"  - {batch_file}")
-        
-        elif args.merge:
+        elif args.merge_csv:
             if not args.output:
-                print("❌ --output is required for merging")
+                print("❌ --output is required for merging CSV files")
                 sys.exit(1)
-            CSVProcessor.merge_markdown_results(args.merge, args.output)
+            CSVProcessor.merge_csv_results(args.merge_csv, args.output)
+        
+        elif args.merge_md:
+            if not args.output:
+                print("❌ --output is required for merging markdown files")
+                sys.exit(1)
+            CSVProcessor.merge_markdown_results(args.merge_md, args.output)
         
         elif args.to_csv:
             if not args.output:
                 print("❌ --output is required for CSV conversion")
                 sys.exit(1)
             CSVProcessor.convert_markdown_to_csv(args.to_csv, args.output)
+        
+        elif args.validate_output:
+            results = CSVProcessor.validate_output_results(args.validate_output)
+            print(f"📄 Output Validation Results:")
+            print(f"   Markdown file exists: {'✅' if results['markdown_exists'] else '❌'}")
+            print(f"   CSV file exists: {'✅' if results['csv_exists'] else '❌'}")
+            print(f"   CSV rows processed: {results['csv_row_count']}")
         
         elif args.create_batch_script:
             create_batch_script()
