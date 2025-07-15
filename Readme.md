@@ -1,574 +1,439 @@
-# AI-Powered Search MCP Integration Platform
+# Strategic AI CSM Applications
 
-A comprehensive full-stack application that provides AI-powered interactions with Google Search and Perplexity AI through Model Context Protocol (MCP) servers. This platform enables seamless web search, AI-powered analysis, and content extraction with optional HTTPS security, user authentication, and advanced caching for optimal performance.
+A comprehensive suite of AI-powered applications for data processing, visitor classification, CRM integration, and multi-database analytics designed for event management and customer analytics.
 
-## 🚀 System Overview
+## 🏗️ Project Overview
 
-This application consists of three integrated components working together to provide comprehensive AI-powered search capabilities:
+This repository contains multiple interconnected applications that leverage artificial intelligence for:
+- Event visitor behavior analysis and classification
+- Graph database analytics with Neo4j
+- CRM integration with HubSpot
+- SQL database operations with MSSQL Server
+- Recommendation systems for personalized experiences
+- Multi-model AI inference and processing pipelines
+- Cross-platform data analytics and integration
 
-1. **Streamlit Client** - AI chat interface with multi-provider support, authentication, SSL support, and embedded MCP server
-2. **Google Search MCP Server** - Web search and content extraction via Google Custom Search API with intelligent caching
-3. **Perplexity MCP Server** - AI-powered search with intelligent analysis via Perplexity API with response caching
-
-## 🏗️ System Architecture
+## 📁 Repository Structure
 
 ```
-┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
-│   Streamlit Client  │    │  Google Search API  │    │  Perplexity AI API  │
-│                     │    │                     │    │                     │
-│  - AI Chat UI       │◄──►│  - Web Search       │    │  - AI Search        │
-│  - Authentication   │    │  - Content Extract  │    │  - Smart Analysis   │
-│  - Multi-Provider   │    │  - Content Caching  │    │  - Response Caching │
-│  - Company Tagging  │    │  (2hr TTL)          │    │  (30min TTL)        │
-│    (stdio MCP)      │    └─────────────────────┘    └─────────────────────┘
-└─────────────────────┘              ▲                          ▲
-           ▲                    ┌────┴─────┐              ┌────┴─────┐
-           │                    │ Server 2 │              │ Server 1 │
-           │                    │ Google   │              │Perplexity│
-           │                    │ Search   │              │ + Cache  │
-           │                    │ + Cache  │              │ MCP      │
-           │                    │ MCP      │              │ Server   │
-           │                    └──────────┘              └──────────┘
+Strategic_AI_CSM_Applications/
+├── 📊 PA/                          # Personal AGENDAS - Data Processing Pipeline
+├── 🤖 app/                         # CSM LLM Application - HPI Classification
+├── 🏢 mcp-chatbot/                 # AI-Powered Multi-Database & CRM Platform
+│   ├── client/                     # Streamlit AI Chat Interface
+│   └── servers/                    # MCP Protocol Servers
+│       ├── server3/                # MSSQL Database Server
+│       ├── server4/                # Neo4j Graph Database Server
+│       └── server5/                # HubSpot CRM Server
+├── 📈 phase1/                      # Conference Attendee Clustering (Phase 1)
+├── 🎯 phase2/                      # Event Visitor Classification (Phase 2)
+├── ⚡ inference/                   # Multi-Model Inference System
+├── 📁 archive/                     # Legacy components and utilities
+└── 📋 requirements.txt             # Common dependencies
 ```
 
-## 📋 Port Reference Table
+---
 
-| Service | Port | Protocol | Purpose |
-|---------|------|----------|---------|
-| **Streamlit HTTP** | 8501 | HTTP | Main web interface |
-| **Streamlit HTTPS** | 8503 | HTTPS | Secure web interface (recommended) |
-| **Google Search MCP** | 8002 | HTTP/SSE | Web search server with caching |
-| **Perplexity MCP** | 8001 | HTTP/SSE | AI search server with caching |
-| **Company Tagging** | - | stdio | Embedded MCP server |
+## 🔧 Core Applications
 
-## 🔧 Core Technologies & Dependencies
+### 📊 PA - Personal AGENDAS
+**A comprehensive data processing and analytics pipeline for veterinary conference data**
 
-This platform is built using modern, robust technologies that enable scalable AI-powered search capabilities with intelligent caching for optimal performance.
+**Purpose**: Process registration, attendance, and session information to generate personalized recommendations and insights for veterinary conferences (BVA - British Veterinary Association and LVA - London Vet Show).
 
-### **🌐 Frontend & User Interface**
+**Key Features**:
+- **Data Processing**: Registration, scan, and session data processing
+- **Neo4j Integration**: Knowledge graph creation with visitors, sessions, and streams
+- **AI-Powered Features**: Stream descriptions and session embeddings
+- **Smart Recommendations**: Personalized session recommendations using visitor similarity
 
-#### **[Streamlit](https://streamlit.io/)** - Web Application Framework
-- **Purpose**: Primary web interface for user interactions
-- **Version**: 1.44+
-- **Features**: Real-time updates, component system, session management
-- **Enhanced**: Multi-tab interface with configuration, connections, tools, and chat tabs
+**Quick Start**:
+```bash
+cd PA/app
+pip install -r requirements.txt
+python main.py
+```
 
-#### **[Streamlit Authenticator](https://github.com/mkhorasani/Streamlit-Authenticator)** - Authentication System
-- **Purpose**: Secure user login and session management
-- **Version**: 0.3.2
-- **Features**: bcrypt password hashing, role-based access control, 30-day session persistence
+**Architecture**:
+- Pipeline coordinator with modular processors
+- Neo4j graph database for relationship mapping
+- Business rules engine for recommendation filtering
+- Multi-year visitor tracking and analysis
 
-### **🧠 AI & Language Models**
+---
 
-#### **[LangChain](https://python.langchain.com/)** - AI Framework
-- **Purpose**: AI agent orchestration and tool routing
-- **Version**: 0.3.20+
-- **Features**: ReAct agents, memory management, tool execution, conversation history
+### 🤖 app - CSM LLM Application (HPI)
+**High Purchase Intention visitor classification system for technology events**
 
-#### **[OpenAI API](https://openai.com/api/)** - AI Language Models
-- **Models**: GPT-4o, GPT-4o-mini
-- **Features**: Tool calling, streaming responses, context handling
+**Purpose**: Analyze and categorize technology event attendees based on their purchasing intentions and engagement patterns using multiple Large Language Models.
 
-#### **[Azure OpenAI](https://azure.microsoft.com/en-us/products/ai-services/openai-service)** - Enterprise AI
-- **Models**: GPT-4o, o3-mini
-- **Features**: Enterprise security, private endpoints, compliance, SLA guarantees
+**Key Features**:
+- **Multi-Model Support**: Llama 3.1, GPT-4o-mini, o3-mini
+- **5-Category Classification**: Networking, Learning, Searching, Early Purchasing, High Purchase Intention
+- **Web Interface**: Streamlit-based authentication and processing
+- **Batch Processing**: Efficient handling of large datasets
 
-### **🔍 Search & Data Sources**
+**Quick Start**:
+```bash
+cd app
+docker-compose up -d
+streamlit run main.py
+```
 
-#### **[Google Custom Search API](https://developers.google.com/custom-search)** - Web Search Engine
-- **Purpose**: Comprehensive web search capabilities with intelligent caching
-- **Version**: v1
-- **Caching**: 30-minute TTL for search results, 2-hour TTL for webpage content
-- **Features**: Custom search engines, result filtering, content extraction optimization
+**Classification Categories**:
+- **Networking**: Professional relationship building
+- **Learning**: Educational opportunities seeking
+- **Searching**: Information gathering on products/vendors
+- **Early Purchasing Intention**: Active sourcing engagement
+- **High Purchase Intention**: Final purchasing journey stages
 
-#### **[Perplexity AI API](https://www.perplexity.ai/)** - AI-Powered Search
-- **Models**: sonar-deep-research, sonar-reasoning-pro, sonar-reasoning, sonar-pro, sonar, r1-1776
-- **Caching**: 30-minute TTL for API responses
-- **Features**: Recency filtering, model selection, citation support, temperature control
+---
 
-### **🔗 Communication Protocols**
+### 🏢 mcp-chatbot - AI-Powered Multi-Database & CRM Platform
+**Full-stack application providing AI-powered interactions with Neo4j, MSSQL, and HubSpot through unified interface**
 
-#### **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)** - Standardized AI Communication
-- **Purpose**: Universal protocol for AI tool integration
-- **Version**: 1.0+
-- **Features**: Tool discovery, schema validation, transport flexibility (SSE + stdio)
+**Purpose**: Seamless data analysis, management, and automation across multiple database and CRM systems through Model Context Protocol (MCP) servers with comprehensive authentication and SSL support.
 
-#### **[Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)** - Real-time Communication
-- **Purpose**: Real-time bidirectional communication for external MCP servers
-- **Features**: Automatic reconnection, message ordering, multiplexing
+**Key Features**:
+- **Streamlit Client**: AI chat interface with multi-provider support and authentication
+- **Neo4j MCP Server**: Graph database operations via Cypher queries
+- **MSSQL MCP Server**: SQL Server database operations with ODBC integration
+- **HubSpot MCP Server**: Complete CRM integration with 25+ tools
+- **Security**: User authentication, SSL/HTTPS support, and session management
+- **Cross-Database Integration**: Unified queries across all data sources
 
-#### **stdio Transport** - Local Process Communication
-- **Purpose**: Embedded MCP server communication within containers
-- **Features**: Zero network latency, simplified deployment, better security
+**Quick Start**:
+```bash
+cd mcp-chatbot
+docker-compose up --build
+# Access: http://localhost:8501 or https://localhost:8502 (SSL)
+```
 
-### **🐳 Infrastructure & Deployment**
+**Components**:
+- **Authentication System**: Secure login with bcrypt hashing
+- **Multi-Database Operations**: Neo4j graph queries, MSSQL operations, HubSpot CRM
+- **Cross-Platform Analytics**: Compare and analyze data across all systems
+- **Real-time Communication**: Server-Sent Events for MCP protocol
+- **SSL/HTTPS Support**: Secure connections with automatic certificate generation
 
-#### **[Docker](https://www.docker.com/)** - Containerization Platform
-- **Purpose**: Consistent deployment across environments
-- **Features**: Multi-container orchestration, health checks, volume mounting
+**Database Support**:
+- **Neo4j**: Schema discovery, Cypher queries, relationship mapping
+- **MSSQL Server**: Table operations, SQL execution, CRUD operations
+- **HubSpot CRM**: Contacts, companies, deals, tickets, workflows
 
-#### **[Docker Compose](https://docs.docker.com/compose/)** - Multi-Container Orchestration
-- **Purpose**: Coordinated deployment of multiple services
-- **Features**: Service scaling, configuration management, logging
+---
 
-### **🔒 Security Technologies**
+## 🔬 Research & Development Phases
 
-#### **[bcrypt](https://github.com/pyca/bcrypt/)** - Password Hashing
-- **Purpose**: Secure password storage and validation
-- **Features**: Adaptive hashing, configurable cost, timing attack resistance
+### 📈 phase1 - Conference Attendee Clustering
+**Machine learning system for clustering conference attendees based on behavior patterns**
 
-#### **[OpenSSL](https://www.openssl.org/)** - SSL/TLS Encryption
-- **Purpose**: HTTPS support and certificate generation
-- **Features**: Self-signed certificates, key generation, encryption
+**Purpose**: Identify six main behavioral clusters using various embedding models (Mistral, LLaMA, Nomic) and classification techniques.
 
-## ⚡ Quick Start
+**Behavioral Clusters**:
+1. **Networking** - Connection-focused attendees
+2. **Learning** - Educational content seekers
+3. **Searching** - Option explorers
+4. **Sourcing: Early** - Early-stage procurement
+5. **Sourcing: In Process** - Mid-stage sourcing
+6. **Sourcing: Deciding** - Late-stage decision making
+
+**Technical Implementation**:
+- Custom BadgeNet neural network (4-layer architecture)
+- Multiple embedding models comparison
+- Focal loss for class imbalance handling
+- Cosine similarity cluster assignment
+
+---
+
+### 🎯 phase2 - Event Visitor Classification System
+**Advanced visitor classification using multiple LLM models**
+
+**Purpose**: Categorize event visitors into five purchasing intention categories using LLama, Phi3, and DeepSeek models.
+
+**Classification Categories**:
+1. **Networking** - Professional relationship building
+2. **Learning** - Educational motivation
+3. **Searching** - Product/vendor exploration
+4. **Early Purchasing Intention** - Active sourcing
+5. **High Purchase Intention** - Final purchasing stages
+
+**Data Flow**:
+- Registration data processing from multiple events
+- Demographic data integration with questionnaire responses
+- Profile generation combining all data sources
+- Multi-model classification with confidence scoring
+
+---
+
+### ⚡ inference - Multi-Model Inference System
+**High-performance LLM inference implementations with focus on profile classification**
+
+**Purpose**: Various implementations for running large language model inference with support for multiple backends including vLLM, Ollama, OpenAI, Azure OpenAI, and Google Gemini.
+
+**Key Components**:
+- **vLLM Framework**: High-performance serving with Paged Attention
+- **Async Processing**: Multiple concurrent inference implementations
+- **Cost Tracking**: Token usage monitoring and optimization
+- **Load Balancing**: Multi-server deployment support
+
+**Supported Models**:
+- Llama 3.1 (8B, various quantizations)
+- GPT-4o-mini (OpenAI/Azure)
+- Gemini 2.0 Flash Lite
+- Custom model deployments
+
+---
+
+## 🚀 Quick Start Guide
 
 ### Prerequisites
+- Python 3.11+
 - Docker & Docker Compose
-- Google Custom Search API key & Search Engine ID
-- Perplexity API key
-- OpenAI API key or Azure OpenAI configuration
+- Neo4j Database (with APOC plugin)
+- MSSQL Server with ODBC Driver 18
+- API Keys (OpenAI, Azure OpenAI, HubSpot, etc.)
 
-### 1. Environment Setup
+### Environment Setup
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd Strategic_AI_CSM_Applications
+```
 
-Create a `.env` file in the project root:
+2. Install common dependencies:
+```bash
+pip install -r requirements.txt
+```
 
+3. Set up environment variables (`.env` file):
 ```env
-# AI Provider Configuration (choose one)
-OPENAI_API_KEY=your_openai_api_key_here
-
-# OR Azure OpenAI Configuration
+# AI Provider Configuration
+OPENAI_API_KEY=your_openai_api_key
 AZURE_API_KEY=your_azure_api_key
-AZURE_ENDPOINT=https://your-endpoint.openai.azure.com/
+AZURE_ENDPOINT=your_azure_endpoint
 AZURE_DEPLOYMENT=your_deployment_name
-AZURE_API_VERSION=2023-12-01-preview
 
-# Google Search Configuration
-GOOGLE_API_KEY=your_google_api_key
-GOOGLE_SEARCH_ENGINE_ID=your_custom_search_engine_id
+# Neo4j Configuration
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your_password
 
-# Perplexity Configuration
-PERPLEXITY_API_KEY=your_perplexity_api_key
-PERPLEXITY_MODEL=sonar
+# MSSQL Configuration
+MSSQL_HOST=your_sql_server_host
+MSSQL_USER=your_username
+MSSQL_PASSWORD=your_password
+MSSQL_DATABASE=your_database
+MSSQL_DRIVER=ODBC Driver 18 for SQL Server
+
+# HubSpot Configuration
+PRIVATE_APP_ACCESS_TOKEN=your_hubspot_token
 
 # SSL Configuration (Optional)
 SSL_ENABLED=true
 ```
 
-### 2. API Setup
+### Running Individual Applications
 
-#### Google Custom Search Setup
-1. **Get API Key**: Go to [Google Cloud Console](https://console.cloud.google.com/), enable Custom Search API, create credentials
-2. **Create Custom Search Engine**: Go to [Google Custom Search](https://cse.google.com/cse/), create new search engine, get Search Engine ID
-
-#### Perplexity API Setup
-1. **Get API Key**: Sign up at [Perplexity AI](https://perplexity.ai) and get your API key
-2. **Choose Model**: Select from available models (sonar, sonar-pro, sonar-reasoning, etc.)
-
-### 3. User Authentication Setup
-
-Generate user credentials for the application:
-
+**PA - Data Processing Pipeline**:
 ```bash
-cd client
-python simple_generate_password.py
+cd PA/app
+python main.py
 ```
 
-This creates `keys/config.yaml` with default users. You can modify user credentials as needed.
-
-### 4. SSL Certificate Setup (Optional)
-
-For HTTPS support, certificates will be generated automatically when `SSL_ENABLED=true`.
-
-### 5. Launch the Platform
-
+**CSM LLM Application**:
 ```bash
-# Build and start all services
+cd app
+docker-compose up -d
+streamlit run main.py
+```
+
+**MCP Multi-Database Platform**:
+```bash
+cd mcp-chatbot
 docker-compose up --build
-
-# Or start individual services
-docker-compose up mcpserver1    # Perplexity MCP Server (with caching)
-docker-compose up mcpserver2    # Google Search MCP Server (with caching)
-docker-compose up hostclient    # Streamlit Client (with embedded stdio MCP)
+# Access: http://localhost:8501 or https://localhost:8502
 ```
-
-### 6. Access the Application
-
-#### HTTPS Mode (Recommended)
-- **Main Interface**: https://localhost:8503
-- **Security**: Self-signed certificate (accept browser warning)
-
-#### HTTP Mode (Default)
-- **Main Interface**: http://localhost:8501
-- **Alternative**: http://127.0.0.1:8501
-
-#### Health Checks & Monitoring
-- **Google Search Server**: http://localhost:8002/health
-- **Perplexity Server**: http://localhost:8001/health
-- **Detailed Google Search Stats**: http://localhost:8002/health/detailed
-- **Clear Google Search Cache**: http://localhost:8002/cache/clear
-
-#### Authentication
-Use the credentials generated in step 3 (default: admin/very_Secure_p@ssword_123!)
-
-## 🎯 Key Features
-
-### **Intelligent Caching System** ⭐ NEW
-- **Google Search Cache**: 30-minute TTL for search results, 2-hour TTL for webpage content
-- **Perplexity Cache**: 30-minute TTL for AI responses
-- **Cache Management**: Built-in tools for cache clearing and statistics
-- **Performance**: Significant reduction in API usage and improved response times
-- **Automatic Cleanup**: Expired entries cleaned automatically
-
-### **Dual Search Engine Integration**
-- **Google Search Tools**: Comprehensive web search and content extraction with caching
-- **Perplexity AI Tools**: AI-powered search with intelligent analysis and caching
-- **Multi-provider AI support** (OpenAI, Azure OpenAI with enhanced configuration)
-- **Intelligent tool selection** based on query type and requirements
-
-### **Advanced Search Capabilities**
-
-#### **Google Search Operations (4 Tools)** - Enhanced with Caching
-- **google-search**: Google Custom Search API integration with 30-minute caching
-- **read-webpage**: Clean webpage content extraction with 2-hour caching
-- **clear-cache**: Cache management tool for clearing search and webpage caches
-- **cache-stats**: Monitoring tool for cache performance and statistics
-
-#### **Perplexity AI Operations (5 Tools)** - Enhanced with Caching
-- **perplexity_search_web**: Standard AI-powered web search with 30-minute caching
-- **perplexity_advanced_search**: Advanced search with custom model parameters and caching
-- **search_show_categories**: Access to comprehensive CSV-based category taxonomy
-- **clear_api_cache**: Cache management for Perplexity API responses
-- **get_cache_stats**: Cache statistics and performance monitoring
-
-#### **Company Tagging Operations (Embedded stdio MCP Server)**
-- **search_show_categories**: Specialized stdio-based MCP server for trade show exhibitor analysis
-- **Taxonomy Management**: Access to structured industry/product categories for 5 major trade shows
-- **CSV Data Access**: Real-time access to categories data with filtering and search capabilities
-- **Integrated Workflow**: Seamless company analysis using both Google Search and Perplexity tools
-
-### **Security & Authentication**
-- **User Authentication System**: Secure login with bcrypt password hashing
-- **Session Management**: Persistent user sessions with configurable expiry (30 days default)
-- **SSL/HTTPS Support**: Optional encrypted connections with self-signed certificates on port 8503
-- **Role-Based Access**: Pre-authorized email domains and user management
-
-### **Technical Excellence**
-- **Docker Containerization**: Easy deployment and scaling with 3 services
-- **SSL/HTTPS Support**: Secure connections with automatic certificate generation
-- **Real-time Communication**: Server-Sent Events (SSE) for external MCP servers
-- **Stdio Integration**: Embedded Company Tagging MCP server for specialized workflows
-- **Intelligent Caching**: Multi-layered caching system for optimal performance
-- **Health Monitoring**: Built-in health checks and cache monitoring for all services
-
-## 📚 Available Tools & Capabilities
-
-### **Total Tools Available: 10 Tools**
-
-#### **Google Search MCP Server (4 Tools)** - With Intelligent Caching
-1. **google-search**
-   - Perform Google searches with 1-10 configurable results
-   - **Caching**: 30-minute TTL for identical search queries
-   - Returns titles, links, snippets, and total result counts
-   - Cache hit/miss information included in responses
-
-2. **read-webpage**
-   - Extract clean content from any accessible webpage
-   - **Caching**: 2-hour TTL for webpage content with URL normalization
-   - Automatic HTML parsing and cleanup (removes scripts, ads, navigation)
-   - Content truncation handling for large pages
-
-3. **clear-cache** ⭐ NEW
-   - Clear cached search results and webpage content
-   - Supports selective clearing (search, webpage, or all)
-   - Returns statistics on cleared entries
-
-4. **cache-stats** ⭐ NEW
-   - Monitor cache performance and efficiency
-   - Shows cache hit rates, memory usage, and TTL information
-   - Provides recommendations for cache management
-
-#### **Perplexity Search MCP Server (5 Tools)** - With Response Caching
-1. **perplexity_search_web**
-   - Standard AI-powered web search with recency filtering
-   - **Caching**: 30-minute TTL for API responses
-   - Returns AI-synthesized responses with automatic citations
-
-2. **perplexity_advanced_search**
-   - Advanced search with custom parameters
-   - **Caching**: Parameter-specific caching with TTL
-   - Model selection, temperature control (0.0-1.0), max tokens (1-2048)
-
-3. **search_show_categories**
-   - Search and filter CSV-based category taxonomy
-   - Filter by show (CAI, DOL, CCSE, BDAIW, DCW), industry, or product
-   - **Local Data**: No external API calls, instant responses
-
-4. **clear_api_cache** ⭐ NEW
-   - Clear Perplexity API response cache
-   - Returns cache statistics and cleared entry count
-   - Useful for forcing fresh API responses
-
-5. **get_cache_stats** ⭐ NEW
-   - Get detailed Perplexity API cache statistics
-   - Shows cache efficiency and performance metrics
-   - Includes cache hit rates and TTL information
-
-#### **Company Tagging MCP Server (1 Tool - Embedded stdio)**
-1. **search_show_categories** (Additional Instance)
-   - Specialized company tagging and categorization workflow
-   - Access to trade show taxonomy with industry/product pairs
-   - Integrated with Google Search and Perplexity for company research
-
-### **Available Resources: 7+ Resources**
-
-#### **CSV Category Resources**
-- **categories://all**: Complete CSV data with all show categories
-- **categories://shows**: Categories organized by show with statistics
-- **categories://shows/{show_name}**: Categories for specific shows
-- **categories://industries**: Categories organized by industry
-- **categories://industries/{industry_name}**: Industry-specific categories
-- **categories://search/{query}**: Search across all category data
-
-### **Performance Optimization Features** ⭐ NEW
-
-#### **Google Search MCP Server Caching**
-- **Search Results**: 30-minute TTL with MD5 key generation
-- **Webpage Content**: 2-hour TTL with URL normalization and tracking parameter removal
-- **LRU Eviction**: Maximum 1000 cached pages with oldest-first eviction
-- **Automatic Cleanup**: Expired entries cleaned every 30 minutes (webpage) and 10 minutes (search)
-- **Cache Statistics**: Real-time monitoring of cache efficiency and memory usage
-
-#### **Perplexity MCP Server Caching**
-- **API Responses**: 30-minute TTL with parameter-specific caching
-- **Intelligent Hashing**: Cache keys based on query and all parameters (recency, model, temperature, etc.)
-- **Health Check Optimization**: 5-minute TTL for health checks to avoid unnecessary API calls
-- **Cache Management**: Tools for clearing cache and monitoring performance
-
-#### **Benefits of Caching System**
-- **Reduced API Costs**: Significant reduction in Google Custom Search and Perplexity API calls
-- **Improved Response Times**: Cache hits provide instant responses
-- **Better Reliability**: Cached results available even during API outages
-- **Resource Efficiency**: Lower server load and bandwidth usage
-- **User Experience**: Faster search results and content loading
-
-## 📝 Usage Examples
-
-### **Authentication Workflow**
-```
-1. Navigate to https://localhost:8503 (SSL) or http://localhost:8501 (HTTP)
-2. Use the sidebar authentication panel
-3. Login with generated credentials
-4. Access the full application features
-```
-
-### **Search Workflows with Caching**
-
-#### **Quick Facts and Current Information (Cached Perplexity)**
-```
-"What are the latest developments in artificial intelligence?"
-"Find recent news about climate change"
-"What's the current status of renewable energy adoption?"
-```
-*Uses Perplexity tools with 30-minute caching for AI-synthesized responses*
-
-#### **Comprehensive Research (Cached Google Search)**
-```
-"Research the impact of AI on healthcare industry"
-"Find detailed information about sustainable farming practices"
-"Analyze market trends in electric vehicles"
-```
-*Uses Google Search with 30-minute search caching and 2-hour content caching*
-
-#### **Cache Management Examples**
-```
-# Clear all caches
-Use the clear-cache tool: {"cacheType": "all"}
-
-# Monitor cache performance
-Use the cache-stats tool: {"detailed": true}
-
-# Clear only search cache
-Use the clear-cache tool: {"cacheType": "search"}
-
-# Get Perplexity cache statistics
-Use the get_cache_stats tool from Perplexity server
-```
-
-### **Performance Monitoring**
-
-#### **Health Check Monitoring**
-- **Google Search**: `curl http://localhost:8002/health/detailed`
-- **Perplexity**: `curl http://localhost:8001/health`
-- **Cache Clearing**: `curl http://localhost:8002/cache/clear`
-
-#### **Cache Performance Indicators**
-- **Cache Hit Rate**: Percentage of requests served from cache
-- **API Calls Avoided**: Number of external API calls prevented by caching
-- **Memory Usage**: Estimated cache memory consumption
-- **TTL Effectiveness**: How well cache TTL settings work for your usage patterns
-
-## 🔧 Component Documentation
-
-### [🖥️ Streamlit Client Documentation](./client/Readme.md)
-- Authentication system setup and configuration
-- SSL/HTTPS configuration and certificate management
-- AI provider setup and management (OpenAI, Azure OpenAI, Enhanced Configuration)
-- Tool execution monitoring and conversation management
-- Company tagging workflow integration
-
-### [🔍 Google Search MCP Server Documentation](./servers/server2/readme.md)
-- Google Custom Search API integration with intelligent caching
-- Web search and content extraction tools (4 tools including cache management)
-- Performance optimization and cache monitoring
-- SSE transport implementation with health checks
-
-### [🔮 Perplexity MCP Server Documentation](./servers/server1/Readme.md)
-- Perplexity AI API integration with response caching
-- AI-powered search with multiple models (5 tools including cache management)
-- Advanced search parameters and filtering
-- CSV category data management and access
-
-## 🛠️ Development & Customization
-
-### **Cache Configuration**
-
-#### **Google Search Server Caching**
-```javascript
-// In servers/server2/tools/searchTool.js
-const searchCache = new SearchCache(30); // 30 minutes TTL
-
-// In servers/server2/tools/readWebpageTool.js
-const webpageCache = new WebpageCacheClass(2); // 2 hours TTL
-```
-
-#### **Perplexity Server Caching**
-```python
-# In servers/server1/perplexity_sse_server.py
-api_cache = APICache(ttl_seconds=1800)  # 30 minutes cache
-health_check_cache = {"ttl": 300}  # 5 minutes health check cache
-```
-
-### **Cache Performance Tuning**
-- **Search Cache TTL**: Adjust based on content freshness requirements
-- **Webpage Cache TTL**: Balance between content freshness and server load
-- **Max Cache Size**: Configure based on available memory
-- **Cleanup Intervals**: Optimize based on usage patterns
-
-## 🔒 Security & Best Practices
-
-### **API Security**
-- Use secure API keys with proper scoping
-- Implement rate limiting for search requests (automatic with caching)
-- Enable SSL/TLS for all communications
-- Regularly rotate API keys and credentials
-
-### **Cache Security**
-- Cache keys use MD5 hashing for security
-- URL normalization removes tracking parameters
-- No sensitive data stored in cache
-- Automatic cleanup of expired entries
-
-### **Performance Monitoring**
-- Monitor cache hit rates to optimize TTL settings
-- Track API usage reduction through caching
-- Monitor memory usage for cache sizing
-- Use health check endpoints for system monitoring
-
-## 🐛 Troubleshooting
-
-### **Cache-Related Issues**
-
-#### **Cache Not Working**
-```bash
-# Check cache statistics
-curl http://localhost:8002/health/detailed
-
-# Clear cache if corrupted
-curl http://localhost:8002/cache/clear
-
-# Check server logs for cache errors
-docker-compose logs mcpserver2 | grep cache
-```
-
-#### **High Memory Usage**
-```bash
-# Check cache sizes
-curl http://localhost:8002/health/detailed
-curl http://localhost:8001/health
-
-# Clear large caches
-Use clear-cache tool with {"cacheType": "webpage"}
-Use clear_api_cache tool for Perplexity
-```
-
-#### **Cache Performance Issues**
-- **Low Hit Rate**: Consider increasing TTL values
-- **High Memory Usage**: Reduce cache sizes or TTL values
-- **Slow Responses**: Check if cache cleanup intervals are appropriate
-
-### **API Issues with Caching**
-
-#### **Stale Data in Cache**
-```bash
-# Force fresh data
-Use tools with skipCache parameter where available
-Clear specific cache type
-Reduce TTL for more frequent updates
-```
-
-#### **API Rate Limiting**
-- **Caching Helps**: Automatically reduces API calls
-- **Monitor Usage**: Use cache statistics to track API call reduction
-- **Optimize TTL**: Balance freshness with API usage
-
-## 📈 Performance Metrics
-
-### **Caching Performance** ⭐ NEW
-- **Google Search Cache Hit Rate**: Typically 40-60% for repeated queries
-- **Webpage Content Cache Hit Rate**: Typically 60-80% for popular pages
-- **Perplexity Cache Hit Rate**: Typically 30-50% for similar queries
-- **API Call Reduction**: 40-70% reduction in external API calls
-- **Response Time Improvement**: 80-95% faster for cached responses
-
-### **Current Performance Characteristics**
-- **Cached Search Response Time**: ~50-100ms (vs 1-3s fresh)
-- **Cached Content Extraction**: ~100-200ms (vs 2-8s fresh)
-- **Cached Perplexity Response**: ~100-300ms (vs 2-5s fresh)
-- **Authentication**: <1s login/logout operations
-- **Tool Discovery**: <2s for MCP server connection
-
-### **Scalability Features**
-- Docker containerization for horizontal scaling
-- Intelligent caching for reduced external dependencies
-- Async operations for concurrent request handling
-- Connection pooling for database and API connections
-
-## 🤝 Contributing
-
-### **Development Workflow**
-1. Fork the repository
-2. Create feature branches for each component
-3. Test authentication and security features
-4. Test both Google and Perplexity search functionality with caching
-5. Verify company tagging and CSV data access
-6. Test cache management and performance monitoring
-7. Submit pull requests with comprehensive testing
-
-### **Cache Testing**
-- Test cache hit/miss scenarios for all tools
-- Verify cache TTL behavior and cleanup
-- Test cache management tools (clear-cache, cache-stats)
-- Monitor cache performance under load
-- Test cache behavior during API outages
 
 ---
 
-**Version**: 2.1.0  
-**Last Updated**: January 2025  
-**Compatibility**: Docker 20+, Python 3.11+, Node.js 18+, Google Custom Search API v1, Perplexity API v1  
-**Security**: Streamlit Authenticator 0.3.2, bcrypt password hashing, SSL/HTTPS support  
-**Total Tools**: 10 tools (4 Google Search with caching, 5 Perplexity AI with caching, 1 Company Tagging)  
-**Servers**: 3 services (Client with embedded stdio MCP, Google Search MCP with caching, Perplexity MCP with caching)  
-**Architecture**: SSE + stdio MCP transport with comprehensive authentication and intelligent caching  
-**Performance**: Intelligent caching system with 40-70% API usage reduction and 80-95% response time improvement for cached content
+## 🔧 Configuration & Customization
+
+### Data Processing (PA)
+- Configure input/output paths in `PA/app/config/config.yaml`
+- Set up Neo4j credentials and connection parameters
+- Customize business rules for recommendations
+
+### Classification Systems (app/phase1/phase2)
+- Model selection and parameters in configuration files
+- Prompt templates for different classification approaches
+- Batch processing settings for large datasets
+
+### Multi-Database Integration (mcp-chatbot)
+- User authentication in `client/keys/config.yaml`
+- MCP server endpoints in `servers_config.json`
+- Database connections for Neo4j, MSSQL, and HubSpot
+- SSL certificate generation and management
+
+---
+
+## 📊 Data Flow & Integration
+
+### Typical Workflow
+1. **Data Ingestion**: Events registration and demographic data
+2. **Processing**: PA pipeline for data cleaning and enrichment
+3. **Classification**: AI-powered visitor categorization
+4. **Storage**: Neo4j graph database with relationships
+5. **Analytics**: Multi-database integration and recommendation generation
+6. **CRM Integration**: HubSpot synchronization and workflow automation
+7. **Deployment**: Real-time inference and monitoring
+
+### Integration Points
+- **Neo4j ↔ HubSpot**: Sync visitor data between graph DB and CRM
+- **MSSQL ↔ Analytics**: Structured data analysis and reporting
+- **Classification ↔ Recommendations**: Use categories for personalized suggestions
+- **Cross-Database Queries**: Unified analytics across all data sources
+- **Inference ↔ Applications**: Real-time model serving for web interfaces
+
+---
+
+## 🔒 Security & Best Practices
+
+### Authentication & Authorization
+- **User Management**: Secure authentication with bcrypt hashing
+- **API Security**: Environment-based credential management
+- **Session Control**: Configurable session timeouts and policies
+- **SSL/HTTPS Support**: Encrypted connections with certificate management
+
+### Data Protection
+- **Input Validation**: Schema validation across all components
+- **Error Handling**: Sanitized error messages and comprehensive logging
+- **Privacy Compliance**: Data anonymization and protection measures
+- **Cross-Database Security**: Separate credentials for each system
+
+### Deployment Security
+- **Containerization**: Isolated service deployment
+- **Network Security**: Configurable port mapping and CORS
+- **Monitoring**: Health checks and performance tracking
+- **Database Security**: Encrypted connections and proper access controls
+
+---
+
+## 📈 Performance & Scalability
+
+### Optimization Strategies
+- **Async Processing**: Concurrent inference for improved throughput
+- **Batch Operations**: Efficient handling of large datasets
+- **Caching**: Strategic caching of embeddings and classifications
+- **Load Balancing**: Multi-server deployment support
+- **Connection Pooling**: Efficient database connection management
+
+### Monitoring & Debugging
+- **Health Checks**: Service availability monitoring across all components
+- **Logging**: Comprehensive logging across all applications
+- **Metrics**: Performance tracking and resource usage
+- **Error Tracking**: Detailed error reporting and debugging tools
+- **Cross-Database Monitoring**: Unified monitoring across all data sources
+
+---
+
+## 🤝 Contributing
+
+### Development Guidelines
+1. **Component-Specific**: Follow individual component development guides
+2. **Code Standards**: PEP 8 for Python, ES6+ for JavaScript
+3. **Documentation**: Comprehensive README and inline comments
+4. **Testing**: Unit tests and integration testing for all components
+5. **Security**: Follow authentication and security best practices
+6. **Cross-Platform Testing**: Validate multi-database integrations
+
+### Adding New Features
+- **New Models**: Extend inference system with additional LLM models
+- **Custom Tools**: Add new integrations via MCP protocol
+- **Data Sources**: Integrate additional event or CRM data sources
+- **Analytics**: Extend reporting and visualization capabilities
+- **Database Support**: Add support for additional database systems
+
+---
+
+## 📚 Documentation Links
+
+### Component-Specific Documentation
+- **[PA - Data Processing Pipeline](./PA/readme.md)**: Comprehensive data processing and Neo4j integration
+- **[CSM LLM Application](./app/readme.md)**: HPI classification system with multi-model support
+- **[MCP Multi-Database Platform](./mcp-chatbot/Readme.md)**: AI-powered multi-database and CRM integration
+  - **[Streamlit Client](./mcp-chatbot/client/Readme.md)**: Authentication, SSL, and UI documentation
+  - **[Neo4j MCP Server](./mcp-chatbot/servers/server4/Readme.md)**: Graph database operations
+  - **[MSSQL MCP Server](./mcp-chatbot/servers/server3/readme.md)**: SQL Server database integration
+  - **[HubSpot MCP Server](./mcp-chatbot/servers/server5/Readme.md)**: Complete CRM integration
+- **[Phase 1 - Clustering](./phase1/readme.md)**: Conference attendee clustering and classification
+- **[Phase 2 - Classification](./phase2/readme.md)**: Event visitor classification system
+- **[Inference System](./inference/readme.md)**: Multi-model inference implementations
+
+### External Resources
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Neo4j Documentation](https://neo4j.com/docs/)
+- [HubSpot API Documentation](https://developers.hubspot.com/docs/api/overview)
+- [MSSQL Server Documentation](https://docs.microsoft.com/en-us/sql/)
+- [Streamlit Documentation](https://docs.streamlit.io/)
+- [LangChain Documentation](https://python.langchain.com/)
+
+---
+
+## 🐛 Troubleshooting
+
+### Common Issues
+**Environment Setup**:
+- Verify all required API keys are configured
+- Check Docker service availability
+- Ensure database connectivity (Neo4j, MSSQL)
+- Verify ODBC driver installation
+
+**Model Inference**:
+- Verify model availability and compatibility
+- Check GPU/CPU resource allocation
+- Monitor token usage and rate limits
+
+**Data Processing**:
+- Validate input data formats and schemas
+- Check file permissions and access rights
+- Verify database schemas and constraints
+
+**Multi-Database Issues**:
+- Check all database connections independently
+- Verify authentication credentials for each system
+- Monitor cross-database query performance
+- Validate SSL/TLS configurations
+
+### Getting Help
+- Review component-specific documentation
+- Check service logs: `docker-compose logs <service>`
+- Use health check endpoints for diagnostics
+- Verify authentication and permissions
+- Test database connections individually
+
+---
+
+## 📄 License & Version Information
+
+**Version**: 3.0.0  
+**Last Updated**: June 2025  
+**Compatibility**: 
+- Python 3.11+
+- Docker 20+
+- Neo4j 5.0+
+- MSSQL Server 2019+
+- Node.js 18+
+
+**Major Updates in v3.0.0**:
+- Added MSSQL MCP Server for SQL database integration
+- Enhanced multi-database analytics and cross-platform queries
+- Improved authentication and SSL/HTTPS support
+- Expanded CRM integration with 25+ HubSpot tools
+- Performance optimizations and monitoring enhancements
+
+**Dependencies**: See individual component requirements and `requirements.txt`
+
+---
+
+**For detailed usage instructions and advanced configuration, please refer to the individual component documentation linked above.**
