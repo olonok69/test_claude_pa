@@ -1,5 +1,3 @@
-
-
 services:
   hostclient:
     build: ./client
@@ -17,11 +15,16 @@ services:
       - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
       - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
       - SSL_ENABLED=${SSL_ENABLED}
-
     depends_on:
       - mcpserver1
       - mcpserver2
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost:8503/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   mcpserver1:
     build: ./servers/server1
@@ -30,26 +33,21 @@ services:
     environment:
       - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
       - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
-      # Cache configuration (optional overrides)
-      - CACHE_TTL_SECONDS=1800  # 30 minutes
-      - HEALTH_CHECK_TTL_SECONDS=300  # 5 minutes
-
+      - CACHE_TTL_SECONDS=1800
+      - HEALTH_CHECK_TTL_SECONDS=300
     restart: unless-stopped
-    # Memory limits to prevent excessive cache usage
     deploy:
       resources:
         limits:
           memory: 512M
         reservations:
           memory: 256M
-    # IMPORTANT: Health check that does NOT call external APIs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    # Note: The /health endpoint has been optimized to NOT make Perplexity API calls
 
   mcpserver2:
     build: ./servers/server2
@@ -60,54 +58,26 @@ services:
       - GOOGLE_SEARCH_ENGINE_ID=${GOOGLE_SEARCH_ENGINE_ID}
       - PORT=8002
       - HOST=0.0.0.0
-      # Cache configuration (optional overrides)
-      - SEARCH_CACHE_TTL_MINUTES=30    # 30 minutes
-      - WEBPAGE_CACHE_TTL_HOURS=2      # 2 hours
-      - WEBPAGE_CACHE_MAX_SIZE=1000    # 1000 entries max
-      - HEALTH_CHECK_TTL_MINUTES=5     # 5 minutes cache
-
+      - SEARCH_CACHE_TTL_MINUTES=30
+      - WEBPAGE_CACHE_TTL_HOURS=2
+      - WEBPAGE_CACHE_MAX_SIZE=1000
+      - HEALTH_CHECK_TTL_MINUTES=5
     restart: unless-stopped
-    # Memory limits to prevent excessive cache usage
     deploy:
       resources:
         limits:
           memory: 512M
         reservations:
           memory: 256M
-    # IMPORTANT: Health check that does NOT call external APIs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://0.0.0.0:8002/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    # Note: The /health endpoint has been optimized to NOT make Google API calls
 
 # Custom network for better container communication
 networks:
   default:
     name: mcp_network
     driver: bridge
-
-# Key Points About This Configuration:
-# 
-# 1. ✅ HEALTH CHECKS ARE API-SAFE
-#    - Health check endpoints have been modified to NOT call external APIs
-#    - They only check internal server status and configuration
-#    - No Perplexity or Google API calls during health monitoring
-#
-# 2. ✅ CACHING OPTIMIZATION
-#    - API responses cached for 30 minutes (search) / 2 hours (content)
-#    - Health checks cached for 5 minutes
-#    - Memory limits prevent excessive cache growth
-#
-# 3. ✅ MONITORING FRIENDLY
-#    - Health checks can run every 30 seconds without API costs
-#    - Docker health status based on server responsiveness only
-#    - Detailed health info available at /health endpoint (cached)
-#
-# 4. ✅ PRODUCTION READY
-#    - Restart policies for resilience
-#    - Memory limits for stability
-#    - Network isolation
-#    - Proper dependency management
