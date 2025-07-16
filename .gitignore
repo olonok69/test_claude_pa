@@ -1,17 +1,98 @@
+# Environment variables
 .env
-csm_data/
-csv/
-output/
-logs/
+.env.local
+.env.prod
+
+# Authentication and security files
+keys/
+*.yaml
+*.yml
+config.yaml
+config.yml
+
+# SSL certificates and private keys
+ssl/
+*.pem
+*.key
+*.crt
+*.csr
+
+# Python
 __pycache__/
-.ipynb_checkpoints/
-classification/
-docker/ollama/
-docker/ollama/.ipynb_checkpoints/
-app/keys
-app/login
-PA/app/data
-PA/app/config/config.yaml
-PA/app/keys/.env
-mcp-chatbot/servers/server5/node_modules/
-mcp-chatbot/client/keys/config.yaml
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Node modules (if any)
+node_modules/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints

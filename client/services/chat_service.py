@@ -1,5 +1,3 @@
-# Updated services/chat_service.py
-
 import streamlit as st
 from config import SERVER_CONFIG
 import uuid
@@ -16,8 +14,6 @@ def init_session():
         "client": None,
         "agent": None,
         "tools": [],
-        "prompts": [],  # Add prompts support
-        "resources": [],  # Add resources support
         "tool_executions": [],
         "servers": SERVER_CONFIG['mcpServers'],
         "conversation_memory": []  # Add conversation memory tracking

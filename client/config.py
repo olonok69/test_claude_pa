@@ -7,13 +7,13 @@ env = os.getenv
 
 # Model mapping - only OpenAI and Azure OpenAI
 MODEL_OPTIONS = {
-    'Azure OpenAI': 'gpt-4.1',  # Using the deployment from .env
     'OpenAI': 'gpt-4o',
+    'Azure OpenAI': 'o3-mini',  # Using the deployment from .env
 }
 
 # Streamlit defaults
 DEFAULT_MAX_TOKENS = 4096
-DEFAULT_TEMPERATURE = 0.2
+DEFAULT_TEMPERATURE = 1.0
 
 # UI Configuration
 TAB_CONFIG = {
@@ -44,28 +44,26 @@ else:
     # Default server configuration if file doesn't exist
     SERVER_CONFIG = {
         "mcpServers": {
-            "Google Search": {
+            "Neo4j": {
                 "transport": "sse",
-                "url": "http://mcpserver2:8002/sse",
+                "url": "http://mcpserver4:8003/sse",
                 "timeout": 600,
                 "headers": None,
                 "sse_read_timeout": 900
             },
-            "Perplexity Search": {
+            "HubSpot": {
                 "transport": "sse",
-                "url": "http://mcpserver1:8001/sse", 
+                "url": "http://mcpserver5:8004/sse", 
                 "timeout": 600,
                 "headers": None,
                 "sse_read_timeout": 900
             },
-            "Company Tagging": {
-                "transport": "stdio",
-                "command": "python",
-                "args": ["-m", "mcp_servers.company_tagging.server"],
-                "env": {
-                    "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}",
-                    "PERPLEXITY_MODEL": "${PERPLEXITY_MODEL}"
-                }
+            "MSSQL": {
+                "transport": "sse",
+                "url": "http://mcpserver3:8008/sse",
+                "timeout": 600,
+                "headers": None,
+                "sse_read_timeout": 900
             }
         }
     }

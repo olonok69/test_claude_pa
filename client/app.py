@@ -17,7 +17,7 @@ nest_asyncio.apply()
 page_icon_path = os.path.join('.', 'icons', 'playground.png')
 
 st.set_page_config(
-    page_title="Google Search MCP Client",
+    page_title="CSM MCP Servers",
     page_icon=page_icon_path,
     layout='wide',
     initial_sidebar_state="expanded"
@@ -108,25 +108,16 @@ def handle_authentication():
 
 def show_authentication_required_message():
     """Show a message when user is not authenticated."""
-    st.title("🔍 AI-Powered Search MCP Client")
+    st.title("🔐 Authentication Required")
     
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Add  logo in the welcome message if available
-        csm_logo_path = os.path.join('.', 'icons', 'CSM.png')
-        if os.path.exists(csm_logo_path):
-            # Center the logo
-            col_a, col_b, col_c = st.columns([1, 1, 1])
-            with col_b:
-                st.image(csm_logo_path, width=120)
-            st.markdown("<br>", unsafe_allow_html=True)
-        
         st.markdown("""
-        ### Welcome to AI-Powered Search MCP Client
+        ### Welcome to CSM MCP Servers
         
-        This application provides AI-powered web search and content extraction through 
-        **dual search engine integration** via Model Context Protocol (MCP) servers.
+        This application provides AI-powered interactions with **Neo4j graph databases**, 
+        **HubSpot CRM systems**, and **MSSQL databases** through Model Context Protocol (MCP) servers.
         
         **Please authenticate using the sidebar to access the application.**
         
@@ -135,43 +126,34 @@ def show_authentication_required_message():
         #### 🚀 Features Available After Login:
         
         - **💬 AI Chat Interface**: Interactive conversations with AI agents
-        - **🔍 Google Web Search**: Comprehensive search across the web using Google Custom Search API
-        - **🔮 Perplexity AI Search**: AI-powered search with intelligent analysis and synthesis
-        - **📄 Content Extraction**: Clean webpage content extraction and analysis
-        - **🔧 Tool Management**: Execute specialized search tools from both engines
-        - **📊 Research Workflows**: Combined search and content analysis capabilities
-        - **🌐 Real-time Results**: Current web information and AI-powered insights
+        - **🗄️ Neo4j Database Operations**: Query and manage graph data with Cypher
+        - **🏢 HubSpot CRM Integration**: Access contacts, companies, deals, tickets, and more
+        - **🗃️ MSSQL Database Operations**: Execute SQL queries, explore tables, and manage data
+        - **🔧 Tool Management**: Execute specialized MCP tools across all platforms
+        - **📊 Real-time Analytics**: Monitor and analyze your data across databases
+        - **🔄 Cross-Platform Integration**: Compare and sync data between systems
         
         ---
         
-        #### 🔍 Dual Search Engine Capabilities:
+        #### 🗄️ Database Capabilities:
         
-        **Google Search Tools:**
-        - **google-search**: Perform Google searches with customizable result counts (1-10 results)
-        - **read-webpage**: Extract and clean content from web pages with automatic formatting
-        - **Research workflows**: Multi-step search and analysis processes
-        - **Content filtering**: Clean, readable text extraction from web pages
+        **Neo4j Graph Database:**
+        - Schema discovery and visualization
+        - Complex relationship queries with Cypher
+        - Graph data creation and modification
+        - Performance analytics and insights
         
-        **Perplexity AI Tools:**
-        - **perplexity_search_web**: AI-powered web search with intelligent responses and citations
-        - **perplexity_advanced_search**: Advanced search with custom model parameters and controls
-        - **Recency filtering**: Filter results by time period (day, week, month, year)
-        - **Multiple AI models**: Support for sonar, sonar-pro, sonar-reasoning, and more
+        **HubSpot CRM System:**
+        - Contact and company management
+        - Deal tracking and pipeline analysis
+        - Ticket management and support workflows
+        - Custom properties and associations
         
-        **Search Features:**
-        - Real-time web search using both Google Custom Search API and Perplexity AI
-        - Configurable result counts and search parameters
-        - Content extraction with automatic cleanup (removes scripts, ads, navigation)
-        - AI-powered analysis and synthesis of search results
-        - Support for any publicly accessible web content
-        - Cross-reference multiple sources for comprehensive research
-        
-        **AI-Powered Analysis:**
-        - Natural language queries for web search across both engines
-        - Intelligent content summarization and analysis
-        - Multi-source information synthesis
-        - Context-aware search result interpretation
-        - Smart tool selection based on query type and requirements
+        **MSSQL Database:**
+        - Table exploration and schema analysis
+        - SQL query execution with proper syntax
+        - Sample data retrieval and analysis
+        - Data modification and management operations
         
         ---
         
@@ -183,79 +165,34 @@ def show_authentication_required_message():
         """)
         
         # Add visual elements with updated info
-        st.info("👈 Use the sidebar to authenticate and start using the dual search platform")
+        st.info("👈 Use the sidebar to authenticate and start using the multi-database platform")
         
         # Add quick stats about the platform
         with st.container():
             st.markdown("#### 📈 Platform Overview")
-            col_a, col_b, col_c, col_d = st.columns(4)
+            col_a, col_b, col_c = st.columns(3)
             
             with col_a:
                 st.metric(
-                    label="🔍 Search Tools",
-                    value="4",
-                    help="Google Search and Perplexity AI tools"
+                    label="🗄️ Database Types",
+                    value="3",
+                    help="Neo4j, HubSpot CRM, MSSQL"
                 )
             
             with col_b:
                 st.metric(
-                    label="🌐 Search Engines", 
-                    value="2",
-                    help="Google Custom Search + Perplexity AI"
+                    label="🧰 Tool Categories", 
+                    value="25+",
+                    help="Graph, CRM, SQL operations"
                 )
             
             with col_c:
                 st.metric(
                     label="🔌 MCP Servers",
-                    value="2",
-                    help="Google Search + Perplexity MCP servers"
+                    value="3",
+                    help="Specialized protocol servers"
                 )
-                
-            with col_d:
-                st.metric(
-                    label="🤖 AI Models",
-                    value="6+",
-                    help="Multiple Perplexity models available"
-                )
-        
-        # Add usage examples
-        with st.expander("💡 Example Queries", expanded=False):
-            st.markdown("""
-            **Quick Facts & Current Information (Perplexity AI):**
-            - "What are the latest developments in artificial intelligence?"
-            - "Find recent news about climate change"
-            - "What's the current status of renewable energy adoption?"
-            
-            **Comprehensive Research (Google Search):**
-            - "Search for React documentation and read the official guide"
-            - "Find climate change reports and extract detailed content"
-            - "Search for Python tutorials and read full articles"
-            
-            **Hybrid Research Workflows:**
-            - "Research the impact of AI on healthcare and provide analysis"
-            - "Compare different approaches to renewable energy"
-            - "Find and analyze multiple sources about cryptocurrency trends"
-            
-            **Advanced Parameters:**
-            - "Search for recent AI research with detailed analysis" (uses Perplexity advanced search)
-            - "Find the top 10 results about machine learning" (uses Google search with num=10)
-            - "Search for news from the last week about technology" (uses recency filtering)
-            """)
-        
-        # Add search engine comparison
-        with st.expander("🔍 Search Engine Comparison", expanded=False):
-            st.markdown("""
-            | Feature | Google Search | Perplexity AI |
-            |---------|---------------|---------------|
-            | **Best For** | Comprehensive research, specific URLs | Quick facts, AI analysis |
-            | **Response Type** | Raw search results + content | AI-synthesized responses |
-            | **Content Extraction** | Full webpage content | Analyzed summaries |
-            | **Citations** | URLs from search | URLs with AI context |
-            | **Recency Control** | No | Yes (day/week/month/year) |
-            | **Result Count** | 1-10 configurable | AI-optimized |
-            | **Model Options** | N/A | Multiple (sonar, sonar-pro, etc.) |
-            | **Use Cases** | Research, documentation | Analysis, current events |
-            """)
+
 
 
 def main():
@@ -268,11 +205,6 @@ def main():
         
         # Register shutdown handler
         atexit.register(on_shutdown)
-        
-        # Always show  logo at the top of sidebar first
-        with st.sidebar:
-            from ui_components.sidebar_components import create_sidebar_header_with_icon
-            create_sidebar_header_with_icon()
         
         # Handle authentication
         authentication_status = handle_authentication()
