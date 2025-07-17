@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Company Classification CLI Tool - Enhanced with Server Selection
-Command-line interface for classifying companies with configurable MCP server selection.
+Enhanced Company Classification CLI Tool with FIXED Header Management
+Fixes the duplicate header issue and properly merges batch results.
 """
 
 import argparse
@@ -10,16 +10,19 @@ import csv
 import json
 import os
 import sys
-from pathlib import Path
-from typing import Dict, List, Optional, Set
+import time
+import pickle
 import traceback
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple
+from datetime import datetime
 import re
 
 # Add the client directory to the path so we can import existing modules
 sys.path.insert(0, str(Path(__file__).parent / "client"))
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from client.services.ai_service import create_llm_model
 from client.services.mcp_service import setup_mcp_client, get_tools_from_client, prepare_server_config
 from langgraph.prebuilt import create_react_agent
@@ -28,13 +31,234 @@ from client.config import SERVER_CONFIG, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS
 # Load environment variables
 load_dotenv()
 
-class CompanyClassificationCLI:
-    def __init__(self, config_path: Optional[str] = None, batch_size: int = 10, enabled_servers: Set[str] = None):
-        """Initialize the CLI tool with configuration and server selection."""
-        # Default to CLI-specific config file with localhost URLs
+class ProgressTracker:
+    """Enhanced progress tracker with proper header management."""
+    
+    def __init__(self, output_base: str):
+        self.output_base = output_base
+        self.progress_file = f"{output_base}_progress.pkl"
+        self.temp_results_file = f"{output_base}_temp_results.json"
+        self.error_log_file = f"{output_base}_errors.log"
+        
+        # Progress tracking
+        self.processed_batches = set()
+        self.failed_batches = set()
+        self.all_data_rows = []  # Store only data rows, no headers
+        self.header_row = None   # Store header separately
+        self.total_batches = 0
+        self.start_time = None
+        self.last_save_time = None
+        
+        # Error tracking
+        self.error_count = 0
+        self.consecutive_errors = 0
+        self.max_consecutive_errors = 3
+        
+    def load_progress(self) -> bool:
+        """Load existing progress if available."""
+        if not os.path.exists(self.progress_file):
+            return False
+            
+        try:
+            with open(self.progress_file, 'rb') as f:
+                data = pickle.load(f)
+                
+            self.processed_batches = data.get('processed_batches', set())
+            self.failed_batches = data.get('failed_batches', set())
+            self.all_data_rows = data.get('all_data_rows', [])
+            self.header_row = data.get('header_row', None)
+            self.total_batches = data.get('total_batches', 0)
+            self.start_time = data.get('start_time', None)
+            self.error_count = data.get('error_count', 0)
+            
+            print(f"📥 Loaded progress: {len(self.processed_batches)} batches completed, {len(self.failed_batches)} failed")
+            print(f"📊 Data rows loaded: {len(self.all_data_rows)}")
+            return True
+            
+        except Exception as e:
+            print(f"⚠️  Error loading progress: {e}")
+            return False
+    
+    def save_progress(self):
+        """Save current progress to disk."""
+        try:
+            progress_data = {
+                'processed_batches': self.processed_batches,
+                'failed_batches': self.failed_batches,
+                'all_data_rows': self.all_data_rows,
+                'header_row': self.header_row,
+                'total_batches': self.total_batches,
+                'start_time': self.start_time,
+                'error_count': self.error_count,
+                'last_save_time': datetime.now().isoformat()
+            }
+            
+            # Save progress file
+            with open(self.progress_file, 'wb') as f:
+                pickle.dump(progress_data, f)
+            
+            # Save human-readable results (header + data)
+            if self.header_row and self.all_data_rows:
+                all_results = [self.header_row] + self.all_data_rows
+                with open(self.temp_results_file, 'w', encoding='utf-8') as f:
+                    json.dump(all_results, f, indent=2, ensure_ascii=False)
+            
+            self.last_save_time = time.time()
+            
+        except Exception as e:
+            print(f"⚠️  Error saving progress: {e}")
+    
+    def log_error(self, batch_num: int, error: str, traceback_str: str = ""):
+        """Log an error to the error log file."""
+        try:
+            with open(self.error_log_file, 'a', encoding='utf-8') as f:
+                f.write(f"\n{'='*50}\n")
+                f.write(f"Batch {batch_num} Error - {datetime.now().isoformat()}\n")
+                f.write(f"Error: {error}\n")
+                if traceback_str:
+                    f.write(f"Traceback:\n{traceback_str}\n")
+                f.write(f"{'='*50}\n")
+        except Exception as e:
+            print(f"⚠️  Error writing to error log: {e}")
+    
+    def is_header_row(self, row: List[str]) -> bool:
+        """Check if a row is a header row."""
+        if not row or len(row) == 0:
+            return False
+        
+        # Check for common header indicators
+        first_cell = row[0].lower().strip()
+        header_indicators = [
+            'company name', 'account name', 'trading name', 
+            'tech industry', 'industry', 'product'
+        ]
+        
+        return any(indicator in first_cell for indicator in header_indicators)
+    
+    def is_separator_row(self, row: List[str]) -> bool:
+        """Check if a row is a markdown separator row (contains only dashes)."""
+        if not row:
+            return False
+        
+        return all(cell.strip() == '' or all(c in '-|: ' for c in cell.strip()) for cell in row)
+    
+    def extract_header_and_data(self, parsed_rows: List[List[str]]) -> Tuple[Optional[List[str]], List[List[str]]]:
+        """Extract header and data rows from parsed table."""
+        if not parsed_rows:
+            return None, []
+        
+        header = None
+        data_rows = []
+        
+        for row in parsed_rows:
+            if not row or len(row) == 0:
+                continue
+            
+            # Skip separator rows
+            if self.is_separator_row(row):
+                continue
+            
+            # Identify header row
+            if self.is_header_row(row):
+                if header is None:  # Take the first header we find
+                    header = row
+                # Skip subsequent headers (duplicates)
+                continue
+            
+            # This is a data row
+            if row and any(cell.strip() for cell in row):  # Has some content
+                data_rows.append(row)
+        
+        return header, data_rows
+    
+    def mark_batch_completed(self, batch_num: int, parsed_rows: List[List[str]]):
+        """Mark a batch as completed and save results with proper header handling."""
+        self.processed_batches.add(batch_num)
+        self.failed_batches.discard(batch_num)
+        
+        # Extract header and data rows
+        batch_header, data_rows = self.extract_header_and_data(parsed_rows)
+        
+        # Set header if we don't have one yet
+        if self.header_row is None and batch_header is not None:
+            self.header_row = batch_header
+            print(f"   📋 Header captured: {len(batch_header)} columns")
+        
+        # Add data rows (no headers)
+        if data_rows:
+            self.all_data_rows.extend(data_rows)
+            print(f"   📊 Added {len(data_rows)} data rows (total: {len(self.all_data_rows)})")
+        
+        self.consecutive_errors = 0
+        
+        # Save progress every 10 batches or if significant time has passed
+        if (batch_num % 10 == 0 or 
+            (self.last_save_time is None or time.time() - self.last_save_time > 300)):
+            self.save_progress()
+    
+    def mark_batch_failed(self, batch_num: int, error: str, traceback_str: str = ""):
+        """Mark a batch as failed and log the error."""
+        self.failed_batches.add(batch_num)
+        self.error_count += 1
+        self.consecutive_errors += 1
+        
+        self.log_error(batch_num, error, traceback_str)
+        self.save_progress()
+    
+    def should_stop_due_to_errors(self) -> bool:
+        """Check if we should stop due to too many consecutive errors."""
+        return self.consecutive_errors >= self.max_consecutive_errors
+    
+    def get_remaining_batches(self, total_batches: int) -> List[int]:
+        """Get list of batches that still need to be processed."""
+        return [i for i in range(1, total_batches + 1) 
+                if i not in self.processed_batches]
+    
+    def get_final_results(self) -> List[List[str]]:
+        """Get final results with header + data rows."""
+        if self.header_row is None:
+            return self.all_data_rows
+        
+        return [self.header_row] + self.all_data_rows
+    
+    def get_stats(self) -> Dict:
+        """Get current processing statistics."""
+        return {
+            'total_batches': self.total_batches,
+            'completed_batches': len(self.processed_batches),
+            'failed_batches': len(self.failed_batches),
+            'remaining_batches': self.total_batches - len(self.processed_batches),
+            'error_count': self.error_count,
+            'consecutive_errors': self.consecutive_errors,
+            'success_rate': len(self.processed_batches) / max(1, self.total_batches) * 100,
+            'total_data_rows': len(self.all_data_rows),
+            'has_header': self.header_row is not None
+        }
+    
+    def cleanup_temp_files(self):
+        """Clean up temporary files after successful completion."""
+        try:
+            if os.path.exists(self.progress_file):
+                os.remove(self.progress_file)
+            if os.path.exists(self.temp_results_file):
+                os.remove(self.temp_results_file)
+        except Exception as e:
+            print(f"⚠️  Error cleaning up temp files: {e}")
+
+class RobustCompanyClassificationCLI:
+    """Enhanced CLI with proper header management and deduplication."""
+    
+    def __init__(self, config_path: Optional[str] = None, batch_size: int = 10, 
+                 enabled_servers: Set[str] = None, output_base: str = "results"):
         self.config_path = config_path or "cli_servers_config.json"
         self.batch_size = batch_size
-        self.enabled_servers = enabled_servers or {"google", "perplexity", "company_tagging"}
+        self.enabled_servers = enabled_servers or {"google", "company_tagging"}
+        self.output_base = output_base
+        
+        # Initialize progress tracker
+        self.progress = ProgressTracker(output_base)
+        
+        # MCP components
         self.client = None
         self.agent = None
         self.tools = []
@@ -45,48 +269,73 @@ class CompanyClassificationCLI:
             "company_tagging": []
         }
         
-    def get_server_config(self) -> Dict[str, Dict]:
-        """Get server configuration based on enabled servers."""
-        # Load base configuration
-        if os.path.exists(self.config_path):
-            with open(self.config_path, 'r') as f:
-                server_config = json.load(f)
-            all_servers = server_config.get('mcpServers', {})
-        else:
-            all_servers = SERVER_CONFIG['mcpServers']
+        # Processing state
+        self.companies = []
+        self.retry_delay = 5
+        self.max_retries = 3
         
-        # Filter servers based on enabled_servers
-        filtered_servers = {}
+    def sanitize_json_string(self, text: str) -> str:
+        """Sanitize a string to prevent JSON parsing errors."""
+        if not isinstance(text, str):
+            return str(text)
         
-        # Company Tagging is always included
-        if "Company Tagging" in all_servers:
-            filtered_servers["Company Tagging"] = all_servers["Company Tagging"]
+        # Remove or escape problematic characters
+        text = text.replace('\x00', '')
+        text = text.replace('\x1c', '')
+        text = text.replace('\x1d', '')
+        text = text.replace('\x1e', '')
+        text = text.replace('\x1f', '')
+        text = text.replace('\x17', '')
         
-        # Add Google Search if enabled
-        if "google" in self.enabled_servers and "Google Search" in all_servers:
-            filtered_servers["Google Search"] = all_servers["Google Search"]
+        # Remove other control characters except common ones
+        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', text)
         
-        # Add Perplexity Search if enabled
-        if "perplexity" in self.enabled_servers and "Perplexity Search" in all_servers:
-            filtered_servers["Perplexity Search"] = all_servers["Perplexity Search"]
-        
-        return filtered_servers
+        return text
     
-    def _has_azure_credentials(self) -> bool:
-        """Check if Azure OpenAI credentials are complete."""
-        azure_vars = ["AZURE_API_KEY", "AZURE_ENDPOINT", "AZURE_DEPLOYMENT", "AZURE_API_VERSION"]
-        return all(os.getenv(var) for var in azure_vars)
+    def clean_response_content(self, response_content: str) -> str:
+        """Clean response content to prevent parsing errors."""
+        if not response_content:
+            return ""
+        
+        # Sanitize the content
+        cleaned = self.sanitize_json_string(response_content)
+        
+        # Try to find and extract only the markdown table
+        lines = cleaned.split('\n')
+        table_lines = []
+        in_table = False
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Check if this is a table line
+            if '|' in line and ('Company Name' in line or 'Tech Industry' in line):
+                in_table = True
+                table_lines.append(line)
+            elif in_table and '|' in line:
+                table_lines.append(line)
+            elif in_table and not line and len(table_lines) > 0:
+                # Empty line might continue the table
+                continue
+            elif in_table and line and '|' not in line:
+                # Non-table line ends the table
+                break
+        
+        if table_lines:
+            return '\n'.join(table_lines)
+        
+        return cleaned
     
     def validate_server_requirements(self) -> bool:
-        """Validate that required environment variables are set based on enabled servers."""
+        """Validate that required environment variables are set."""
         missing_vars = []
         
-        # Check AI provider credentials - prioritize Azure OpenAI
+        # Check AI provider credentials
         if self._has_azure_credentials():
-            # Azure OpenAI is available and complete
             pass
         elif os.getenv("OPENAI_API_KEY"):
-            # OpenAI is available as fallback
             pass
         else:
             missing_vars.append("AZURE_API_KEY + AZURE_ENDPOINT + AZURE_DEPLOYMENT + AZURE_API_VERSION or OPENAI_API_KEY")
@@ -98,16 +347,82 @@ class CompanyClassificationCLI:
             if not os.getenv("GOOGLE_SEARCH_ENGINE_ID"):
                 missing_vars.append("GOOGLE_SEARCH_ENGINE_ID")
         
-        # Check Perplexity credentials if enabled
-        if "perplexity" in self.enabled_servers:
-            if not os.getenv("PERPLEXITY_API_KEY"):
-                missing_vars.append("PERPLEXITY_API_KEY")
-        
         if missing_vars:
             print(f"❌ Missing required environment variables: {', '.join(missing_vars)}")
             return False
         
         return True
+    
+    def _has_azure_credentials(self) -> bool:
+        """Check if Azure OpenAI credentials are complete."""
+        azure_vars = ["AZURE_API_KEY", "AZURE_ENDPOINT", "AZURE_DEPLOYMENT", "AZURE_API_VERSION"]
+        return all(os.getenv(var) for var in azure_vars)
+    
+    def get_server_config(self) -> Dict[str, Dict]:
+        """Get server configuration based on enabled servers."""
+        if os.path.exists(self.config_path):
+            with open(self.config_path, 'r') as f:
+                server_config = json.load(f)
+            all_servers = server_config.get('mcpServers', {})
+        else:
+            all_servers = SERVER_CONFIG['mcpServers']
+        
+        filtered_servers = {}
+        
+        # Company Tagging is always included
+        if "Company Tagging" in all_servers:
+            filtered_servers["Company Tagging"] = all_servers["Company Tagging"]
+        
+        # Add Google Search if enabled
+        if "google" in self.enabled_servers and "Google Search" in all_servers:
+            filtered_servers["Google Search"] = all_servers["Google Search"]
+        
+        return filtered_servers
+    
+    async def setup_connections(self):
+        """Set up MCP client connections and initialize the agent."""
+        print("🔧 Setting up MCP connections...")
+        
+        if not self.validate_server_requirements():
+            raise ValueError("Missing required environment variables")
+        
+        # Create LLM instance
+        if self._has_azure_credentials():
+            llm_provider = "Azure OpenAI"
+        else:
+            llm_provider = "OpenAI"
+        
+        try:
+            self.llm = create_llm_model(
+                llm_provider,
+                temperature=DEFAULT_TEMPERATURE,
+                max_tokens=DEFAULT_MAX_TOKENS
+            )
+            print(f"✅ LLM initialized: {llm_provider}")
+        except Exception as e:
+            raise ValueError(f"Failed to initialize LLM: {e}")
+        
+        # Get server configuration
+        try:
+            servers = self.get_server_config()
+            prepared_servers = prepare_server_config(servers)
+            
+            print(f"🔌 Connecting to {len(prepared_servers)} MCP servers...")
+            
+            self.client = await setup_mcp_client(prepared_servers)
+            self.tools = await get_tools_from_client(self.client)
+            
+            # Categorize tools
+            self.available_tools = self.categorize_tools(self.tools)
+            
+            # Create agent
+            self.agent = create_react_agent(self.llm, self.tools)
+            
+            print(f"✅ Initialized with {len(self.tools)} available tools")
+            
+        except Exception as e:
+            print(f"❌ MCP Connection Error: {str(e)}")
+            raise ValueError(f"Failed to setup MCP connections: {e}")
     
     def categorize_tools(self, tools: List) -> Dict[str, List]:
         """Categorize tools by server type."""
@@ -121,154 +436,16 @@ class CompanyClassificationCLI:
             tool_name = tool.name.lower()
             tool_desc = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
             
-            # Company Tagging tool detection
             if any(keyword in tool_name for keyword in [
-                'search_show_categories', 'company_tagging', 'tag_companies', 
-                'categorize', 'taxonomy', 'show_categories'
-            ]) or any(keyword in tool_desc for keyword in [
-                'company', 'categoriz', 'taxonomy', 'tag', 'show', 'exhibitor'
+                'search_show_categories', 'company_tagging', 'tag_companies'
             ]):
                 categorized["company_tagging"].append(tool)
-            
-            # Perplexity tool detection
             elif any(keyword in tool_name for keyword in [
-                'perplexity_search_web', 'perplexity_advanced_search', 'perplexity'
-            ]) or 'perplexity' in tool_desc:
-                categorized["perplexity"].append(tool)
-            
-            # Google Search tool detection
-            elif any(keyword in tool_name for keyword in [
-                'google-search', 'read-webpage', 'google_search', 'webpage'
-            ]) or (('google' in tool_name or 'search' in tool_name or 'webpage' in tool_name) 
-                   and 'perplexity' not in tool_name):
+                'google-search', 'read-webpage', 'google_search'
+            ]):
                 categorized["google"].append(tool)
         
         return categorized
-    
-    async def setup_connections(self):
-        """Set up MCP client connections and initialize the agent."""
-        print("🔧 Setting up MCP connections...")
-        print(f"   Enabled servers: {', '.join(self.enabled_servers)}")
-        
-        # Validate environment variables
-        if not self.validate_server_requirements():
-            raise ValueError("Missing required environment variables")
-        
-        # Create LLM instance - prioritize Azure OpenAI
-        if self._has_azure_credentials():
-            llm_provider = "Azure OpenAI"
-        elif os.getenv("OPENAI_API_KEY"):
-            llm_provider = "OpenAI"
-        else:
-            raise ValueError("No valid AI provider credentials found")
-        
-        try:
-            self.llm = create_llm_model(
-                llm_provider,
-                temperature=DEFAULT_TEMPERATURE,
-                max_tokens=DEFAULT_MAX_TOKENS
-            )
-            print(f"✅ LLM initialized: {llm_provider}")
-        except Exception as e:
-            raise ValueError(f"Failed to initialize LLM: {e}")
-        
-        # Get filtered server configuration
-        try:
-            servers = self.get_server_config()
-            prepared_servers = prepare_server_config(servers)
-            
-            if not prepared_servers:
-                raise ValueError("No valid servers configured")
-            
-            print(f"🔌 Connecting to {len(prepared_servers)} MCP servers:")
-            for name in prepared_servers.keys():
-                print(f"   - {name}")
-            
-            # Setup MCP client
-            self.client = await setup_mcp_client(prepared_servers)
-            self.tools = await get_tools_from_client(self.client)
-            
-            # Categorize tools
-            self.available_tools = self.categorize_tools(self.tools)
-            
-            # Create agent
-            self.agent = create_react_agent(self.llm, self.tools)
-            
-            print(f"✅ Initialized with {len(self.tools)} available tools:")
-            for category, tools in self.available_tools.items():
-                if tools:
-                    print(f"   - {category}: {len(tools)} tools")
-            
-        except Exception as e:
-            print(f"❌ MCP Connection Error: {str(e)}")
-            raise ValueError(f"Failed to setup MCP connections: {e}")
-    
-    def create_research_prompt(self, companies_batch: List[Dict]) -> str:
-        """Create research prompt based on available servers."""
-        company_data = self.format_companies_for_analysis(companies_batch)
-        
-        # Build research instructions based on available tools
-        research_instructions = []
-        
-        if self.available_tools["google"]:
-            research_instructions.append('   - Use google-search tool: If domain exists, use "site:[domain] products services", otherwise use "[company name] products services technology"')
-        
-        if self.available_tools["perplexity"]:
-            research_instructions.append('   - Use perplexity_search_web tool: "[company name] products services technology offerings"')
-        
-        if not research_instructions:
-            raise ValueError("No research tools available. At least one of Google or Perplexity must be enabled.")
-        
-        # Build tool requirements
-        tool_requirements = []
-        if self.available_tools["google"] and self.available_tools["perplexity"]:
-            tool_requirements.append("- MUST use both google-search AND perplexity_search_web for each company")
-        elif self.available_tools["google"]:
-            tool_requirements.append("- MUST use google-search tool for each company")
-        elif self.available_tools["perplexity"]:
-            tool_requirements.append("- MUST use perplexity_search_web tool for each company")
-        
-        return f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
-
-COMPANY DATA TO ANALYZE:
-{company_data}
-
-AVAILABLE RESEARCH TOOLS:
-{chr(10).join(f"✅ {category.title()}: {len(tools)} tools available" for category, tools in self.available_tools.items() if tools)}
-
-MANDATORY RESEARCH PROCESS:
-
-1. **Retrieve Complete Taxonomy** (ONCE ONLY):
-   - Use search_show_categories tool without any filters to get all available categories
-
-2. **For EACH Company - Research Phase:**
-   - Choose research name priority: Domain > Trading Name > Account Name
-{chr(10).join(research_instructions)}
-   - **Google Search Strategy**: If domain exists and is not empty, use "site:[domain] products services". If no domain or empty domain, use "[company name] products services technology"
-   - **Perplexity Search Strategy**: Always use "[company name] products services technology offerings"
-   - Identify what the company actually sells/offers
-
-3. **Analysis Phase:**
-   - Map company offerings to relevant shows (CAI, DOL, CCSE, BDAIW, DCW)
-   - Match findings to EXACT taxonomy pairs from step 1
-   - Select up to 4 (Industry | Product) pairs per company
-   - Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
-
-4. **Output Requirements:**
-   - Generate a markdown table with these columns:
-   | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
-   - Do NOT provide any additional text, explanations, or context
-   - Do NOT show research details or tool executions
-   - ONLY the markdown table
-
-CRITICAL RULES:
-{chr(10).join(tool_requirements)}
-- MUST use search_show_categories to get taxonomy before starting
-- Use taxonomy pairs EXACTLY as written
-- For Google searches: Use domain-specific search if domain exists, otherwise use company name search
-- Output ONLY the markdown table, nothing else
-
-Begin the systematic analysis now."""
     
     def read_csv_file(self, csv_path: str) -> List[Dict]:
         """Read and parse the CSV file."""
@@ -280,7 +457,6 @@ Begin the systematic analysis now."""
         companies = []
         try:
             with open(csv_path, 'r', encoding='utf-8', newline='') as csvfile:
-                # Try to detect the delimiter
                 sample = csvfile.read(1024)
                 csvfile.seek(0)
                 sniffer = csv.Sniffer()
@@ -290,21 +466,16 @@ Begin the systematic analysis now."""
                 
                 for row_num, row in enumerate(reader, 1):
                     # Clean and validate row data
-                    cleaned_row = {k.strip(): v.strip() if v else "" for k, v in row.items()}
+                    cleaned_row = {}
+                    for k, v in row.items():
+                        if k is not None and v is not None:
+                            cleaned_row[k.strip()] = self.sanitize_json_string(str(v).strip())
                     
                     # Check for required columns
                     required_columns = ['Account Name', 'Trading Name', 'Domain', 'Event']
-                    missing_columns = [col for col in required_columns if col not in cleaned_row]
-                    
-                    if missing_columns:
-                        print(f"⚠️  Row {row_num}: Missing columns {missing_columns}, skipping...")
-                        continue
-                    
-                    # Only add rows that have at least an Account Name
-                    if cleaned_row.get('Account Name'):
-                        companies.append(cleaned_row)
-                    else:
-                        print(f"⚠️  Row {row_num}: No Account Name, skipping...")
+                    if all(col in cleaned_row for col in required_columns):
+                        if cleaned_row.get('Account Name'):
+                            companies.append(cleaned_row)
             
             print(f"✅ Successfully read {len(companies)} companies from CSV")
             return companies
@@ -317,10 +488,7 @@ Begin the systematic analysis now."""
         formatted_lines = []
         
         for company in companies:
-            # Create the formatted block exactly like the UI
             company_block = []
-            
-            # Each field on its own line, exactly like UI
             company_block.append(f"Account Name = {company.get('Account Name', '')}")
             company_block.append(f"Trading Name = {company.get('Trading Name', '')}")
             company_block.append(f"Domain = {company.get('Domain', '')}")
@@ -328,16 +496,63 @@ Begin the systematic analysis now."""
             
             formatted_lines.append('\n'.join(company_block))
         
-        # Join companies with blank line separation
         return '\n\n'.join(formatted_lines)
+    
+    def create_research_prompt(self, companies_batch: List[Dict]) -> str:
+        """Create research prompt for the batch."""
+        company_data = self.format_companies_for_analysis(companies_batch)
+        
+        return f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
+
+COMPANY DATA TO ANALYZE:
+{company_data}
+
+MANDATORY RESEARCH PROCESS:
+
+1. **Retrieve Complete Taxonomy** (ONCE ONLY):
+   - Use search_show_categories tool without any filters to get all available categories
+
+2. **For EACH Company - Research Phase:**
+   - Choose research name priority: Domain > Trading Name > Account Name
+   - Use google-search tool: If domain exists, use "site:[domain] products services", otherwise use "[company name] products services technology"
+   - Identify what the company actually sells/offers
+
+3. **Analysis Phase:**
+   - Map company offerings to relevant shows (CAI, DOL, CCSE, BDAIW, DCW)
+   - Match findings to EXACT taxonomy pairs from step 1
+   - Select up to 4 (Industry | Product) pairs per company
+   - Use pairs EXACTLY as they appear
+
+4. **Output Requirements:**
+   - Generate a markdown table with ONLY DATA ROWS (NO HEADER)
+   - Use this exact format for each company:
+   | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
+   - Do NOT include the header row in your response
+   - Do NOT provide additional text, explanations, or context
+   - ONLY the data rows without header
+
+CRITICAL RULES:
+- MUST use search_show_categories to get taxonomy before starting
+- Use taxonomy pairs EXACTLY as written
+- Output ONLY data rows (no header row)
+- Each row should have company data only
+
+Begin the systematic analysis now."""
     
     def parse_markdown_table(self, response: str) -> List[List[str]]:
         """Parse markdown table response into structured data."""
+        if not response:
+            return []
+        
+        # Clean the response first
+        response = self.clean_response_content(response)
+        
         lines = response.strip().split('\n')
         table_rows = []
         
         for line in lines:
-            if "|" in line and line.strip():
+            line = line.strip()
+            if "|" in line and line:
                 # Parse markdown table row
                 columns = [col.strip() for col in line.split('|')]
                 # Remove empty first/last columns from markdown formatting
@@ -348,108 +563,170 @@ Begin the systematic analysis now."""
                 
                 # Skip separator lines
                 if columns and not all(col == '' or '-' in col for col in columns):
-                    table_rows.append(columns)
+                    # Sanitize each column
+                    sanitized_columns = [self.sanitize_json_string(col) for col in columns]
+                    table_rows.append(sanitized_columns)
         
         return table_rows
     
-    async def process_batch(self, batch_companies: List[Dict], batch_num: int, total_batches: int) -> List[List[str]]:
-        """Process a single batch of companies."""
-        print(f"🔄 Processing batch {batch_num}/{total_batches} ({len(batch_companies)} companies)")
-        
-        try:
-            # Create batch prompt with server-specific instructions
-            batch_prompt = self.create_research_prompt(batch_companies)
-            
-            # Create conversation memory
-            conversation_memory = []
-            conversation_memory.append(HumanMessage(content=batch_prompt))
-            
-            # Run the agent
-            response = await self.agent.ainvoke({"messages": conversation_memory})
-            
-            # Extract the response
-            assistant_response = None
-            if "messages" in response:
-                for msg in response["messages"]:
-                    if isinstance(msg, AIMessage) and hasattr(msg, "content") and msg.content:
-                        assistant_response = str(msg.content)
-                        # Look for markdown table in the response
-                        if "|" in assistant_response and "Company Name" in assistant_response:
-                            # Extract just the table part
-                            lines = assistant_response.split('\n')
-                            table_lines = []
-                            in_table = False
-                            for line in lines:
-                                if "|" in line and ("Company Name" in line or "Tech Industry" in line):
-                                    in_table = True
-                                if in_table and "|" in line:
-                                    table_lines.append(line.strip())
-                                elif in_table and not line.strip():
-                                    continue
-                                elif in_table and "|" not in line.strip() and line.strip():
-                                    break
-                            
-                            if table_lines:
-                                assistant_response = '\n'.join(table_lines)
-                                break
-            
-            if assistant_response and "|" in assistant_response:
-                # Parse the markdown table
-                parsed_rows = self.parse_markdown_table(assistant_response)
-                print(f"   ✅ Batch {batch_num} completed: {len(parsed_rows)-1} companies processed")  # -1 for header
-                return parsed_rows
-            else:
-                print(f"   ❌ Batch {batch_num} failed: No valid table response")
-                return []
+    async def process_batch_with_retry(self, batch_companies: List[Dict], 
+                                     batch_num: int, total_batches: int) -> List[List[str]]:
+        """Process a batch with retry logic."""
+        for attempt in range(self.max_retries):
+            try:
+                print(f"🔄 Processing batch {batch_num}/{total_batches} (attempt {attempt + 1}/{self.max_retries})")
                 
-        except Exception as e:
-            print(f"   ❌ Batch {batch_num} error: {str(e)}")
-            return []
+                batch_prompt = self.create_research_prompt(batch_companies)
+                conversation_memory = [HumanMessage(content=batch_prompt)]
+                
+                # Run the agent with timeout
+                response = await asyncio.wait_for(
+                    self.agent.ainvoke({"messages": conversation_memory}),
+                    timeout=300  # 5 minute timeout per batch
+                )
+                
+                # Extract and clean the response
+                assistant_response = None
+                if "messages" in response:
+                    for msg in response["messages"]:
+                        if isinstance(msg, AIMessage) and hasattr(msg, "content") and msg.content:
+                            assistant_response = self.clean_response_content(str(msg.content))
+                            break
+                
+                if assistant_response and "|" in assistant_response:
+                    parsed_rows = self.parse_markdown_table(assistant_response)
+                    if parsed_rows:
+                        print(f"   ✅ Batch {batch_num} completed: {len(parsed_rows)} rows processed")
+                        return parsed_rows
+                
+                # If we get here, no valid response was found
+                if attempt < self.max_retries - 1:
+                    print(f"   ⚠️  Batch {batch_num} attempt {attempt + 1} failed (no valid response), retrying...")
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                else:
+                    print(f"   ❌ Batch {batch_num} failed after {self.max_retries} attempts")
+                    return []
+                    
+            except asyncio.TimeoutError:
+                error_msg = f"Batch {batch_num} timeout after 5 minutes"
+                print(f"   ⏰ {error_msg}")
+                if attempt < self.max_retries - 1:
+                    print(f"   🔄 Retrying in {self.retry_delay} seconds...")
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                else:
+                    self.progress.mark_batch_failed(batch_num, error_msg)
+                    return []
+                    
+            except Exception as e:
+                error_msg = f"Batch {batch_num} error: {str(e)}"
+                traceback_str = traceback.format_exc()
+                print(f"   ❌ {error_msg}")
+                
+                if attempt < self.max_retries - 1:
+                    print(f"   🔄 Retrying in {self.retry_delay} seconds...")
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+                else:
+                    self.progress.mark_batch_failed(batch_num, error_msg, traceback_str)
+                    return []
+        
+        return []
     
-    async def classify_companies_batched(self, companies: List[Dict]) -> tuple[str, List[List[str]]]:
-        """Classify companies using batched processing."""
-        print(f"🔍 Processing {len(companies)} companies in batches of {self.batch_size}")
+    async def classify_companies_batched(self, companies: List[Dict]) -> Tuple[str, List[List[str]]]:
+        """Classify companies using batched processing with proper header management."""
         
         # Split companies into batches
         batches = [companies[i:i + self.batch_size] for i in range(0, len(companies), self.batch_size)]
         total_batches = len(batches)
         
-        print(f"📊 Created {total_batches} batches")
+        # Initialize progress tracker
+        self.progress.total_batches = total_batches
+        self.progress.start_time = time.time()
         
-        all_results = []
-        markdown_lines = []
-        header_added = False
+        # Load existing progress if available
+        if self.progress.load_progress():
+            print(f"📂 Resuming from previous run...")
         
-        for batch_num, batch_companies in enumerate(batches, 1):
-            # Process batch
-            batch_results = await self.process_batch(batch_companies, batch_num, total_batches)
+        # Set default header if we don't have one
+        if self.progress.header_row is None:
+            self.progress.header_row = [
+                "Company Name", "Trading Name", 
+                "Tech Industry 1", "Tech Product 1",
+                "Tech Industry 2", "Tech Product 2", 
+                "Tech Industry 3", "Tech Product 3",
+                "Tech Industry 4", "Tech Product 4"
+            ]
+            print("📋 Using default header structure")
+        
+        # Get remaining batches to process
+        remaining_batches = self.progress.get_remaining_batches(total_batches)
+        
+        if not remaining_batches:
+            print("✅ All batches already completed!")
+        else:
+            print(f"📊 Processing {len(remaining_batches)} remaining batches out of {total_batches} total")
+        
+        # Process remaining batches
+        for batch_idx in remaining_batches:
+            batch_num = batch_idx
+            batch_companies = batches[batch_idx - 1]  # Convert to 0-based for list access
+            
+            # Process batch with retry logic
+            batch_results = await self.process_batch_with_retry(batch_companies, batch_num, total_batches)
             
             if batch_results:
-                if not header_added:
-                    # Add header from first successful batch
-                    all_results.append(batch_results[0])  # Header row
-                    markdown_lines.append('|'.join([''] + batch_results[0] + ['']))
-                    if len(batch_results) > 1:
-                        # Add separator line
-                        separator = ['---'] * len(batch_results[0])
-                        markdown_lines.append('|'.join([''] + separator + ['']))
-                    header_added = True
+                self.progress.mark_batch_completed(batch_num, batch_results)
+            else:
+                print(f"   ❌ Batch {batch_num} failed completely")
                 
-                # Add data rows (skip header if present)
-                data_rows = batch_results[1:] if len(batch_results) > 1 and not header_added else batch_results[1:]
-                for row in data_rows:
-                    all_results.append(row)
-                    markdown_lines.append('|'.join([''] + row + ['']))
+                # Check if we should stop due to too many consecutive errors
+                if self.progress.should_stop_due_to_errors():
+                    print(f"❌ Stopping due to {self.progress.consecutive_errors} consecutive errors")
+                    break
+            
+            # Print progress update
+            stats = self.progress.get_stats()
+            print(f"📊 Progress: {stats['completed_batches']}/{stats['total_batches']} batches "
+                  f"({stats['success_rate']:.1f}% success rate, {stats['total_data_rows']} companies)")
         
-        # Create markdown content
-        markdown_content = '\n'.join(markdown_lines)
+        # Final save
+        self.progress.save_progress()
         
-        print(f"✅ Batch processing completed: {len(all_results)-1} companies processed")  # -1 for header
+        # Generate final results with proper header
+        final_results = self.progress.get_final_results()
         
-        return markdown_content, all_results
+        # Generate markdown content with single header
+        if final_results and len(final_results) > 0:
+            header = final_results[0]
+            data_rows = final_results[1:] if len(final_results) > 1 else []
+            
+            # Format as markdown table
+            markdown_lines = []
+            markdown_lines.append('|' + '|'.join([''] + header + ['']) + '|')
+            
+            # Add separator line
+            separator = ['---'] * len(header)
+            markdown_lines.append('|' + '|'.join([''] + separator + ['']) + '|')
+            
+            # Add data rows
+            for row in data_rows:
+                if len(row) >= len(header):
+                    markdown_lines.append('|' + '|'.join([''] + row[:len(header)] + ['']) + '|')
+            
+            markdown_content = '\n'.join(markdown_lines)
+        else:
+            markdown_content = "No results to display"
+        
+        return markdown_content, final_results
     
     def save_csv_results(self, results: List[List[str]], csv_path: str):
         """Save results to CSV file."""
+        if not results:
+            print("⚠️  No results to save")
+            return
+            
         try:
             with open(csv_path, 'w', encoding='utf-8', newline='') as f:
                 writer = csv.writer(f)
@@ -460,7 +737,6 @@ Begin the systematic analysis now."""
     
     async def save_results(self, markdown_content: str, csv_results: List[List[str]], base_output_path: str):
         """Save the classification results to both MD and CSV files."""
-        # Determine file paths
         base_path = Path(base_output_path)
         md_path = base_path.with_suffix('.md')
         csv_path = base_path.with_suffix('.csv')
@@ -475,6 +751,13 @@ Begin the systematic analysis now."""
             if csv_results:
                 self.save_csv_results(csv_results, str(csv_path))
             
+            # Save final statistics
+            stats = self.progress.get_stats()
+            stats_path = base_path.with_suffix('.stats.json')
+            with open(stats_path, 'w', encoding='utf-8') as f:
+                json.dump(stats, f, indent=2)
+            print(f"📊 Statistics saved to: {stats_path}")
+            
         except Exception as e:
             raise ValueError(f"Error saving results: {e}")
     
@@ -487,102 +770,49 @@ Begin the systematic analysis now."""
             except Exception as e:
                 print(f"⚠️  Error during cleanup: {e}")
 
-def parse_server_selection(servers_arg: str) -> Set[str]:
-    """Parse server selection argument."""
-    if not servers_arg:
-        return {"google", "perplexity"}  # Default to both
-    
-    valid_servers = {"google", "perplexity", "both"}
-    servers = set(server.strip().lower() for server in servers_arg.split(','))
-    
-    # Handle 'both' shorthand
-    if "both" in servers:
-        return {"google", "perplexity"}
-    
-    # Validate servers
-    invalid_servers = servers - valid_servers
-    if invalid_servers:
-        raise ValueError(f"Invalid servers: {invalid_servers}. Valid options: google, perplexity, both")
-    
-    return servers
-
 async def main():
-    """Main CLI function."""
+    """Main CLI function with enhanced header management."""
     parser = argparse.ArgumentParser(
-        description="Company Classification CLI Tool - Enhanced with Server Selection",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Server Selection Examples:
-  # Use both Google and Perplexity (default)
-  python company_cli.py --input companies.csv --output results
-  
-  # Use only Google Search
-  python company_cli.py --input companies.csv --output results --servers google
-  
-  # Use only Perplexity
-  python company_cli.py --input companies.csv --output results --servers perplexity
-  
-  # Use both servers (explicit)
-  python company_cli.py --input companies.csv --output results --servers both
-  
-  # Custom batch size with specific server
-  python company_cli.py --input companies.csv --output results --servers google --batch-size 5
-        """
+        description="Enhanced Company Classification CLI Tool with Fixed Header Management",
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    parser.add_argument(
-        "--input", "-i",
-        required=True,
-        help="Path to the input CSV file with company data"
-    )
-    
-    parser.add_argument(
-        "--output", "-o",
-        required=True,
-        help="Base path for output files (will create .md and .csv files)"
-    )
-    
-    parser.add_argument(
-        "--servers", "-s",
-        type=str,
-        default="both",
-        help="MCP servers to use: 'google', 'perplexity', or 'both' (default: both)"
-    )
-    
-    parser.add_argument(
-        "--batch-size", "-b",
-        type=int,
-        default=10,
-        help="Number of companies to process in each batch (default: 10)"
-    )
-    
-    parser.add_argument(
-        "--config", "-c",
-        help="Path to custom server configuration JSON file"
-    )
-    
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Enable verbose output"
-    )
+    parser.add_argument("--input", "-i", required=True, help="Path to input CSV file")
+    parser.add_argument("--output", "-o", required=True, help="Base path for output files")
+    parser.add_argument("--servers", "-s", type=str, default="google", 
+                       help="MCP servers to use (default: google)")
+    parser.add_argument("--batch-size", "-b", type=int, default=3, 
+                       help="Batch size (default: 3)")
+    parser.add_argument("--config", "-c", help="Path to server configuration file")
+    parser.add_argument("--resume", action="store_true", 
+                       help="Resume from previous run (default behavior)")
+    parser.add_argument("--clean-start", action="store_true", 
+                       help="Start fresh, ignoring previous progress")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
     
     args = parser.parse_args()
     
     try:
         # Parse server selection
-        enabled_servers = parse_server_selection(args.servers)
-        # Company tagging is always enabled
-        enabled_servers.add("company_tagging")
+        if args.servers == "google":
+            enabled_servers = {"google", "company_tagging"}
+        else:
+            enabled_servers = {"google", "company_tagging"}
         
         # Initialize CLI tool
-        cli = CompanyClassificationCLI(
-            config_path=args.config, 
+        cli = RobustCompanyClassificationCLI(
+            config_path=args.config,
             batch_size=args.batch_size,
-            enabled_servers=enabled_servers
+            enabled_servers=enabled_servers,
+            output_base=args.output
         )
         
-        print("🚀 Starting Company Classification CLI Tool - Enhanced with Server Selection")
+        # Clean start if requested
+        if args.clean_start:
+            print("🧹 Starting fresh (ignoring previous progress)")
+            cli.progress.cleanup_temp_files()
+        
+        print("🚀 Enhanced Company Classification CLI Tool - Header Fixed Version")
         print("=" * 80)
         
         # Setup connections
@@ -601,29 +831,27 @@ Server Selection Examples:
         # Save results
         await cli.save_results(markdown_content, csv_results, args.output)
         
-        # Print summary
-        processed_count = len(csv_results) - 1 if csv_results else 0  # -1 for header
-        print(f"\n📊 Processing Summary:")
+        # Print final summary
+        stats = cli.progress.get_stats()
+        print(f"\n📊 Final Processing Summary:")
         print(f"   Total companies in file: {len(companies)}")
-        print(f"   Successfully processed: {processed_count}")
-        print(f"   Servers used: {', '.join(s for s in enabled_servers if s != 'company_tagging')}")
-        print(f"   Batch size used: {args.batch_size}")
-        print(f"   Output files: {args.output}.md, {args.output}.csv")
+        print(f"   Total batches: {stats['total_batches']}")
+        print(f"   Completed batches: {stats['completed_batches']}")
+        print(f"   Failed batches: {stats['failed_batches']}")
+        print(f"   Success rate: {stats['success_rate']:.1f}%")
+        print(f"   Total errors: {stats['error_count']}")
+        print(f"   Total data rows: {stats['total_data_rows']}")
+        print(f"   Header present: {stats['has_header']}")
         
-        # Print server tool counts
-        print(f"\n🔧 Tools Used:")
-        for category, tools in cli.available_tools.items():
-            if tools:
-                print(f"   {category.title()}: {len(tools)} tools")
+        # Clean up temp files on successful completion
+        if stats['completed_batches'] == stats['total_batches']:
+            cli.progress.cleanup_temp_files()
+            print("✅ Processing completed successfully! Temporary files cleaned up.")
+            print("🎉 Results saved with single header and no duplicates!")
+        else:
+            print(f"⚠️  Processing incomplete. Use --resume to continue from batch {stats['completed_batches'] + 1}")
+            print(f"   Progress saved in: {cli.progress.progress_file}")
         
-        # Print results if verbose
-        if args.verbose and markdown_content:
-            print("\n" + "=" * 80)
-            print("CLASSIFICATION RESULTS:")
-            print("=" * 80)
-            print(markdown_content)
-        
-        print("\n✅ Company classification completed successfully!")
         return 0
         
     except Exception as e:
