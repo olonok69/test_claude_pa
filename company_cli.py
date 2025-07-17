@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Company Classification CLI Tool - Batch Processing Version
-Command-line interface for classifying companies using batched processing.
+Company Classification CLI Tool - Enhanced with Server Selection
+Command-line interface for classifying companies with configurable MCP server selection.
 """
 
 import argparse
@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 import traceback
 import re
 
@@ -25,31 +25,143 @@ from client.services.mcp_service import setup_mcp_client, get_tools_from_client,
 from langgraph.prebuilt import create_react_agent
 from client.config import SERVER_CONFIG, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS
 
-
 # Load environment variables
 load_dotenv()
 
 class CompanyClassificationCLI:
-    def __init__(self, config_path: Optional[str] = None, batch_size: int = 10):
-        """Initialize the CLI tool with configuration."""
+    def __init__(self, config_path: Optional[str] = None, batch_size: int = 10, enabled_servers: Set[str] = None):
+        """Initialize the CLI tool with configuration and server selection."""
         # Default to CLI-specific config file with localhost URLs
         self.config_path = config_path or "cli_servers_config.json"
         self.batch_size = batch_size
+        self.enabled_servers = enabled_servers or {"google", "perplexity", "company_tagging"}
         self.client = None
         self.agent = None
         self.tools = []
         self.llm = None
+        self.available_tools = {
+            "google": [],
+            "perplexity": [],
+            "company_tagging": []
+        }
         
+    def get_server_config(self) -> Dict[str, Dict]:
+        """Get server configuration based on enabled servers."""
+        # Load base configuration
+        if os.path.exists(self.config_path):
+            with open(self.config_path, 'r') as f:
+                server_config = json.load(f)
+            all_servers = server_config.get('mcpServers', {})
+        else:
+            all_servers = SERVER_CONFIG['mcpServers']
+        
+        # Filter servers based on enabled_servers
+        filtered_servers = {}
+        
+        # Company Tagging is always included
+        if "Company Tagging" in all_servers:
+            filtered_servers["Company Tagging"] = all_servers["Company Tagging"]
+        
+        # Add Google Search if enabled
+        if "google" in self.enabled_servers and "Google Search" in all_servers:
+            filtered_servers["Google Search"] = all_servers["Google Search"]
+        
+        # Add Perplexity Search if enabled
+        if "perplexity" in self.enabled_servers and "Perplexity Search" in all_servers:
+            filtered_servers["Perplexity Search"] = all_servers["Perplexity Search"]
+        
+        return filtered_servers
+    
+    def _has_azure_credentials(self) -> bool:
+        """Check if Azure OpenAI credentials are complete."""
+        azure_vars = ["AZURE_API_KEY", "AZURE_ENDPOINT", "AZURE_DEPLOYMENT", "AZURE_API_VERSION"]
+        return all(os.getenv(var) for var in azure_vars)
+    
+    def validate_server_requirements(self) -> bool:
+        """Validate that required environment variables are set based on enabled servers."""
+        missing_vars = []
+        
+        # Check AI provider credentials - prioritize Azure OpenAI
+        if self._has_azure_credentials():
+            # Azure OpenAI is available and complete
+            pass
+        elif os.getenv("OPENAI_API_KEY"):
+            # OpenAI is available as fallback
+            pass
+        else:
+            missing_vars.append("AZURE_API_KEY + AZURE_ENDPOINT + AZURE_DEPLOYMENT + AZURE_API_VERSION or OPENAI_API_KEY")
+        
+        # Check Google Search credentials if enabled
+        if "google" in self.enabled_servers:
+            if not os.getenv("GOOGLE_API_KEY"):
+                missing_vars.append("GOOGLE_API_KEY")
+            if not os.getenv("GOOGLE_SEARCH_ENGINE_ID"):
+                missing_vars.append("GOOGLE_SEARCH_ENGINE_ID")
+        
+        # Check Perplexity credentials if enabled
+        if "perplexity" in self.enabled_servers:
+            if not os.getenv("PERPLEXITY_API_KEY"):
+                missing_vars.append("PERPLEXITY_API_KEY")
+        
+        if missing_vars:
+            print(f"❌ Missing required environment variables: {', '.join(missing_vars)}")
+            return False
+        
+        return True
+    
+    def categorize_tools(self, tools: List) -> Dict[str, List]:
+        """Categorize tools by server type."""
+        categorized = {
+            "google": [],
+            "perplexity": [],
+            "company_tagging": []
+        }
+        
+        for tool in tools:
+            tool_name = tool.name.lower()
+            tool_desc = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
+            
+            # Company Tagging tool detection
+            if any(keyword in tool_name for keyword in [
+                'search_show_categories', 'company_tagging', 'tag_companies', 
+                'categorize', 'taxonomy', 'show_categories'
+            ]) or any(keyword in tool_desc for keyword in [
+                'company', 'categoriz', 'taxonomy', 'tag', 'show', 'exhibitor'
+            ]):
+                categorized["company_tagging"].append(tool)
+            
+            # Perplexity tool detection
+            elif any(keyword in tool_name for keyword in [
+                'perplexity_search_web', 'perplexity_advanced_search', 'perplexity'
+            ]) or 'perplexity' in tool_desc:
+                categorized["perplexity"].append(tool)
+            
+            # Google Search tool detection
+            elif any(keyword in tool_name for keyword in [
+                'google-search', 'read-webpage', 'google_search', 'webpage'
+            ]) or (('google' in tool_name or 'search' in tool_name or 'webpage' in tool_name) 
+                   and 'perplexity' not in tool_name):
+                categorized["google"].append(tool)
+        
+        return categorized
+    
     async def setup_connections(self):
         """Set up MCP client connections and initialize the agent."""
         print("🔧 Setting up MCP connections...")
+        print(f"   Enabled servers: {', '.join(self.enabled_servers)}")
         
         # Validate environment variables
-        if not self._validate_environment():
+        if not self.validate_server_requirements():
             raise ValueError("Missing required environment variables")
         
-        # Create LLM instance
-        llm_provider = "OpenAI" if os.getenv("OPENAI_API_KEY") else "Azure OpenAI"
+        # Create LLM instance - prioritize Azure OpenAI
+        if self._has_azure_credentials():
+            llm_provider = "Azure OpenAI"
+        elif os.getenv("OPENAI_API_KEY"):
+            llm_provider = "OpenAI"
+        else:
+            raise ValueError("No valid AI provider credentials found")
+        
         try:
             self.llm = create_llm_model(
                 llm_provider,
@@ -60,57 +172,103 @@ class CompanyClassificationCLI:
         except Exception as e:
             raise ValueError(f"Failed to initialize LLM: {e}")
         
-        # Prepare server configuration
+        # Get filtered server configuration
         try:
-            # Load server configuration
-            if os.path.exists(self.config_path):
-                with open(self.config_path, 'r') as f:
-                    server_config = json.load(f)
-                servers = server_config.get('mcpServers', {})
-            else:
-                servers = SERVER_CONFIG['mcpServers']
-            
+            servers = self.get_server_config()
             prepared_servers = prepare_server_config(servers)
-            print(f"🔌 Connected to {len(prepared_servers)} MCP servers")
+            
+            if not prepared_servers:
+                raise ValueError("No valid servers configured")
+            
+            print(f"🔌 Connecting to {len(prepared_servers)} MCP servers:")
+            for name in prepared_servers.keys():
+                print(f"   - {name}")
             
             # Setup MCP client
             self.client = await setup_mcp_client(prepared_servers)
             self.tools = await get_tools_from_client(self.client)
             
+            # Categorize tools
+            self.available_tools = self.categorize_tools(self.tools)
+            
             # Create agent
             self.agent = create_react_agent(self.llm, self.tools)
             
-            print(f"✅ Initialized with {len(self.tools)} available tools")
+            print(f"✅ Initialized with {len(self.tools)} available tools:")
+            for category, tools in self.available_tools.items():
+                if tools:
+                    print(f"   - {category}: {len(tools)} tools")
             
         except Exception as e:
             print(f"❌ MCP Connection Error: {str(e)}")
             raise ValueError(f"Failed to setup MCP connections: {e}")
     
-    def _validate_environment(self) -> bool:
-        """Validate that required environment variables are set."""
-        required_vars = []
+    def create_research_prompt(self, companies_batch: List[Dict]) -> str:
+        """Create research prompt based on available servers."""
+        company_data = self.format_companies_for_analysis(companies_batch)
         
-        # Check AI provider credentials
-        if not os.getenv("OPENAI_API_KEY"):
-            azure_vars = ["AZURE_API_KEY", "AZURE_ENDPOINT", "AZURE_DEPLOYMENT", "AZURE_API_VERSION"]
-            if not all(os.getenv(var) for var in azure_vars):
-                required_vars.extend(["OPENAI_API_KEY or Azure OpenAI credentials"])
+        # Build research instructions based on available tools
+        research_instructions = []
         
-        # Check Google Search credentials
-        if not os.getenv("GOOGLE_API_KEY"):
-            required_vars.append("GOOGLE_API_KEY")
-        if not os.getenv("GOOGLE_SEARCH_ENGINE_ID"):
-            required_vars.append("GOOGLE_SEARCH_ENGINE_ID")
+        if self.available_tools["google"]:
+            research_instructions.append('   - Use google-search tool: If domain exists, use "site:[domain] products services", otherwise use "[company name] products services technology"')
         
-        # Check Perplexity credentials
-        if not os.getenv("PERPLEXITY_API_KEY"):
-            required_vars.append("PERPLEXITY_API_KEY")
+        if self.available_tools["perplexity"]:
+            research_instructions.append('   - Use perplexity_search_web tool: "[company name] products services technology offerings"')
         
-        if required_vars:
-            print(f"❌ Missing required environment variables: {', '.join(required_vars)}")
-            return False
+        if not research_instructions:
+            raise ValueError("No research tools available. At least one of Google or Perplexity must be enabled.")
         
-        return True
+        # Build tool requirements
+        tool_requirements = []
+        if self.available_tools["google"] and self.available_tools["perplexity"]:
+            tool_requirements.append("- MUST use both google-search AND perplexity_search_web for each company")
+        elif self.available_tools["google"]:
+            tool_requirements.append("- MUST use google-search tool for each company")
+        elif self.available_tools["perplexity"]:
+            tool_requirements.append("- MUST use perplexity_search_web tool for each company")
+        
+        return f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
+
+COMPANY DATA TO ANALYZE:
+{company_data}
+
+AVAILABLE RESEARCH TOOLS:
+{chr(10).join(f"✅ {category.title()}: {len(tools)} tools available" for category, tools in self.available_tools.items() if tools)}
+
+MANDATORY RESEARCH PROCESS:
+
+1. **Retrieve Complete Taxonomy** (ONCE ONLY):
+   - Use search_show_categories tool without any filters to get all available categories
+
+2. **For EACH Company - Research Phase:**
+   - Choose research name priority: Domain > Trading Name > Account Name
+{chr(10).join(research_instructions)}
+   - **Google Search Strategy**: If domain exists and is not empty, use "site:[domain] products services". If no domain or empty domain, use "[company name] products services technology"
+   - **Perplexity Search Strategy**: Always use "[company name] products services technology offerings"
+   - Identify what the company actually sells/offers
+
+3. **Analysis Phase:**
+   - Map company offerings to relevant shows (CAI, DOL, CCSE, BDAIW, DCW)
+   - Match findings to EXACT taxonomy pairs from step 1
+   - Select up to 4 (Industry | Product) pairs per company
+   - Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
+
+4. **Output Requirements:**
+   - Generate a markdown table with these columns:
+   | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
+   - Do NOT provide any additional text, explanations, or context
+   - Do NOT show research details or tool executions
+   - ONLY the markdown table
+
+CRITICAL RULES:
+{chr(10).join(tool_requirements)}
+- MUST use search_show_categories to get taxonomy before starting
+- Use taxonomy pairs EXACTLY as written
+- For Google searches: Use domain-specific search if domain exists, otherwise use company name search
+- Output ONLY the markdown table, nothing else
+
+Begin the systematic analysis now."""
     
     def read_csv_file(self, csv_path: str) -> List[Dict]:
         """Read and parse the CSV file."""
@@ -173,47 +331,6 @@ class CompanyClassificationCLI:
         # Join companies with blank line separation
         return '\n\n'.join(formatted_lines)
     
-    def create_batch_prompt(self, companies_batch: List[Dict]) -> str:
-        """Create the prompt for a batch of companies."""
-        company_data = self.format_companies_for_analysis(companies_batch)
-        
-        return f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
-
-COMPANY DATA TO ANALYZE:
-{company_data}
-
-MANDATORY RESEARCH PROCESS:
-
-1. **Retrieve Complete Taxonomy** (ONCE ONLY):
-   - Use search_show_categories tool without any filters to get all available categories
-
-2. **For EACH Company - Research Phase:**
-   - Choose research name: Domain > Trading Name > Company Name
-   - Use perplexity_search_web tool: "[company name] products services technology offerings"
-   - Use google-search tool: "site:[domain] products services" 
-   - Identify what the company actually sells/offers
-
-3. **Analysis Phase:**
-   - Map company offerings to relevant shows (CAI, DOL, CCSE, BDAIW, DCW)
-   - Match findings to EXACT taxonomy pairs from step 1
-   - Select up to 4 (Industry | Product) pairs per company
-   - Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
-
-4. **Output Requirements:**
-   - Generate a markdown table with these columns:
-   | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
-   - Do NOT provide any additional text, explanations, or context
-   - Do NOT show research details or tool executions
-   - ONLY the markdown table
-
-CRITICAL RULES:
-- MUST use both google-search AND perplexity_search_web for each company
-- MUST use search_show_categories to get taxonomy before starting
-- Use taxonomy pairs EXACTLY as written
-- Output ONLY the markdown table, nothing else
-
-Begin the systematic analysis now."""
-    
     def parse_markdown_table(self, response: str) -> List[List[str]]:
         """Parse markdown table response into structured data."""
         lines = response.strip().split('\n')
@@ -240,8 +357,8 @@ Begin the systematic analysis now."""
         print(f"🔄 Processing batch {batch_num}/{total_batches} ({len(batch_companies)} companies)")
         
         try:
-            # Create batch prompt
-            batch_prompt = self.create_batch_prompt(batch_companies)
+            # Create batch prompt with server-specific instructions
+            batch_prompt = self.create_research_prompt(batch_companies)
             
             # Create conversation memory
             conversation_memory = []
@@ -370,16 +487,46 @@ Begin the systematic analysis now."""
             except Exception as e:
                 print(f"⚠️  Error during cleanup: {e}")
 
+def parse_server_selection(servers_arg: str) -> Set[str]:
+    """Parse server selection argument."""
+    if not servers_arg:
+        return {"google", "perplexity"}  # Default to both
+    
+    valid_servers = {"google", "perplexity", "both"}
+    servers = set(server.strip().lower() for server in servers_arg.split(','))
+    
+    # Handle 'both' shorthand
+    if "both" in servers:
+        return {"google", "perplexity"}
+    
+    # Validate servers
+    invalid_servers = servers - valid_servers
+    if invalid_servers:
+        raise ValueError(f"Invalid servers: {invalid_servers}. Valid options: google, perplexity, both")
+    
+    return servers
+
 async def main():
     """Main CLI function."""
     parser = argparse.ArgumentParser(
-        description="Company Classification CLI Tool - Batch Processing",
+        description="Company Classification CLI Tool - Enhanced with Server Selection",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
+Server Selection Examples:
+  # Use both Google and Perplexity (default)
   python company_cli.py --input companies.csv --output results
-  python company_cli.py --input companies.csv --output results --batch-size 5
-  python company_cli.py --input companies.csv --output results --config custom_config.json
+  
+  # Use only Google Search
+  python company_cli.py --input companies.csv --output results --servers google
+  
+  # Use only Perplexity
+  python company_cli.py --input companies.csv --output results --servers perplexity
+  
+  # Use both servers (explicit)
+  python company_cli.py --input companies.csv --output results --servers both
+  
+  # Custom batch size with specific server
+  python company_cli.py --input companies.csv --output results --servers google --batch-size 5
         """
     )
     
@@ -393,6 +540,13 @@ Examples:
         "--output", "-o",
         required=True,
         help="Base path for output files (will create .md and .csv files)"
+    )
+    
+    parser.add_argument(
+        "--servers", "-s",
+        type=str,
+        default="both",
+        help="MCP servers to use: 'google', 'perplexity', or 'both' (default: both)"
     )
     
     parser.add_argument(
@@ -415,12 +569,21 @@ Examples:
     
     args = parser.parse_args()
     
-    # Initialize CLI tool
-    cli = CompanyClassificationCLI(config_path=args.config, batch_size=args.batch_size)
-    
     try:
-        print("🚀 Starting Company Classification CLI Tool - Batch Processing")
-        print("=" * 60)
+        # Parse server selection
+        enabled_servers = parse_server_selection(args.servers)
+        # Company tagging is always enabled
+        enabled_servers.add("company_tagging")
+        
+        # Initialize CLI tool
+        cli = CompanyClassificationCLI(
+            config_path=args.config, 
+            batch_size=args.batch_size,
+            enabled_servers=enabled_servers
+        )
+        
+        print("🚀 Starting Company Classification CLI Tool - Enhanced with Server Selection")
+        print("=" * 80)
         
         # Setup connections
         await cli.setup_connections()
@@ -443,14 +606,21 @@ Examples:
         print(f"\n📊 Processing Summary:")
         print(f"   Total companies in file: {len(companies)}")
         print(f"   Successfully processed: {processed_count}")
+        print(f"   Servers used: {', '.join(s for s in enabled_servers if s != 'company_tagging')}")
         print(f"   Batch size used: {args.batch_size}")
         print(f"   Output files: {args.output}.md, {args.output}.csv")
         
+        # Print server tool counts
+        print(f"\n🔧 Tools Used:")
+        for category, tools in cli.available_tools.items():
+            if tools:
+                print(f"   {category.title()}: {len(tools)} tools")
+        
         # Print results if verbose
         if args.verbose and markdown_content:
-            print("\n" + "=" * 60)
+            print("\n" + "=" * 80)
             print("CLASSIFICATION RESULTS:")
-            print("=" * 60)
+            print("=" * 80)
             print(markdown_content)
         
         print("\n✅ Company classification completed successfully!")
@@ -464,7 +634,8 @@ Examples:
         return 1
     
     finally:
-        await cli.cleanup()
+        if 'cli' in locals():
+            await cli.cleanup()
 
 if __name__ == "__main__":
     sys.exit(asyncio.run(main()))

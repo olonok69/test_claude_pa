@@ -6,7 +6,7 @@ from services.ai_service import get_response_stream
 from services.mcp_service import run_agent, use_prompt
 from services.chat_service import get_current_chat, _append_message_to_session, get_clean_conversation_memory
 from utils.async_helpers import run_async
-from utils.ai_prompts import make_system_prompt, make_main_prompt
+from utils.ai_prompts import make_system_prompt, make_main_prompt, get_server_connection_status, validate_company_tagging_requirements, get_research_strategy_description
 import ui_components.sidebar_components as sd_components
 from ui_components.main_components import display_tool_executions
 from ui_components.tab_components import create_configuration_tab, create_connection_tab, create_tools_tab
@@ -48,6 +48,56 @@ def extract_company_data_from_text(user_text):
     return '\n'.join(company_data_lines) if company_data_lines else user_text
 
 
+def display_server_status():
+    """Display current server connection status."""
+    server_status = get_server_connection_status()
+    
+    with st.container():
+        st.markdown("### 🔧 Current Server Status")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if server_status["google_connected"]:
+                st.success(f"🔍 Google Search: {server_status['tool_breakdown']['google']} tools")
+            else:
+                st.error("🔍 Google Search: Not connected")
+        
+        with col2:
+            if server_status["perplexity_connected"]:
+                st.success(f"🔮 Perplexity AI: {server_status['tool_breakdown']['perplexity']} tools")
+            else:
+                st.error("🔮 Perplexity AI: Not connected")
+        
+        with col3:
+            if server_status["company_tagging_connected"]:
+                st.success(f"📊 Company Tagging: {server_status['tool_breakdown']['company_tagging']} tools")
+            else:
+                st.error("📊 Company Tagging: Not connected")
+        
+        # Show research strategy
+        if server_status["total_tools"] > 0:
+            strategies = get_research_strategy_description()
+            with st.expander("📋 Current Research Strategy", expanded=False):
+                for strategy in strategies:
+                    st.write(f"• {strategy}")
+        else:
+            st.warning("⚠️ No MCP servers connected. Please connect in the Connections tab.")
+
+
+def display_company_tagging_requirements():
+    """Display company tagging requirements and status."""
+    is_valid, message = validate_company_tagging_requirements()
+    
+    if is_valid:
+        if "Warning" in message:
+            st.warning(f"⚠️ {message}")
+        else:
+            st.success(f"✅ {message}")
+    else:
+        st.error(f"❌ {message}")
+
+
 def main():
     """Main application function with authentication check."""
     # Check authentication before proceeding
@@ -80,35 +130,37 @@ def main():
         # Main chat interface
         st.header("💬 Chat with AI-Powered Search Agents")
         
-        # Show available search engines
-        col1, col2 = st.columns(2)
-        with col1:
-            google_tools = [tool for tool in st.session_state.get('tools', []) if 
-                          any(keyword in tool.name.lower() for keyword in ['google-search', 'read-webpage']) or 
-                          ('google' in tool.name.lower() and 'perplexity' not in tool.name.lower())]
-            if google_tools:
-                st.success(f"🔍 Google Search: {len(google_tools)} tools available")
-            else:
-                st.warning("🔍 Google Search: Not connected")
+        # Display current server status
+        display_server_status()
         
-        with col2:
-            perplexity_tools = [tool for tool in st.session_state.get('tools', []) if 
-                              any(keyword in tool.name.lower() for keyword in ['perplexity_search_web', 'perplexity_advanced_search']) or 
-                              'perplexity' in tool.name.lower()]
-            if perplexity_tools:
-                st.success(f"🔮 Perplexity AI: {len(perplexity_tools)} tools available")
-            else:
-                st.warning("🔮 Perplexity AI: Not connected")
+        # Special section for company tagging
+        server_status = get_server_connection_status()
+        if server_status["company_tagging_connected"]:
+            with st.expander("📊 Company Tagging Workflow", expanded=False):
+                st.markdown("**Specialized workflow for company categorization:**")
+                st.markdown("- Use phrases like 'tag companies' or 'categorize companies' to activate")
+                st.markdown("- Provides systematic research and taxonomy-based categorization")
+                st.markdown("- Supports multiple company analysis in a single request")
+                
+                display_company_tagging_requirements()
+                
+                # Show example usage
+                st.markdown("**Example usage:**")
+                st.code("""
+Account Name = Microsoft Corporation
+Trading Name = Microsoft
+Domain = microsoft.com
+Event = Cloud and AI Infrastructure
+
+Account Name = Amazon Web Services
+Trading Name = AWS
+Domain = aws.amazon.com
+Event = Cloud and AI Infrastructure
+
+Tag these companies with the appropriate taxonomy categories.
+                """, language="text")
         
-        # Show company tagging capability
-        company_tagging_tools = [tool for tool in st.session_state.get('tools', []) if 'search_show_categories' in tool.name.lower()]
-        if company_tagging_tools:
-            st.info(f"📝 Company Tagging: Specialized workflow available")
-        else:
-            st.warning("📝 Company Tagging: Not available - connect Company Tagging MCP server")
-        
-        st.markdown("Ask questions to search the web using Google Search and Perplexity AI tools for comprehensive research and analysis.")
-        st.markdown("**Special Feature:** Use phrases like 'tag companies' or 'categorize companies' to activate the specialized company tagging workflow.")
+        st.markdown("Ask questions to search the web using available MCP servers for comprehensive research and analysis.")
         
         messages_container = st.container(border=True, height=600)
         
@@ -161,55 +213,29 @@ def main():
                 with st.spinner("Thinking…", show_time=True):
                     # Check if this is a company tagging request
                     if is_company_tagging_request(user_text):
-                        # Handle company tagging by directly using the systematic process
+                        # Validate company tagging requirements
+                        is_valid, validation_message = validate_company_tagging_requirements()
+                        
+                        if not is_valid:
+                            error_msg = f"❌ Company tagging not available: {validation_message}"
+                            with messages_container.chat_message("assistant"):
+                                st.markdown(error_msg)
+                            _append_message_to_session({"role": "assistant", "content": error_msg})
+                            st.rerun()
+                            return
+                        
+                        # Handle company tagging with server-aware prompt
                         try:
                             if st.session_state.get("agent"):
-                                # Extract company data from the user text
-                                company_data = extract_company_data_from_text(user_text)
-                                
-                                # Create the company tagging system prompt directly
-                                company_tagging_prompt = f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
-
-COMPANY DATA TO ANALYZE:
-{company_data}
-
-MANDATORY RESEARCH PROCESS:
-
-1. **Retrieve Complete Taxonomy** (ONCE ONLY):
-   - Use search_show_categories tool without any filters to get all available categories
-
-2. **For EACH Company - Research Phase:**
-   - Choose research name: Domain > Trading Name > Company Name
-   - Use google-search tool: "site:[domain] products services" 
-   - Use perplexity_search_web tool: "[company name] products services technology offerings"
-   - Identify what the company actually sells/offers
-
-3. **Analysis Phase:**
-   - Map company offerings to relevant shows (CAI, DOL, CCSE, BDAIW, DCW)
-   - Match findings to EXACT taxonomy pairs from step 1
-   - Select up to 4 (Industry | Product) pairs per company
-   - Use pairs EXACTLY as they appear - no modifications to spelling, spacing, or characters
-
-4. **Output Requirements:**
-   - Generate ONLY a markdown table with these columns:
-   | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
-   - Do NOT provide any additional text, explanations, or context
-   - Do NOT show research details or tool executions
-   - ONLY the markdown table
-
-CRITICAL RULES:
-- MUST use both google-search AND perplexity_search_web for each company
-- MUST use search_show_categories to get taxonomy before starting
-- Use taxonomy pairs EXACTLY as written
-- Output ONLY the markdown table, nothing else
-
-Begin the systematic analysis now."""
+                                # Use the updated prompt system that adapts to available servers
+                                system_prompt = make_system_prompt()
+                                main_prompt = make_main_prompt(user_text)
                                 
                                 # Create conversation memory for the agent
                                 conversation_memory = get_clean_conversation_memory()
                                 
                                 # Add the company tagging prompt as the user message
-                                conversation_memory.append(HumanMessage(content=company_tagging_prompt))
+                                conversation_memory.append(HumanMessage(content=main_prompt))
                                 
                                 # Run the agent with the specialized prompt
                                 response = run_async(run_agent(st.session_state.agent, conversation_memory))
@@ -249,7 +275,7 @@ Begin the systematic analysis now."""
                                     response_dct = {"role": "assistant", "content": assistant_response}
                                     _append_message_to_session(response_dct)
                                 else:
-                                    error_msg = "❌ Could not generate company tagging results. Please check the company data format and ensure both Google Search and Perplexity tools are available."
+                                    error_msg = "❌ Could not generate company tagging results. Please check the company data format and ensure required tools are available."
                                     with messages_container.chat_message("assistant"):
                                         st.markdown(error_msg)
                                     _append_message_to_session({"role": "assistant", "content": error_msg})
@@ -266,9 +292,10 @@ Begin the systematic analysis now."""
                             _append_message_to_session({"role": "assistant", "content": error_msg})
                     
                     else:
-                        # Handle normal conversation
+                        # Handle normal conversation with server-aware prompts
                         system_prompt = make_system_prompt()
                         main_prompt = make_main_prompt(user_text)
+                        
                         try:
                             # If agent is available, use it
                             if st.session_state.agent:
@@ -364,12 +391,20 @@ Begin the systematic analysis now."""
                                     
                             # Fall back to regular stream response if agent not available
                             else:
-                                available_servers = list(st.session_state.get('servers', {}).keys())
-                                if available_servers:
-                                    server_list = ", ".join(available_servers)
-                                    st.warning(f"⚠️ You are not connected to the MCP servers ({server_list})! Please connect in the Connections tab.")
+                                server_status = get_server_connection_status()
+                                if server_status["total_tools"] > 0:
+                                    connected_servers = []
+                                    if server_status["google_connected"]:
+                                        connected_servers.append("Google Search")
+                                    if server_status["perplexity_connected"]:
+                                        connected_servers.append("Perplexity AI")
+                                    if server_status["company_tagging_connected"]:
+                                        connected_servers.append("Company Tagging")
+                                    
+                                    server_list = ", ".join(connected_servers)
+                                    st.warning(f"⚠️ You are connected to {server_list} but the agent is not initialized! Please reconnect in the Connections tab.")
                                 else:
-                                    st.warning("⚠️ No MCP servers configured! Please check your configuration.")
+                                    st.warning("⚠️ No MCP servers connected! Please connect in the Connections tab.")
                                 
                                 response_stream = get_response_stream(
                                     main_prompt,

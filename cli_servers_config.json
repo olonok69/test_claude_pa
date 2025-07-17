@@ -3,9 +3,9 @@
     "Google Search": {
       "transport": "sse",
       "url": "http://localhost:8002/sse",
-      "timeout": 600,
+      "timeout": 1200,
       "headers": null,
-      "sse_read_timeout": 900
+      "sse_read_timeout": 1800
     },
     "Perplexity Search": {
       "transport": "sse",
