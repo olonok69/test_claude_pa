@@ -153,8 +153,8 @@ def main():
             # Navigation section (only shown when authenticated)
             st.title("🌾 Navigation")
 
-            # Supply & Demand Section
-            with st.expander("📊 Supply & Demand", expanded=True):
+            # Wheat Supply & Demand Section
+            with st.expander("🌾 Wheat Supply & Demand", expanded=True):
                 if st.button("🌾 Production", use_container_width=True):
                     navigate_to_page("pages/1_wheat_production.py")
                 if st.button("📦 Exports", use_container_width=True):
@@ -171,6 +171,18 @@ def main():
                     navigate_to_page("pages/7_wheat_yield.py")
                 if st.button("🌍 World Demand", use_container_width=True):
                     navigate_to_page("pages/8_wheat_world_demand.py")
+
+            # Corn Supply & Demand Section
+            with st.expander("🌽 Corn Supply & Demand", expanded=False):
+                if st.button("🌽 Production", use_container_width=True):
+                    navigate_to_page("pages/10_corn_production.py")
+                st.info("📦 Exports - Coming Soon")
+                st.info("📥 Imports - Coming Soon")
+                st.info("🏢 Ending Stocks - Coming Soon")
+                st.info("📊 Stock-to-Use Ratio - Coming Soon")
+                st.info("🌽 Acreage - Coming Soon")
+                st.info("🌱 Yield - Coming Soon")
+                st.info("🌍 World Demand - Coming Soon")
 
             # MCP Tools Section
             with st.expander("🤖 AI & MCP Tools", expanded=False):
@@ -202,13 +214,18 @@ def show_authenticated_content():
     st.markdown("### Integrated Wheat Market Analysis & AI Tools")
 
     # Check database status
-    db_exists = os.path.exists("wheat_production.db")
+    wheat_db_exists = os.path.exists("wheat_production.db")
+    corn_db_exists = os.path.exists("corn_production.db")
 
-    if db_exists:
-        st.success("✅ Database is connected and ready")
+    if wheat_db_exists and corn_db_exists:
+        st.success("✅ All databases are connected and ready")
+    elif wheat_db_exists:
+        st.warning("⚠️ Wheat database connected. Corn database not found.")
+    elif corn_db_exists:
+        st.warning("⚠️ Corn database connected. Wheat database not found.")
     else:
-        st.warning(
-            "⚠️ Database not found. Please run `python database_setup.py` to initialize the database."
+        st.error(
+            "⚠️ No databases found. Please run setup scripts to initialize the databases."
         )
 
     # Dashboard overview
@@ -222,7 +239,8 @@ def show_authenticated_content():
         st.markdown(
             """
         ### 📊 Supply & Demand Analysis
-        - **🌾 Production**: Track global wheat production
+        - **🌾 Wheat Production**: Track global wheat production
+        - **🌽 Corn Production**: Track global corn production
         - **📦 Exports**: Monitor export volumes and trends
         - **📥 Imports**: Analyze import patterns
         - **🏢 Stocks**: Ending stocks and reserves
@@ -253,76 +271,98 @@ def show_authenticated_content():
         if st.button("Launch AI Tools", type="primary"):
             st.switch_page("pages/9_mcp_app.py")
 
-    # Key metrics if database exists
-    if db_exists:
+    # Key metrics if databases exist
+    if wheat_db_exists or corn_db_exists:
         st.markdown("---")
         st.markdown("## 📈 Key Metrics")
 
-        from wheat_helpers.database_helper import WheatProductionDB
+        # Wheat metrics
+        if wheat_db_exists:
+            st.markdown("### 🌾 Wheat")
+            from wheat_helpers.database_helper import WheatProductionDB
 
-        db = WheatProductionDB()
+            wheat_db = WheatProductionDB()
 
-        # Get latest data
-        production_data = db.get_all_production_data()
-        export_data = db.get_all_export_data()
-        import_data = db.get_all_import_data()
-        stocks_data = db.get_all_stocks_data()
+            # Get latest wheat data
+            wheat_production_data = wheat_db.get_all_production_data()
+            wheat_export_data = wheat_db.get_all_export_data()
+            wheat_import_data = wheat_db.get_all_import_data()
+            wheat_stocks_data = wheat_db.get_all_stocks_data()
 
-        # Get world demand data
-        try:
-            demand_data = db.get_all_world_demand_data()
-        except:
-            # If the method doesn't exist yet or table doesn't exist
-            demand_data = {}
+            # Get wheat world demand data
+            try:
+                wheat_demand_data = wheat_db.get_all_world_demand_data()
+            except:
+                wheat_demand_data = {}
 
-        # Create two rows of metrics
-        # First row
-        col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-            if production_data and "WORLD" in production_data:
-                world_prod = production_data["WORLD"].get("2024/2025", 0)
-                st.metric("Global Production", f"{world_prod:.1f} Mt")
-
-        with col2:
-            if export_data and "TOTAL MAJOR EXPORTERS" in export_data:
-                total_exports = export_data["TOTAL MAJOR EXPORTERS"].get("2024/2025", 0)
-                st.metric("Major Exports", f"{total_exports:.1f} Mt")
-
-        with col3:
-            if import_data and "TOTAL MAJOR IMPORTERS" in import_data:
-                total_imports = import_data["TOTAL MAJOR IMPORTERS"].get("2024/2025", 0)
-                st.metric("Major Imports", f"{total_imports:.1f} Mt")
-
-        with col4:
-            if stocks_data and "WORLD" in stocks_data:
-                world_stocks = stocks_data["WORLD"].get("2024/2025", 0)
-                st.metric("Global Stocks", f"{world_stocks:.1f} Mt")
-
-        # Second row for demand metrics
-        if demand_data:
-            st.markdown("### 🌍 Demand Metrics")
+            # Create wheat metrics row
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
-                if "Total Consumption" in demand_data:
-                    total_demand = demand_data["Total Consumption"].get("2024/2025", 0)
-                    st.metric("Global Demand", f"{total_demand:.1f} Mt")
+                if wheat_production_data and "WORLD" in wheat_production_data:
+                    world_prod = wheat_production_data["WORLD"].get("2024/2025", 0)
+                    st.metric("Global Production", f"{world_prod:.1f} Mt")
 
             with col2:
-                if "Food" in demand_data:
-                    food_demand = demand_data["Food"].get("2024/2025", 0)
-                    st.metric("Food Demand", f"{food_demand:.1f} Mt")
+                if wheat_export_data and "TOTAL MAJOR EXPORTERS" in wheat_export_data:
+                    total_exports = wheat_export_data["TOTAL MAJOR EXPORTERS"].get(
+                        "2024/2025", 0
+                    )
+                    st.metric("Major Exports", f"{total_exports:.1f} Mt")
 
             with col3:
-                if "Feed" in demand_data:
-                    feed_demand = demand_data["Feed"].get("2024/2025", 0)
-                    st.metric("Feed Demand", f"{feed_demand:.1f} Mt")
+                if wheat_import_data and "TOTAL MAJOR IMPORTERS" in wheat_import_data:
+                    total_imports = wheat_import_data["TOTAL MAJOR IMPORTERS"].get(
+                        "2024/2025", 0
+                    )
+                    st.metric("Major Imports", f"{total_imports:.1f} Mt")
 
             with col4:
-                if "Industrial" in demand_data:
-                    industrial_demand = demand_data["Industrial"].get("2024/2025", 0)
-                    st.metric("Industrial Use", f"{industrial_demand:.1f} Mt")
+                if wheat_stocks_data and "WORLD" in wheat_stocks_data:
+                    world_stocks = wheat_stocks_data["WORLD"].get("2024/2025", 0)
+                    st.metric("Global Stocks", f"{world_stocks:.1f} Mt")
+
+        # Corn metrics
+        if corn_db_exists:
+            st.markdown("### 🌽 Corn")
+            from corn_helpers.database_helper import CornProductionDB
+
+            corn_db = CornProductionDB()
+
+            # Get latest corn data
+            corn_production_data = corn_db.get_all_production_data()
+            corn_export_data = corn_db.get_all_export_data()
+            corn_import_data = corn_db.get_all_import_data()
+            corn_stocks_data = corn_db.get_all_stocks_data()
+
+            # Get corn world demand data
+            try:
+                corn_demand_data = corn_db.get_all_world_demand_data()
+            except:
+                corn_demand_data = {}
+
+            # Create corn metrics row
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                if corn_production_data and "WORLD" in corn_production_data:
+                    world_prod = corn_production_data["WORLD"].get("2024/2025", 0)
+                    st.metric("Global Production", f"{world_prod:.1f} Mt")
+
+            with col2:
+                if corn_export_data and "WORLD" in corn_export_data:
+                    total_exports = corn_export_data["WORLD"].get("2024/2025", 0)
+                    st.metric("World Exports", f"{total_exports:.1f} Mt")
+
+            with col3:
+                if corn_import_data and "World" in corn_import_data:
+                    total_imports = corn_import_data["World"].get("2024/2025", 0)
+                    st.metric("World Imports", f"{total_imports:.1f} Mt")
+
+            with col4:
+                if corn_stocks_data and "WORLD" in corn_stocks_data:
+                    world_stocks = corn_stocks_data["WORLD"].get("2024/2025", 0)
+                    st.metric("Global Stocks", f"{world_stocks:.1f} Mt")
 
 
 def show_unauthenticated_content():

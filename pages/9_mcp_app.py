@@ -98,26 +98,42 @@ with st.sidebar:
     # Quick Navigation to Wheat pages
     st.markdown("### 🌾 Wheat Analysis")
 
-    with st.expander("📊 Supply & Demand", expanded=False):
+    with st.expander("📊 Wheat Supply & Demand", expanded=False):
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🌾 Production", use_container_width=True):
+            if st.button("🌾 Production", use_container_width=True, key="wheat_prod"):
                 st.switch_page("pages/1_wheat_production.py")
-            if st.button("📥 Imports", use_container_width=True):
+            if st.button("📥 Imports", use_container_width=True, key="wheat_imp"):
                 st.switch_page("pages/3_wheat_imports.py")
-            if st.button("📊 S/U Ratio", use_container_width=True):
+            if st.button("📊 S/U Ratio", use_container_width=True, key="wheat_su"):
                 st.switch_page("pages/5_stock_to_use_ratio.py")
-            if st.button("🌱 Yield", use_container_width=True):
+            if st.button("🌱 Yield", use_container_width=True, key="wheat_yield"):
                 st.switch_page("pages/7_wheat_yield.py")
         with col2:
-            if st.button("📦 Exports", use_container_width=True):
+            if st.button("📦 Exports", use_container_width=True, key="wheat_exp"):
                 st.switch_page("pages/2_wheat_exports.py")
-            if st.button("🏢 Stocks", use_container_width=True):
+            if st.button("🏢 Stocks", use_container_width=True, key="wheat_stock"):
                 st.switch_page("pages/4_wheat_stocks.py")
-            if st.button("🌾 Acreage", use_container_width=True):
+            if st.button("🌾 Acreage", use_container_width=True, key="wheat_acre"):
                 st.switch_page("pages/6_wheat_acreage.py")
-            if st.button("🌍 World Demand", use_container_width=True):
+            if st.button("🌍 World Demand", use_container_width=True, key="wheat_dem"):
                 st.switch_page("pages/8_wheat_world_demand.py")
+
+    st.markdown("---")
+
+    # Corn pages
+    st.markdown("### 🌽 Corn Analysis")
+
+    with st.expander("📊 Corn Supply & Demand", expanded=False):
+        if st.button("🌽 Production", use_container_width=True, key="corn_prod"):
+            st.switch_page("pages/10_corn_production.py")
+        st.info("📦 Exports - Coming Soon")
+        st.info("📥 Imports - Coming Soon")
+        st.info("🏢 Stocks - Coming Soon")
+        st.info("📊 S/U Ratio - Coming Soon")
+        st.info("🌽 Acreage - Coming Soon")
+        st.info("🌱 Yield - Coming Soon")
+        st.info("🌍 World Demand - Coming Soon")
 
     st.markdown("---")
 
