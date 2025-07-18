@@ -23,3 +23,11 @@ from .neo4j_utils import (
     create_constraints,
 )
 from .summary_utils import generate_and_save_summary
+
+# Make vet_specific_functions available but don't import it automatically
+# It will be imported when needed by the pipeline
+try:
+    from . import vet_specific_functions
+except ImportError:
+    # vet_specific_functions is optional
+    pass

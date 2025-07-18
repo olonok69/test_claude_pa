@@ -21,7 +21,27 @@ def run_registration_processing(config):
     Returns:
         RegistrationProcessor instance
     """
+    logger = logging.getLogger(__name__)
+    
+    # Check if this is a veterinary event and apply vet-specific functions
+    event_config = config.get("event", {})
+    main_event_name = event_config.get("main_event_name", "").lower()
+    
     reg_processor = RegistrationProcessor(config)
+    
+    # Apply event-specific enhancements
+    if main_event_name in ["bva", "veterinary", "vet"]:
+        try:
+            from utils import vet_specific_functions
+            vet_specific_functions.add_vet_specific_methods(reg_processor)
+            logger.info("Applied veterinary-specific processing functions")
+        except ImportError as e:
+            logger.warning(f"Could not load vet-specific functions: {e}")
+        except Exception as e:
+            logger.warning(f"Error applying vet-specific functions: {e}")
+    else:
+        logger.info(f"No event-specific functions applied for event: {main_event_name}")
+    
     reg_processor.process()
     return reg_processor
 

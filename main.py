@@ -45,6 +45,9 @@ if __name__ == "__main__":
     if not os.path.exists(args.config):
         print(f"Error: Configuration file '{args.config}' not found.")
         print("Please create a configuration file or specify a valid path with --config")
+        print("\nExample usage:")
+        print("  python main.py --config config/config_vet.yaml")
+        print("  python main.py --config config/config_tech.yaml")
         exit(1)
 
     # Set up logging first to load config
