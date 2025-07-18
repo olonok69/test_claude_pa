@@ -10,18 +10,32 @@ import json
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from wheat_helpers.database_helper import WheatProductionDB
-from wheat_helpers.common_functions import (
+from corn_helpers.database_helper import CornProductionDB
+from corn_helpers.common_functions import (
     format_change,
     create_status_indicators,
     create_change_visualization,
     style_change_column,
 )
 
+
+def style_percentage_column(val):
+    """Style function for percentage columns"""
+    if pd.isna(val) or val == "-" or val == "":
+        return ""
+    try:
+        # Extract numeric value
+        if isinstance(val, str) and "%" in val:
+            return "color: #1f77b4; font-weight: normal"
+        return ""
+    except:
+        return ""
+
+
 # Page configuration
 st.set_page_config(
-    page_title="Wheat Yield Dashboard",
-    page_icon="🌱",
+    page_title="Corn Acreage Dashboard",
+    page_icon="🌽",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -56,7 +70,7 @@ if not st.session_state.get("authentication_status"):
         st.switch_page("app.py")
     st.stop()
 
-# Define allowed countries (exactly as requested)
+# Define allowed countries (based on create_corn_database.py)
 ALLOWED_COUNTRIES = [
     "WORLD",
     "China",
@@ -99,26 +113,25 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Quick Navigation
-    st.markdown("### 🌾 Quick Navigation")
+    # Quick Navigation - Corn
+    st.markdown("### 🌽 Corn - Quick Navigation")
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🌾 Production", use_container_width=True):
-            st.switch_page("pages/1_wheat_production.py")
+        if st.button("🌽 Production", use_container_width=True):
+            st.switch_page("pages/10_corn_production.py")
         if st.button("📥 Imports", use_container_width=True):
-            st.switch_page("pages/3_wheat_imports.py")
-        if st.button("🌿 Acreage", use_container_width=True):
-            st.switch_page("pages/6_wheat_acreage.py")
-        if st.button("🌍 World Demand", use_container_width=True):
-            st.switch_page("pages/8_wheat_world_demand.py")
+            st.switch_page("pages/12_corn_imports.py")
+        if st.button("🏢 Stocks", use_container_width=True):
+            st.switch_page("pages/13_corn_stocks.py")
+        if st.button("🌱 Yield", use_container_width=True):
+            st.switch_page("pages/16_corn_yield.py")
     with col2:
         if st.button("📦 Exports", use_container_width=True):
-            st.switch_page("pages/2_wheat_exports.py")
-        if st.button("🏢 Stocks", use_container_width=True):
-            st.switch_page("pages/4_wheat_stocks.py")
+            st.switch_page("pages/11_corn_exports.py")
         if st.button("📊 S/U Ratio", use_container_width=True):
-            st.switch_page("pages/5_stock_to_use_ratio.py")
+            st.switch_page("pages/14_corn_stock_to_use_ratio.py")
+        st.info("🌍 World Demand - Coming Soon")
 
     st.markdown("---")
 
@@ -128,7 +141,7 @@ with st.sidebar:
         st.switch_page("pages/9_mcp_app.py")
 
     st.markdown("---")
-    st.markdown("### 🌱 Yield Dashboard")
+    st.markdown("### 🌽 Acreage Dashboard")
 
     # Add current date in sidebar
     st.markdown("---")
@@ -139,52 +152,52 @@ with st.sidebar:
 @st.cache_resource
 def get_database():
     """Initialize and return database instance"""
-    if not os.path.exists("wheat_production.db"):
+    if not os.path.exists("corn_production.db"):
         st.error(
-            "❌ Database not found. Please run 'python database_setup.py' first to create the database."
+            "❌ Database not found. Please run 'python create_corn_database.py' first to create the database."
         )
         return None
-    return WheatProductionDB()
+    return CornProductionDB()
 
 
-# Load yield data from database with filtering
+# Load acreage data from database with filtering
 @st.cache_data
-def load_yield_data():
-    """Load yield data from database"""
+def load_acreage_data():
+    """Load acreage data from database"""
     db = get_database()
     if not db:
         return None, None, None
 
     try:
-        # Get all yield data
-        all_yield_data = db.get_all_yield_data()
+        # Get all acreage data
+        all_acreage_data = db.get_all_acreage_data()
 
         # Filter to keep only allowed countries
-        yield_data = {
+        acreage_data = {
             country: data
-            for country, data in all_yield_data.items()
+            for country, data in all_acreage_data.items()
             if country in ALLOWED_COUNTRIES
         }
 
         # Get metadata
         metadata = db.get_metadata()
 
-        # Get current year configuration - NOW WITH 2025/2026
+        # Get current year configuration
         current_config = {
             "display_years": metadata.get(
-                "yield_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
+                "acreage_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
             ).split(","),
             "year_status": json.loads(
                 metadata.get(
-                    "yield_year_status",
+                    "acreage_year_status",
                     '{"2022/2023": "actual", "2023/2024": "actual", "2024/2025": "estimate", "2025/2026": "projection"}',
                 )
             ),
         }
 
-        return yield_data, metadata, current_config
+        return acreage_data, metadata, current_config
     except Exception as e:
-        st.error(f"❌ Error loading yield data from database: {e}")
+        st.error(f"❌ Error loading acreage data from database: {e}")
         return None, None, None
 
 
@@ -203,7 +216,7 @@ def can_initialize_year():
         return False, "Database not available"
 
     metadata = db.get_metadata()
-    last_init = metadata.get("yield_last_year_initialization")
+    last_init = metadata.get("acreage_last_year_initialization")
 
     # Check if already initialized this year
     if last_init:
@@ -218,7 +231,7 @@ def can_initialize_year():
             pass
 
     # Get current configuration
-    display_years = metadata.get("yield_display_years", "").split(",")
+    display_years = metadata.get("acreage_display_years", "").split(",")
     if not display_years:
         return False, "No year configuration found"
 
@@ -253,11 +266,11 @@ def initialize_new_year():
         # Get current configuration from metadata
         metadata = db.get_metadata()
         current_display_years = metadata.get(
-            "yield_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
+            "acreage_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
         ).split(",")
 
         # Check what years actually exist in the database
-        cursor.execute("SELECT DISTINCT year FROM wheat_yield ORDER BY year")
+        cursor.execute("SELECT DISTINCT year FROM corn_acreage ORDER BY year")
         all_years = [row[0] for row in cursor.fetchall()]
 
         print(f"Current display years: {current_display_years}")
@@ -290,9 +303,9 @@ def initialize_new_year():
             # Insert data for new year by copying from previous year
             cursor.execute(
                 """
-                INSERT INTO wheat_yield (country, year, yield_value, change_value, change_percentage, yield_category, weather_impact, status)
-                SELECT country, ?, yield_value, 0, 0, yield_category, NULL, 'projection'
-                FROM wheat_yield
+                INSERT INTO corn_acreage (country, year, acreage_value, percentage_world, change_value, yield_per_hectare, status)
+                SELECT country, ?, acreage_value, percentage_world, 0, yield_per_hectare, 'projection'
+                FROM corn_acreage
                 WHERE year = ? AND country IN ({})
             """.format(
                     ",".join(["?"] * len(ALLOWED_COUNTRIES))
@@ -304,43 +317,13 @@ def initialize_new_year():
         for year, status in new_year_status.items():
             cursor.execute(
                 """
-                UPDATE wheat_yield 
+                UPDATE corn_acreage 
                 SET status = ?, updated_at = ?
                 WHERE year = ?
             """,
                 (status, datetime.now().isoformat(), year),
             )
             print(f"Updated {year} status to {status}")
-
-        # Recalculate change values for all display years
-        for i, year in enumerate(new_display_years):
-            if i > 0:
-                prev_year = new_display_years[i - 1]
-                cursor.execute(
-                    """
-                    UPDATE wheat_yield AS w1
-                    SET change_value = w1.yield_value - (
-                        SELECT yield_value FROM wheat_yield w2 
-                        WHERE w2.country = w1.country AND w2.year = ?
-                    ),
-                    change_percentage = CASE 
-                        WHEN (SELECT yield_value FROM wheat_yield w2 WHERE w2.country = w1.country AND w2.year = ?) > 0
-                        THEN ((w1.yield_value - (SELECT yield_value FROM wheat_yield w2 WHERE w2.country = w1.country AND w2.year = ?)) / 
-                              (SELECT yield_value FROM wheat_yield w2 WHERE w2.country = w1.country AND w2.year = ?)) * 100
-                        ELSE 0
-                    END,
-                    updated_at = ?
-                    WHERE year = ?
-                """,
-                    (
-                        prev_year,
-                        prev_year,
-                        prev_year,
-                        prev_year,
-                        datetime.now().isoformat(),
-                        year,
-                    ),
-                )
 
         # Update metadata with new configuration
         cursor.execute(
@@ -349,7 +332,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "yield_display_years",
+                "acreage_display_years",
                 ",".join(new_display_years),
                 datetime.now().isoformat(),
             ),
@@ -361,7 +344,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "yield_year_status",
+                "acreage_year_status",
                 json.dumps(new_year_status),
                 datetime.now().isoformat(),
             ),
@@ -373,7 +356,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "yield_last_year_initialization",
+                "acreage_last_year_initialization",
                 datetime.now().isoformat(),
                 datetime.now().isoformat(),
             ),
@@ -404,19 +387,19 @@ def initialize_new_year():
 # Initialize session state
 def initialize_session_state():
     """Initialize session state with database data"""
-    if "yield_data_loaded" not in st.session_state:
-        yield_data, metadata, current_config = load_yield_data()
+    if "corn_acreage_data_loaded" not in st.session_state:
+        acreage_data, metadata, current_config = load_acreage_data()
 
-        if yield_data and metadata:
-            st.session_state.yield_data = yield_data
-            st.session_state.yield_metadata = metadata
-            st.session_state.yield_current_config = current_config
-            st.session_state.yield_data_loaded = True
+        if acreage_data and metadata:
+            st.session_state.corn_acreage_data = acreage_data
+            st.session_state.corn_acreage_metadata = metadata
+            st.session_state.corn_acreage_current_config = current_config
+            st.session_state.corn_acreage_data_loaded = True
         else:
             # Fallback to empty data
-            st.session_state.yield_data = {}
-            st.session_state.yield_metadata = {}
-            st.session_state.yield_current_config = {
+            st.session_state.corn_acreage_data = {}
+            st.session_state.corn_acreage_metadata = {}
+            st.session_state.corn_acreage_current_config = {
                 "display_years": ["2022/2023", "2023/2024", "2024/2025", "2025/2026"],
                 "year_status": {
                     "2022/2023": "actual",
@@ -425,18 +408,18 @@ def initialize_session_state():
                     "2025/2026": "projection",
                 },
             }
-            st.session_state.yield_data_loaded = False
+            st.session_state.corn_acreage_data_loaded = False
 
 
 # Initialize session state
 initialize_session_state()
 
 # Title and header
-st.title("🌱 Wheat Yield Dashboard")
-st.markdown("### Global Wheat Productivity Analysis")
+st.title("🌽 Corn Acreage Dashboard")
+st.markdown("### Global Corn Area Harvested Analysis")
 
 # Database status indicator
-if st.session_state.yield_data_loaded:
+if st.session_state.corn_acreage_data_loaded:
     st.sidebar.success("🗄️ Connected to Database")
 else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
@@ -447,13 +430,13 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
         "📈 Data Overview",
         "✏️ Edit Projections",
         "📊 Visualizations",
-        "🌍 Regional Analysis",
+        "🌱 Yield Analysis",
         "💾 Data Export",
     ]
 )
 
 with tab1:
-    st.header("Global Wheat Yields")
+    st.header("Global Corn Acreage (Area Harvested)")
 
     # Year initialization section
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -479,12 +462,12 @@ with tab1:
             st.rerun()
 
     # Display dynamic status indicators based on current configuration
-    if "yield_current_config" in st.session_state:
+    if "corn_acreage_current_config" in st.session_state:
         st.markdown("### Status Information")
         status_cols = st.columns(4)
 
-        display_years = st.session_state.yield_current_config["display_years"]
-        year_status = st.session_state.yield_current_config["year_status"]
+        display_years = st.session_state.corn_acreage_current_config["display_years"]
+        year_status = st.session_state.corn_acreage_current_config["year_status"]
 
         for i, year in enumerate(display_years):
             if i < len(status_cols):
@@ -502,25 +485,35 @@ with tab1:
     # Key insights
     st.info(
         """
-    **Yield** (tonnes per hectare) measures wheat productivity and farming efficiency.
-    - Key driver of production along with acreage
-    - Influenced by: weather, technology, inputs, management practices
-    - Global average: ~3.5 t/ha with significant regional variation
+    **Acreage (Area Harvested)** represents the total land area from which corn is harvested.
+    - Measured in Million Hectares (Mha)
+    - Key driver of production along with yield
+    - Influenced by: crop prices, weather, government policies, competing crops
     """
     )
 
     # Create enhanced table
-    st.markdown("### Yield Data (tonnes per hectare)")
+    st.markdown("### Acreage Data (Million Hectares)")
 
     # Get display years from configuration
-    display_years = st.session_state.yield_current_config.get(
+    display_years = st.session_state.corn_acreage_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
-    # Create the data table with proper formatting
+    # Create the data table with proper formatting and change calculations
     table_data = []
 
-    for country, data in st.session_state.yield_data.items():
+    # First, get WORLD total for the first year to calculate percentages
+    world_total_first_year = None
+    if (
+        "WORLD" in st.session_state.corn_acreage_data
+        and display_years[0] in st.session_state.corn_acreage_data["WORLD"]
+    ):
+        world_total_first_year = st.session_state.corn_acreage_data["WORLD"][
+            display_years[0]
+        ]
+
+    for country, data in st.session_state.corn_acreage_data.items():
         if country not in ALLOWED_COUNTRIES:
             continue
 
@@ -531,14 +524,33 @@ with tab1:
             if year in data:
                 row[year] = f"{data[year]:.2f}"
 
-                # Calculate change from previous year (except for first year)
-                if i > 0:
+                if i == 0:
+                    # For first year, show % World instead of Change
+                    if (
+                        country != "WORLD"
+                        and world_total_first_year
+                        and world_total_first_year > 0
+                    ):
+                        percentage = (data[year] / world_total_first_year) * 100
+                        row["% World"] = f"{percentage:.1f}%"
+                    else:
+                        row["% World"] = "-"
+                else:
+                    # For other years, calculate change from previous year
                     prev_year = display_years[i - 1]
                     if prev_year in data:
                         change = data[year] - data[prev_year]
                         row[f"Change{' ' * i}"] = format_change(change)
                     else:
                         row[f"Change{' ' * i}"] = "-"
+
+        # Add yield for latest year
+        latest_year = display_years[-1]
+        yield_key = f"{latest_year}_yield"
+        if yield_key in data:
+            row["Yield (t/ha)"] = f"{data[yield_key]:.2f}"
+        else:
+            row["Yield (t/ha)"] = "-"
 
         table_data.append(row)
 
@@ -549,10 +561,18 @@ with tab1:
         col for col in df_display.columns if col.strip().startswith("Change")
     ]
 
+    # Apply different styling to % World and Change columns
     styled_df = df_display.style
+
+    # Style change columns
     for col in change_columns:
         styled_df = styled_df.map(style_change_column, subset=[col])
 
+    # Style % World column if it exists
+    if "% World" in df_display.columns:
+        styled_df = styled_df.map(style_percentage_column, subset=["% World"])
+
+    # Apply general styling
     styled_df = styled_df.set_properties(**{"text-align": "center"}).set_properties(
         **{"text-align": "left"}, subset=["Country"]
     )
@@ -569,101 +589,110 @@ with tab1:
 
     with col1:
         if (
-            "WORLD" in st.session_state.yield_data
-            and latest_year in st.session_state.yield_data["WORLD"]
+            "WORLD" in st.session_state.corn_acreage_data
+            and latest_year in st.session_state.corn_acreage_data["WORLD"]
         ):
-            world_yield = st.session_state.yield_data["WORLD"][latest_year]
-            st.metric(f"Global Avg Yield {latest_year}", f"{world_yield:.2f} t/ha")
+            world_latest = st.session_state.corn_acreage_data["WORLD"][latest_year]
+            st.metric(f"Global Acreage {latest_year}", f"{world_latest:.1f} Mha")
 
     with col2:
         if (
-            "WORLD" in st.session_state.yield_data
-            and latest_year in st.session_state.yield_data["WORLD"]
-            and prev_year in st.session_state.yield_data["WORLD"]
+            "WORLD" in st.session_state.corn_acreage_data
+            and latest_year in st.session_state.corn_acreage_data["WORLD"]
+            and prev_year in st.session_state.corn_acreage_data["WORLD"]
         ):
             world_change = (
-                st.session_state.yield_data["WORLD"][latest_year]
-                - st.session_state.yield_data["WORLD"][prev_year]
+                st.session_state.corn_acreage_data["WORLD"][latest_year]
+                - st.session_state.corn_acreage_data["WORLD"][prev_year]
             )
-            st.metric("Change from Previous Year", f"{world_change:+.2f} t/ha")
+            st.metric("Change from Previous Year", f"{world_change:+.1f} Mha")
 
     with col3:
-        # Find highest yield country (excluding WORLD)
+        # Average yield
+        world_yield_key = f"{latest_year}_yield"
+        if (
+            "WORLD" in st.session_state.corn_acreage_data
+            and world_yield_key in st.session_state.corn_acreage_data["WORLD"]
+        ):
+            world_yield = st.session_state.corn_acreage_data["WORLD"][world_yield_key]
+            st.metric("Global Avg Yield", f"{world_yield:.2f} t/ha")
+
+    with col4:
+        # Top country by acreage (excluding WORLD)
         countries_only = {
             k: v
-            for k, v in st.session_state.yield_data.items()
+            for k, v in st.session_state.corn_acreage_data.items()
             if k != "WORLD" and k in ALLOWED_COUNTRIES
         }
         if countries_only and latest_year in next(iter(countries_only.values())):
-            max_country = max(
+            top_country = max(
                 countries_only.items(), key=lambda x: x[1].get(latest_year, 0)
             )
-            st.metric(
-                f"Highest Yield", f"{max_country[0]}: {max_country[1][latest_year]:.2f}"
-            )
-
-    with col4:
-        # Count improving countries
-        improving = sum(
-            1
-            for country, data in countries_only.items()
-            if latest_year in data
-            and prev_year in data
-            and data[latest_year] > data[prev_year]
-        )
-        st.metric("Countries Improving", improving)
+            st.metric(f"Largest Area", f"{top_country[0]}")
 
 with tab2:
     # Get the projection year (last year in display_years)
-    display_years = st.session_state.yield_current_config.get(
+    display_years = st.session_state.corn_acreage_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
     projection_year = display_years[-1]
     estimate_year = display_years[-2]
 
-    st.header(f"Edit {projection_year} Yield Projections")
+    st.header(f"Edit {projection_year} Acreage Projections")
     st.markdown(
         f"**Note:** Historical data ({', '.join(display_years[:-1])}) is static and cannot be modified."
     )
 
     # Create form for editing projections
-    with st.form("yield_projection_form"):
-        st.markdown(f"### Update Yield Projections for {projection_year}")
+    with st.form("corn_acreage_projection_form"):
+        st.markdown(f"### Update Acreage Projections for {projection_year}")
 
         # Create input fields for each country
         updated_values = {}
+        updated_yields = {}
 
         # Filter countries to allowed list only (excluding WORLD for editing)
         filtered_countries = [
             c
-            for c in st.session_state.yield_data.keys()
+            for c in st.session_state.corn_acreage_data.keys()
             if c in ALLOWED_COUNTRIES and c != "WORLD"
         ]
 
         for country in filtered_countries:
-            if projection_year not in st.session_state.yield_data[country]:
+            if projection_year not in st.session_state.corn_acreage_data[country]:
                 continue
 
-            current_value = st.session_state.yield_data[country][projection_year]
+            current_value = st.session_state.corn_acreage_data[country][projection_year]
+            yield_key = f"{projection_year}_yield"
+            current_yield = st.session_state.corn_acreage_data[country].get(
+                yield_key, 0
+            )
+
+            # Calculate change from estimate year
+            estimate_value = st.session_state.corn_acreage_data[country].get(
+                estimate_year, 0
+            )
+            current_change = current_value - estimate_value if estimate_value else 0
 
             # Show historical trend
             historical_values = []
             for year in display_years[:-1]:
-                if year in st.session_state.yield_data[country]:
-                    historical_values.append(st.session_state.yield_data[country][year])
+                if year in st.session_state.corn_acreage_data[country]:
+                    historical_values.append(
+                        st.session_state.corn_acreage_data[country][year]
+                    )
 
             st.subheader(f"{country}")
             col1, col2, col3 = st.columns([2, 1, 1])
 
             with col1:
                 updated_values[country] = st.number_input(
-                    f"Yield (t/ha)",
+                    f"Acreage (Mha)",
                     value=float(current_value),
                     min_value=0.0,
-                    max_value=10.0,
-                    step=0.01,
+                    step=0.1,
                     format="%.2f",
-                    key=f"yield_{country}",
+                    key=f"corn_acreage_{country}",
                     help=(
                         f"Historical: {' → '.join([f'{v:.2f}' for v in historical_values])}"
                         if historical_values
@@ -672,12 +701,21 @@ with tab2:
                 )
 
             with col2:
+                updated_yields[country] = st.number_input(
+                    f"Yield (t/ha)",
+                    value=float(current_yield),
+                    min_value=0.0,
+                    max_value=20.0,
+                    step=0.01,
+                    format="%.2f",
+                    key=f"corn_yield_{country}",
+                    help="Tonnes per hectare",
+                )
+
+            with col3:
                 # Display calculated change
-                if estimate_year in st.session_state.yield_data[country]:
-                    calc_change = (
-                        updated_values[country]
-                        - st.session_state.yield_data[country][estimate_year]
-                    )
+                if estimate_value:
+                    calc_change = updated_values[country] - estimate_value
                     if calc_change > 0:
                         st.success(f"Change: +{calc_change:.2f}")
                     elif calc_change < 0:
@@ -685,104 +723,85 @@ with tab2:
                     else:
                         st.info("Change: 0.00")
 
-            with col3:
-                # Show yield category
-                yield_val = updated_values[country]
-                if yield_val >= 7.0:
-                    st.markdown("🟣 **Very High**")
-                elif yield_val >= 5.0:
-                    st.markdown("🟢 **High**")
-                elif yield_val >= 3.0:
-                    st.markdown("🔵 **Medium**")
-                elif yield_val >= 2.0:
-                    st.markdown("🟡 **Low**")
-                else:
-                    st.markdown("🔴 **Very Low**")
-
         # Submit button
-        if st.form_submit_button("Update Yield Projections", type="primary"):
+        if st.form_submit_button("Update Acreage Projections", type="primary"):
             # Update the data
             db = get_database()
 
             # Update individual countries
             for country, value in updated_values.items():
-                st.session_state.yield_data[country][projection_year] = value
+                st.session_state.corn_acreage_data[country][projection_year] = value
+                st.session_state.corn_acreage_data[country][
+                    f"{projection_year}_yield"
+                ] = updated_yields[country]
 
                 # Calculate change from estimate year
-                if estimate_year in st.session_state.yield_data[country]:
-                    change = value - st.session_state.yield_data[country][estimate_year]
-                    change_pct = (
-                        (change / st.session_state.yield_data[country][estimate_year])
-                        * 100
-                        if st.session_state.yield_data[country][estimate_year] > 0
-                        else 0
+                if estimate_year in st.session_state.corn_acreage_data[country]:
+                    change = (
+                        value
+                        - st.session_state.corn_acreage_data[country][estimate_year]
                     )
                 else:
                     change = 0
-                    change_pct = 0
 
                 # Save to database
                 if db:
-                    db.update_yield_value(
+                    db.update_acreage_value(
                         country,
                         projection_year,
                         value,
                         change,
-                        change_pct,
-                        None,  # No weather impact
+                        updated_yields[country],
                     )
 
-            # Calculate and update WORLD average
-            world_avg = sum(updated_values.values()) / len(updated_values)
+            # Calculate and update WORLD total
+            world_total = sum(updated_values.values())
+            world_yield = (
+                sum(updated_yields.values()) / len(updated_yields)
+                if updated_yields
+                else 0
+            )
 
-            if estimate_year in st.session_state.yield_data.get("WORLD", {}):
+            if estimate_year in st.session_state.corn_acreage_data.get("WORLD", {}):
                 world_change = (
-                    world_avg - st.session_state.yield_data["WORLD"][estimate_year]
-                )
-                world_change_pct = (
-                    (world_change / st.session_state.yield_data["WORLD"][estimate_year])
-                    * 100
-                    if st.session_state.yield_data["WORLD"][estimate_year] > 0
-                    else 0
+                    world_total
+                    - st.session_state.corn_acreage_data["WORLD"][estimate_year]
                 )
             else:
                 world_change = 0
-                world_change_pct = 0
 
-            if "WORLD" not in st.session_state.yield_data:
-                st.session_state.yield_data["WORLD"] = {}
+            if "WORLD" not in st.session_state.corn_acreage_data:
+                st.session_state.corn_acreage_data["WORLD"] = {}
 
-            st.session_state.yield_data["WORLD"][projection_year] = world_avg
+            st.session_state.corn_acreage_data["WORLD"][projection_year] = world_total
+            st.session_state.corn_acreage_data["WORLD"][
+                f"{projection_year}_yield"
+            ] = world_yield
 
             if db:
-                db.update_yield_value(
-                    "WORLD",
-                    projection_year,
-                    world_avg,
-                    world_change,
-                    world_change_pct,
-                    None,
+                db.update_acreage_value(
+                    "WORLD", projection_year, world_total, world_change, world_yield
                 )
 
-            st.success("✅ Yield projections updated successfully!")
+            st.success("✅ Acreage projections updated successfully!")
             if db:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
 with tab3:
-    st.header("Yield Visualizations")
+    st.header("Acreage Visualizations")
 
     # Get display years from configuration
-    display_years = st.session_state.yield_current_config.get(
+    display_years = st.session_state.corn_acreage_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
     # Time series plot
-    st.subheader("Yield Trends Over Time")
+    st.subheader("Acreage Trends Over Time")
 
     # Select countries to display - filtered to allowed countries only
     available_countries = [
-        c for c in st.session_state.yield_data.keys() if c in ALLOWED_COUNTRIES
+        c for c in st.session_state.corn_acreage_data.keys() if c in ALLOWED_COUNTRIES
     ]
 
     countries_to_plot = st.multiselect(
@@ -793,11 +812,10 @@ with tab3:
             for c in [
                 "WORLD",
                 "China",
-                "European Union",
-                "India",
                 "United States",
+                "India",
+                "European Union",
                 "Russia",
-                "Australia",
             ]
             if c in available_countries
         ],
@@ -812,8 +830,8 @@ with tab3:
             years_with_data = []
 
             for year in display_years:
-                if year in st.session_state.yield_data[country]:
-                    values.append(st.session_state.yield_data[country][year])
+                if year in st.session_state.corn_acreage_data[country]:
+                    values.append(st.session_state.corn_acreage_data[country][year])
                     years_with_data.append(year)
 
             if values:
@@ -825,14 +843,14 @@ with tab3:
                         name=country,
                         hovertemplate=f"<b>{country}</b><br>"
                         + "Year: %{x}<br>"
-                        + "Yield: %{y:.2f} t/ha<extra></extra>",
+                        + "Acreage: %{y:.2f} Mha<extra></extra>",
                     )
                 )
 
         fig.update_layout(
-            title="Wheat Yield Trends",
+            title="Corn Acreage Trends",
             xaxis_title="Year",
-            yaxis_title="Yield (tonnes per hectare)",
+            yaxis_title="Area Harvested (Million Hectares)",
             hovermode="x unified",
             height=500,
         )
@@ -842,7 +860,9 @@ with tab3:
             # Find the index where projection starts
             for i, year in enumerate(display_years):
                 if (
-                    st.session_state.yield_current_config["year_status"].get(year)
+                    st.session_state.corn_acreage_current_config["year_status"].get(
+                        year
+                    )
                     == "projection"
                 ):
                     fig.add_vline(
@@ -856,57 +876,53 @@ with tab3:
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # Yield comparison chart
-    st.subheader(f"Yield Comparison by Country ({display_years[-1]})")
+    # Top countries by acreage
+    st.subheader(f"Top Countries by Corn Acreage ({display_years[-1]})")
 
-    # Get yield data for countries (excluding WORLD)
+    # Get top countries (excluding WORLD)
     countries_only = {
         k: v
-        for k, v in st.session_state.yield_data.items()
+        for k, v in st.session_state.corn_acreage_data.items()
         if k != "WORLD" and k in ALLOWED_COUNTRIES
     }
 
     latest_year = display_years[-1]
-    yield_comparison = []
+    top_countries = sorted(
+        countries_only.items(), key=lambda x: x[1].get(latest_year, 0), reverse=True
+    )
 
-    for country, data in countries_only.items():
-        if latest_year in data:
-            yield_comparison.append({"Country": country, "Yield": data[latest_year]})
-
-    if yield_comparison:
-        df_yield = pd.DataFrame(yield_comparison)
-        df_yield = df_yield.sort_values("Yield", ascending=False)
-
-        # Create bar chart with color coding
-        fig_comparison = px.bar(
-            df_yield,
-            x="Country",
-            y="Yield",
-            title=f"Wheat Yields by Country - {latest_year}",
-            color="Yield",
-            color_continuous_scale="Greens",
+    if top_countries:
+        fig_bar = go.Figure(
+            data=[
+                go.Bar(
+                    x=[country for country, _ in top_countries],
+                    y=[data.get(latest_year, 0) for _, data in top_countries],
+                    text=[
+                        f"{data.get(latest_year, 0):.1f}" for _, data in top_countries
+                    ],
+                    textposition="auto",
+                    marker_color="gold",
+                    hovertemplate="<b>%{x}</b><br>"
+                    + "Acreage: %{y:.2f} Mha<br>"
+                    + "<extra></extra>",
+                )
+            ]
         )
 
-        # Add world average line
-        world_yield = st.session_state.yield_data.get("WORLD", {}).get(
-            latest_year, 3.52
-        )
-        fig_comparison.add_hline(
-            y=world_yield,
-            line_dash="dash",
-            line_color="red",
-            annotation_text=f"World Average: {world_yield:.2f} t/ha",
+        fig_bar.update_layout(
+            title=f"Corn Growing Countries by Area - {latest_year}",
+            xaxis_title="Country",
+            yaxis_title="Area Harvested (Million Hectares)",
+            height=400,
         )
 
-        fig_comparison.update_layout(
-            xaxis_title="Country", yaxis_title="Yield (t/ha)", height=400
-        )
-
-        st.plotly_chart(fig_comparison, use_container_width=True)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
     # Change analysis - filtered to allowed countries
     filtered_data = {
-        k: v for k, v in st.session_state.yield_data.items() if k in ALLOWED_COUNTRIES
+        k: v
+        for k, v in st.session_state.corn_acreage_data.items()
+        if k in ALLOWED_COUNTRIES
     }
 
     # Calculate changes for visualization
@@ -915,155 +931,136 @@ with tab3:
             if i > 0 and year in data and display_years[i - 1] in data:
                 data[f"{year}_change"] = data[year] - data[display_years[i - 1]]
 
-    create_change_visualization(filtered_data, "Yield", exclude=["WORLD"])
+    create_change_visualization(filtered_data, "Acreage", exclude=["WORLD"])
 
 with tab4:
-    st.header("Regional Yield Analysis")
+    st.header("Yield Analysis")
+
+    st.markdown(
+        """
+    **Yield** (tonnes per hectare) is a key productivity indicator that combines with acreage to determine production.
+    Higher yields indicate:
+    - Better farming practices
+    - Favorable weather conditions
+    - Improved seed varieties and technology
+    - Better irrigation and inputs
+    """
+    )
 
     # Get display years from configuration
-    display_years = st.session_state.yield_current_config.get(
+    display_years = st.session_state.corn_acreage_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
     latest_year = display_years[-1]
 
-    # Yield gap analysis
-    st.subheader("Yield Gap Analysis")
+    # Yield comparison chart
+    st.subheader(f"Yield Comparison by Country ({latest_year})")
 
-    # Get yield data for all countries except WORLD
-    countries_only = {
-        k: v
-        for k, v in st.session_state.yield_data.items()
-        if k != "WORLD" and k in ALLOWED_COUNTRIES
-    }
-
-    # Create dataframe for analysis
+    # Get yield data
     yield_data = []
-    for country, data in countries_only.items():
-        if latest_year in data:
-            yield_data.append({"Country": country, "Yield": data[latest_year]})
+    for country, data in st.session_state.corn_acreage_data.items():
+        if country in ALLOWED_COUNTRIES and country != "WORLD":
+            yield_key = f"{latest_year}_yield"
+            if yield_key in data and latest_year in data:
+                yield_data.append(
+                    {
+                        "Country": country,
+                        "Yield": data[yield_key],
+                        "Acreage": data[latest_year],
+                    }
+                )
 
     if yield_data:
         df_yield = pd.DataFrame(yield_data)
+        df_yield = df_yield.sort_values("Yield", ascending=False)
 
-        # Calculate yield gaps relative to best performer
-        max_yield = df_yield["Yield"].max()
-        df_yield["Yield_Gap"] = max_yield - df_yield["Yield"]
-        df_yield["Potential_Increase_Pct"] = (
-            df_yield["Yield_Gap"] / df_yield["Yield"] * 100
-        ).round(1)
-
-        # Sort by yield gap
-        df_yield = df_yield.sort_values("Yield_Gap", ascending=False)
-
-        # Create gap analysis chart
-        fig_gap = go.Figure()
-
-        # Add current yield bars
-        fig_gap.add_trace(
-            go.Bar(
-                name="Current Yield",
-                x=df_yield["Country"],
-                y=df_yield["Yield"],
-                marker_color="lightblue",
-            )
+        # Create yield bar chart
+        fig_yield = px.bar(
+            df_yield,
+            x="Country",
+            y="Yield",
+            title=f"Corn Yields by Country - {latest_year}",
+            color="Yield",
+            color_continuous_scale="Oranges",
         )
 
-        # Add potential yield bars
-        fig_gap.add_trace(
-            go.Bar(
-                name="Yield Gap",
-                x=df_yield["Country"],
-                y=df_yield["Yield_Gap"],
-                marker_color="lightcoral",
-            )
-        )
-
-        fig_gap.update_layout(
-            title="Yield Improvement Potential by Country",
-            xaxis_title="Country",
-            yaxis_title="Yield (t/ha)",
-            barmode="stack",
-            height=400,
-        )
-
-        st.plotly_chart(fig_gap, use_container_width=True)
-
-        # Summary metrics
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            avg_gap = df_yield["Yield_Gap"].mean()
-            st.metric("Average Yield Gap", f"{avg_gap:.2f} t/ha")
-
-        with col2:
-            world_yield = st.session_state.yield_data.get("WORLD", {}).get(
-                latest_year, 3.52
-            )
-            countries_below_avg = len(df_yield[df_yield["Yield"] < world_yield])
-            st.metric("Countries Below Average", countries_below_avg)
-
-        with col3:
-            max_gap_country = df_yield.iloc[0]
-            st.metric(
-                "Largest Gap",
-                f"{max_gap_country['Country']}: {max_gap_country['Yield_Gap']:.2f} t/ha",
-            )
-
-    # Yield distribution
-    st.subheader("Yield Distribution Analysis")
-
-    if yield_data:
-        # Create box plot
-        fig_box = go.Figure()
-
-        fig_box.add_trace(
-            go.Box(
-                y=df_yield["Yield"],
-                name="All Countries",
-                boxpoints="all",
-                jitter=0.3,
-                pointpos=-1.8,
-                marker_color="green",
-            )
-        )
-
-        fig_box.update_layout(
-            title=f"Yield Distribution - {latest_year}",
-            yaxis_title="Yield (t/ha)",
-            height=400,
+        fig_yield.update_layout(
+            xaxis_title="Country", yaxis_title="Yield (tonnes per hectare)", height=400
         )
 
         # Add world average line
-        world_yield = st.session_state.yield_data.get("WORLD", {}).get(
-            latest_year, 3.52
+        world_yield_key = f"{latest_year}_yield"
+        world_yield = st.session_state.corn_acreage_data.get("WORLD", {}).get(
+            world_yield_key, 5.97
         )
-        fig_box.add_hline(
+        fig_yield.add_hline(
             y=world_yield,
             line_dash="dash",
             line_color="red",
-            annotation_text=f"World Average: {world_yield:.2f}",
+            annotation_text=f"World Average: {world_yield:.2f} t/ha",
         )
 
-        st.plotly_chart(fig_box, use_container_width=True)
+        st.plotly_chart(fig_yield, use_container_width=True)
 
-        # Statistics table
-        st.markdown("### Statistical Summary")
-        stats_df = pd.DataFrame(
-            {
-                "Metric": ["Mean", "Median", "Std Dev", "Min", "Max"],
-                "Value": [
-                    f"{df_yield['Yield'].mean():.2f} t/ha",
-                    f"{df_yield['Yield'].median():.2f} t/ha",
-                    f"{df_yield['Yield'].std():.2f} t/ha",
-                    f"{df_yield['Yield'].min():.2f} t/ha ({df_yield.loc[df_yield['Yield'].idxmin(), 'Country']})",
-                    f"{df_yield['Yield'].max():.2f} t/ha ({df_yield.loc[df_yield['Yield'].idxmax(), 'Country']})",
-                ],
-            }
+        # Scatter plot: Acreage vs Yield
+        st.subheader("Acreage vs Yield Analysis")
+
+        fig_scatter = px.scatter(
+            df_yield,
+            x="Acreage",
+            y="Yield",
+            text="Country",
+            size="Acreage",
+            title=f"Corn Acreage vs Yield ({latest_year})",
+            labels={"Acreage": "Area Harvested (Mha)", "Yield": "Yield (t/ha)"},
         )
-        st.table(stats_df)
+
+        fig_scatter.update_traces(textposition="top center")
+        fig_scatter.update_layout(height=500)
+
+        # Add quadrant lines
+        fig_scatter.add_hline(y=world_yield, line_dash="dash", line_color="gray")
+        fig_scatter.add_vline(x=15, line_dash="dash", line_color="gray")
+
+        # Add quadrant labels
+        fig_scatter.add_annotation(
+            x=5, y=10, text="High Yield<br>Small Area", showarrow=False
+        )
+        fig_scatter.add_annotation(
+            x=30, y=10, text="High Yield<br>Large Area", showarrow=False
+        )
+        fig_scatter.add_annotation(
+            x=5, y=2, text="Low Yield<br>Small Area", showarrow=False
+        )
+        fig_scatter.add_annotation(
+            x=30, y=2, text="Low Yield<br>Large Area", showarrow=False
+        )
+
+        st.plotly_chart(fig_scatter, use_container_width=True)
+
+        # Yield statistics
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            avg_yield = df_yield["Yield"].mean()
+            st.metric("Average Yield", f"{avg_yield:.2f} t/ha")
+
+        with col2:
+            max_yield_country = df_yield.iloc[0]
+            st.metric(
+                "Highest Yield",
+                f"{max_yield_country['Country']}: {max_yield_country['Yield']:.2f} t/ha",
+            )
+
+        with col3:
+            min_yield_country = df_yield.iloc[-1]
+            st.metric(
+                "Lowest Yield",
+                f"{min_yield_country['Country']}: {min_yield_country['Yield']:.2f} t/ha",
+            )
 
 with tab5:
-    st.header("Yield Data Management")
+    st.header("Acreage Data Management")
 
     # Export options
     col1, col2 = st.columns(2)
@@ -1072,72 +1069,74 @@ with tab5:
         st.subheader("Export Current Data")
 
         # Filter data for export
-        export_yield_data = {
+        export_acreage_data = {
             country: data
-            for country, data in st.session_state.yield_data.items()
+            for country, data in st.session_state.corn_acreage_data.items()
             if country in ALLOWED_COUNTRIES
         }
 
         # Prepare export data
         export_data = {
-            "wheat_yield_data": export_yield_data,
-            "metadata": st.session_state.yield_metadata,
-            "current_config": st.session_state.yield_current_config,
+            "corn_acreage_data": export_acreage_data,
+            "metadata": st.session_state.corn_acreage_metadata,
+            "current_config": st.session_state.corn_acreage_current_config,
             "export_timestamp": datetime.now().isoformat(),
             "data_source": (
-                "database" if st.session_state.yield_data_loaded else "local"
+                "database" if st.session_state.corn_acreage_data_loaded else "local"
             ),
             "user": st.session_state.get("username", "unknown"),
         }
 
         # JSON export
         st.download_button(
-            label="📥 Download Yield Data as JSON",
+            label="📥 Download Acreage Data as JSON",
             data=json.dumps(export_data, indent=2),
-            file_name=f"wheat_yield_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            file_name=f"corn_acreage_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
         )
 
         # CSV export
-        df_export = pd.DataFrame(export_yield_data).T
+        df_export = pd.DataFrame(export_acreage_data).T
         csv_data = df_export.to_csv()
         st.download_button(
-            label="📥 Download Yield Data as CSV",
+            label="📥 Download Acreage Data as CSV",
             data=csv_data,
-            file_name=f"wheat_yield_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"corn_acreage_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
         )
 
     with col2:
         st.subheader("Import Data")
 
-        uploaded_file = st.file_uploader("Upload JSON yield data file", type=["json"])
+        uploaded_file = st.file_uploader("Upload JSON acreage data file", type=["json"])
 
         if uploaded_file is not None:
             try:
                 uploaded_data = json.load(uploaded_file)
 
-                if st.button("Import Yield Data"):
-                    if "wheat_yield_data" in uploaded_data:
+                if st.button("Import Acreage Data"):
+                    if "corn_acreage_data" in uploaded_data:
                         # Filter imported data to allowed countries
                         filtered_data = {
                             country: data
                             for country, data in uploaded_data[
-                                "wheat_yield_data"
+                                "corn_acreage_data"
                             ].items()
                             if country in ALLOWED_COUNTRIES
                         }
-                        st.session_state.yield_data = filtered_data
+                        st.session_state.corn_acreage_data = filtered_data
 
                     if "metadata" in uploaded_data:
-                        st.session_state.yield_metadata = uploaded_data["metadata"]
+                        st.session_state.corn_acreage_metadata = uploaded_data[
+                            "metadata"
+                        ]
 
                     if "current_config" in uploaded_data:
-                        st.session_state.yield_current_config = uploaded_data[
+                        st.session_state.corn_acreage_current_config = uploaded_data[
                             "current_config"
                         ]
 
-                    st.success("Yield data imported successfully!")
+                    st.success("Acreage data imported successfully!")
                     st.rerun()
 
             except json.JSONDecodeError:
@@ -1147,14 +1146,14 @@ with tab5:
 st.markdown("---")
 status_text = (
     "🗄️ Database Connected"
-    if st.session_state.yield_data_loaded
+    if st.session_state.corn_acreage_data_loaded
     else "💾 Local Data Mode"
 )
 user_info = f"👤 {st.session_state.get('name', 'User')}"
 st.markdown(
     f"""
     <div style='text-align: center; color: #666; font-size: 0.8em;'>
-    🌱 Wheat Yield Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
+    🌽 Corn Acreage Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
     </div>
     """,
     unsafe_allow_html=True,

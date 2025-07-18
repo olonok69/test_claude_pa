@@ -214,8 +214,14 @@ def main():
                     key="nav_corn_su",
                 ):
                     navigate_to_page("pages/14_corn_stock_to_use_ratio.py")
-                st.info("🌽 Acreage - Coming Soon")
-                st.info("🌱 Yield - Coming Soon")
+                if st.button(
+                    "🌽 Acreage", use_container_width=True, key="nav_corn_acre"
+                ):
+                    navigate_to_page("pages/15_corn_acreage.py")
+                if st.button(
+                    "🌱 Yield", use_container_width=True, key="nav_corn_yield"
+                ):
+                    navigate_to_page("pages/16_corn_yield.py")
                 st.info("🌍 World Demand - Coming Soon")
 
             # MCP Tools Section
