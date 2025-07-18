@@ -155,28 +155,51 @@ def main():
 
             # Wheat Supply & Demand Section
             with st.expander("🌾 Wheat Supply & Demand", expanded=True):
-                if st.button("🌾 Production", use_container_width=True):
+                if st.button(
+                    "🌾 Production", use_container_width=True, key="nav_wheat_prod"
+                ):
                     navigate_to_page("pages/1_wheat_production.py")
-                if st.button("📦 Exports", use_container_width=True):
+                if st.button(
+                    "📦 Exports", use_container_width=True, key="nav_wheat_exp"
+                ):
                     navigate_to_page("pages/2_wheat_exports.py")
-                if st.button("📥 Imports", use_container_width=True):
+                if st.button(
+                    "📥 Imports", use_container_width=True, key="nav_wheat_imp"
+                ):
                     navigate_to_page("pages/3_wheat_imports.py")
-                if st.button("🏢 Ending Stocks", use_container_width=True):
+                if st.button(
+                    "🏢 Ending Stocks", use_container_width=True, key="nav_wheat_stocks"
+                ):
                     navigate_to_page("pages/4_wheat_stocks.py")
-                if st.button("📊 Stock-to-Use Ratio", use_container_width=True):
+                if st.button(
+                    "📊 Stock-to-Use Ratio",
+                    use_container_width=True,
+                    key="nav_wheat_su",
+                ):
                     navigate_to_page("pages/5_stock_to_use_ratio.py")
-                if st.button("🌾 Acreage", use_container_width=True):
+                if st.button(
+                    "🌾 Acreage", use_container_width=True, key="nav_wheat_acre"
+                ):
                     navigate_to_page("pages/6_wheat_acreage.py")
-                if st.button("🌱 Yield", use_container_width=True):
+                if st.button(
+                    "🌱 Yield", use_container_width=True, key="nav_wheat_yield"
+                ):
                     navigate_to_page("pages/7_wheat_yield.py")
-                if st.button("🌍 World Demand", use_container_width=True):
+                if st.button(
+                    "🌍 World Demand", use_container_width=True, key="nav_wheat_demand"
+                ):
                     navigate_to_page("pages/8_wheat_world_demand.py")
 
             # Corn Supply & Demand Section
             with st.expander("🌽 Corn Supply & Demand", expanded=False):
-                if st.button("🌽 Production", use_container_width=True):
+                if st.button(
+                    "🌽 Production", use_container_width=True, key="nav_corn_prod"
+                ):
                     navigate_to_page("pages/10_corn_production.py")
-                st.info("📦 Exports - Coming Soon")
+                if st.button(
+                    "📦 Exports", use_container_width=True, key="nav_corn_exp"
+                ):
+                    navigate_to_page("pages/11_corn_exports.py")
                 st.info("📥 Imports - Coming Soon")
                 st.info("🏢 Ending Stocks - Coming Soon")
                 st.info("📊 Stock-to-Use Ratio - Coming Soon")
@@ -186,13 +209,25 @@ def main():
 
             # MCP Tools Section
             with st.expander("🤖 AI & MCP Tools", expanded=False):
-                if st.button("💬 MCP Chat Interface", use_container_width=True):
+                if st.button(
+                    "💬 MCP Chat Interface",
+                    use_container_width=True,
+                    key="nav_mcp_chat",
+                ):
                     navigate_to_page("pages/9_mcp_app.py")
-                if st.button("🔥 Firecrawl Tools", use_container_width=True):
+                if st.button(
+                    "🔥 Firecrawl Tools", use_container_width=True, key="nav_firecrawl"
+                ):
                     navigate_to_page("pages/9_mcp_app.py")
-                if st.button("🔍 Google Search", use_container_width=True):
+                if st.button(
+                    "🔍 Google Search", use_container_width=True, key="nav_google"
+                ):
                     navigate_to_page("pages/9_mcp_app.py")
-                if st.button("🔮 Perplexity Search", use_container_width=True):
+                if st.button(
+                    "🔮 Perplexity Search",
+                    use_container_width=True,
+                    key="nav_perplexity",
+                ):
                     navigate_to_page("pages/9_mcp_app.py")
 
             # Future sections
@@ -251,7 +286,9 @@ def show_authenticated_content():
         """
         )
 
-        if st.button("Start Supply & Demand Analysis", type="primary"):
+        if st.button(
+            "Start Supply & Demand Analysis", type="primary", key="start_sd_analysis"
+        ):
             st.switch_page("pages/1_wheat_production.py")
 
     with col2:
@@ -268,7 +305,7 @@ def show_authenticated_content():
         """
         )
 
-        if st.button("Launch AI Tools", type="primary"):
+        if st.button("Launch AI Tools", type="primary", key="launch_ai_tools"):
             st.switch_page("pages/9_mcp_app.py")
 
     # Key metrics if databases exist

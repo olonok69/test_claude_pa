@@ -127,7 +127,8 @@ with st.sidebar:
     with st.expander("📊 Corn Supply & Demand", expanded=False):
         if st.button("🌽 Production", use_container_width=True, key="corn_prod"):
             st.switch_page("pages/10_corn_production.py")
-        st.info("📦 Exports - Coming Soon")
+        if st.button("📦 Exports", use_container_width=True, key="corn_exp"):
+            st.switch_page("pages/11_corn_exports.py")
         st.info("📥 Imports - Coming Soon")
         st.info("🏢 Stocks - Coming Soon")
         st.info("📊 S/U Ratio - Coming Soon")
