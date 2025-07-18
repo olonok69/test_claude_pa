@@ -36,11 +36,11 @@ def compare_key_outputs(old_processor, new_processor):
     
     comparisons = []
     
-    # Define the key dataframes to compare
+    # Define the key dataframes to compare - both processors should have the same variable names
     key_dfs = [
         ('df_reg_demo_this', 'df_reg_demo_this'),
-        ('df_reg_demo_last_bva', 'df_reg_demo_last_main'),
-        ('df_reg_demo_last_lva', 'df_reg_demo_last_secondary')
+        ('df_reg_demo_last_bva', 'df_reg_demo_last_bva'),
+        ('df_reg_demo_last_lva', 'df_reg_demo_last_lva')
     ]
     
     for old_attr, new_attr in key_dfs:
@@ -121,6 +121,85 @@ def compare_key_outputs(old_processor, new_processor):
     return all(comparisons)
 
 
+def compare_output_files(old_output, new_output):
+    """Compare the output files from both processors."""
+    print("\n📁 Comparing Output Files...")
+    
+    # Get all CSV files from both directories
+    old_csvs = {f.name: f for f in old_output.glob("**/*.csv")}
+    new_csvs = {f.name: f for f in new_output.glob("**/*.csv")}
+    
+    # Get all JSON files from both directories
+    old_jsons = {f.name: f for f in old_output.glob("**/*.json")}
+    new_jsons = {f.name: f for f in new_output.glob("**/*.json")}
+    
+    all_identical = True
+    
+    # Compare CSV files
+    all_csv_files = set(old_csvs.keys()) | set(new_csvs.keys())
+    for filename in all_csv_files:
+        if filename not in old_csvs:
+            print(f"❌ Missing in old: {filename}")
+            all_identical = False
+            continue
+        if filename not in new_csvs:
+            print(f"❌ Missing in new: {filename}")
+            all_identical = False
+            continue
+        
+        try:
+            old_df = pd.read_csv(old_csvs[filename])
+            new_df = pd.read_csv(new_csvs[filename])
+            
+            if old_df.shape != new_df.shape:
+                print(f"❌ {filename}: Shape mismatch {old_df.shape} vs {new_df.shape}")
+                all_identical = False
+            elif not old_df.equals(new_df):
+                print(f"❌ {filename}: Content differs")
+                all_identical = False
+            else:
+                print(f"✅ {filename}: IDENTICAL")
+                
+        except Exception as e:
+            print(f"❌ Error comparing {filename}: {e}")
+            all_identical = False
+    
+    # Compare JSON files
+    all_json_files = set(old_jsons.keys()) | set(new_jsons.keys())
+    for filename in all_json_files:
+        if filename not in old_jsons:
+            print(f"❌ Missing in old: {filename}")
+            all_identical = False
+            continue
+        if filename not in new_jsons:
+            print(f"❌ Missing in new: {filename}")
+            all_identical = False
+            continue
+        
+        try:
+            import json
+            with open(old_jsons[filename], 'r') as f:
+                old_data = json.load(f)
+            with open(new_jsons[filename], 'r') as f:
+                new_data = json.load(f)
+            
+            # Compare JSON content
+            old_str = json.dumps(old_data, sort_keys=True)
+            new_str = json.dumps(new_data, sort_keys=True)
+            
+            if old_str == new_str:
+                print(f"✅ {filename}: IDENTICAL")
+            else:
+                print(f"❌ {filename}: Content differs")
+                all_identical = False
+                
+        except Exception as e:
+            print(f"❌ Error comparing {filename}: {e}")
+            all_identical = False
+    
+    return all_identical
+
+
 def run_test():
     """Run the test comparison."""
     print("🚀 Starting Registration Processor Comparison Test")
@@ -158,18 +237,25 @@ def run_test():
             new_processor.process()
             print("✅ New processor completed")
             
-            # Compare outputs
-            identical = compare_key_outputs(old_processor, new_processor)
+            # Compare dataframes
+            dataframes_identical = compare_key_outputs(old_processor, new_processor)
+            
+            # Compare output files
+            files_identical = compare_output_files(old_output, new_output)
             
             # Final result
             print("\n" + "=" * 60)
-            if identical:
-                print("🎉 SUCCESS: All key outputs are IDENTICAL!")
+            if dataframes_identical and files_identical:
+                print("🎉 SUCCESS: All outputs are IDENTICAL!")
                 print("✅ The new processor produces the same results as the old one.")
                 return True
             else:
                 print("❌ FAILURE: Outputs are DIFFERENT!")
                 print("⚠️  The new processor produces different results.")
+                if not dataframes_identical:
+                    print("   - Key dataframes differ")
+                if not files_identical:
+                    print("   - Output files differ")
                 return False
                 
         except Exception as e:

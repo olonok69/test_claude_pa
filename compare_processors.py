@@ -230,9 +230,9 @@ class ProcessorComparison:
                 continue
             
             try:
-                with open(old_jsons[filename], 'r') as f:
+                with open(old_jsons[filename], 'r', encoding='utf-8') as f:
                     old_data = json.load(f)
-                with open(new_jsons[filename], 'r') as f:
+                with open(new_jsons[filename], 'r', encoding='utf-8') as f:
                     new_data = json.load(f)
                 
                 # Compare JSON content
@@ -271,38 +271,31 @@ class ProcessorComparison:
             'df_reg_demo_last_lva'
         ]
         
-        # Map old attribute names to new attribute names
-        attr_mapping = {
-            'df_reg_demo_last_bva': 'df_reg_demo_last_main',
-            'df_reg_demo_last_lva': 'df_reg_demo_last_secondary'
-        }
-        
-        for old_attr in dataframe_attrs:
-            new_attr = attr_mapping.get(old_attr, old_attr)
-            
-            if hasattr(old_processor, old_attr) and hasattr(new_processor, new_attr):
-                old_df = getattr(old_processor, old_attr)
-                new_df = getattr(new_processor, new_attr)
+        # Both processors should have the same attribute names now
+        for attr in dataframe_attrs:
+            if hasattr(old_processor, attr) and hasattr(new_processor, attr):
+                old_df = getattr(old_processor, attr)
+                new_df = getattr(new_processor, attr)
                 
                 if isinstance(old_df, pd.DataFrame) and isinstance(new_df, pd.DataFrame):
-                    attr_comparisons[old_attr] = self.compare_dataframes(
-                        old_df, new_df, f"processor_attr_{old_attr}"
+                    attr_comparisons[attr] = self.compare_dataframes(
+                        old_df, new_df, f"processor_attr_{attr}"
                     )
                 else:
-                    attr_comparisons[old_attr] = {
-                        "name": old_attr,
+                    attr_comparisons[attr] = {
+                        "name": attr,
                         "identical": False,
                         "differences": ["Attribute is not a DataFrame"]
                     }
             else:
                 missing_attrs = []
-                if not hasattr(old_processor, old_attr):
-                    missing_attrs.append(f"old_processor.{old_attr}")
-                if not hasattr(new_processor, new_attr):
-                    missing_attrs.append(f"new_processor.{new_attr}")
+                if not hasattr(old_processor, attr):
+                    missing_attrs.append(f"old_processor.{attr}")
+                if not hasattr(new_processor, attr):
+                    missing_attrs.append(f"new_processor.{attr}")
                 
-                attr_comparisons[old_attr] = {
-                    "name": old_attr,
+                attr_comparisons[attr] = {
+                    "name": attr,
                     "identical": False,
                     "differences": [f"Missing attributes: {missing_attrs}"]
                 }
@@ -346,7 +339,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         # CSV file details
         report += "\n## CSV File Comparisons\n"
         for filename, comp in file_comparisons["csv_files"].items():
-            status = "✅ IDENTICAL" if comp["identical"] else "❌ DIFFERENT"
+            status = "IDENTICAL" if comp["identical"] else "DIFFERENT"
             report += f"\n### {filename} {status}\n"
             report += f"- Old shape: {comp.get('old_shape', 'N/A')}\n"
             report += f"- New shape: {comp.get('new_shape', 'N/A')}\n"
@@ -360,7 +353,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         if file_comparisons["json_files"]:
             report += "\n## JSON File Comparisons\n"
             for filename, comp in file_comparisons["json_files"].items():
-                status = "✅ IDENTICAL" if comp["identical"] else "❌ DIFFERENT"
+                status = "IDENTICAL" if comp["identical"] else "DIFFERENT"
                 report += f"\n### {filename} {status}\n"
                 report += f"- Old size: {comp.get('old_size', 'N/A')}\n"
                 report += f"- New size: {comp.get('new_size', 'N/A')}\n"
@@ -373,7 +366,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         # Processor attribute details
         report += "\n## Processor Attribute Comparisons\n"
         for attr_name, comp in attr_comparisons.items():
-            status = "✅ IDENTICAL" if comp["identical"] else "❌ DIFFERENT"
+            status = "IDENTICAL" if comp["identical"] else "DIFFERENT"
             report += f"\n### {attr_name} {status}\n"
             report += f"- Old shape: {comp.get('old_shape', 'N/A')}\n"
             report += f"- New shape: {comp.get('new_shape', 'N/A')}\n"
@@ -404,12 +397,12 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             # Generate report
             report = self.generate_report(file_comparisons, attr_comparisons)
             
-            # Save report
+            # Save report with UTF-8 encoding
             report_path = self.comparison_dir / f"comparison_report_{self.timestamp}.md"
-            with open(report_path, 'w') as f:
+            with open(report_path, 'w', encoding='utf-8') as f:
                 f.write(report)
             
-            # Save detailed comparison data
+            # Save detailed comparison data with UTF-8 encoding
             comparison_data = {
                 "timestamp": self.timestamp,
                 "file_comparisons": file_comparisons,
@@ -425,8 +418,8 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             }
             
             comparison_data_path = self.comparison_dir / f"comparison_data_{self.timestamp}.json"
-            with open(comparison_data_path, 'w') as f:
-                json.dump(comparison_data, f, indent=2, default=str)
+            with open(comparison_data_path, 'w', encoding='utf-8') as f:
+                json.dump(comparison_data, f, indent=2, default=str, ensure_ascii=False)
             
             # Print summary
             print(f"\n{'='*60}")
@@ -448,17 +441,17 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             )
             
             if all_identical:
-                print("✅ SUCCESS: All outputs are identical!")
+                print("SUCCESS: All outputs are identical!")
                 self.logger.info("Comparison completed successfully - all outputs identical")
             else:
-                print("❌ DIFFERENCES FOUND: Check the report for details")
+                print("DIFFERENCES FOUND: Check the report for details")
                 self.logger.warning("Comparison completed - differences found")
             
             return all_identical
             
         except Exception as e:
             self.logger.error(f"Error during comparison: {str(e)}", exc_info=True)
-            print(f"❌ ERROR: {str(e)}")
+            print(f"ERROR: {str(e)}")
             return False
 
 
@@ -475,10 +468,10 @@ def main():
     success = comparison.run_comparison()
     
     if success:
-        print("\n🎉 Processors produce identical outputs!")
+        print("\nProcessors produce identical outputs!")
         sys.exit(0)
     else:
-        print("\n⚠️  Processors produce different outputs. Check the report for details.")
+        print("\nProcessors produce different outputs. Check the report for details.")
         sys.exit(1)
 
 

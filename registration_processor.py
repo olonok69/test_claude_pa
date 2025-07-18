@@ -72,17 +72,24 @@ class RegistrationProcessor:
         self.config = config
         self.output_dir = config.get("output_dir", "output")
         
-        # Get event configuration
+        # Get event configuration - with backward compatibility
         self.event_config = config.get("event", {})
         
-        # Event identifiers
-        self.main_event_name = self.event_config.get("main_event_name", "main")
-        self.secondary_event_name = self.event_config.get("secondary_event_name", "secondary")
-        
-        # Shows configuration
-        self.shows_this_year = self.event_config.get("shows_this_year", [])
-        self.shows_last_year_main = self.event_config.get("shows_last_year_main", [])
-        self.shows_last_year_secondary = self.event_config.get("shows_last_year_secondary", [])
+        # For backward compatibility, support both old and new config structure
+        if self.event_config:
+            # New config structure
+            self.main_event_name = self.event_config.get("main_event_name", "bva")
+            self.secondary_event_name = self.event_config.get("secondary_event_name", "lva")
+            self.shows_this_year = self.event_config.get("shows_this_year", ["BVA2025"])
+            self.shows_last_year_main = self.event_config.get("shows_last_year_main", [])
+            self.shows_last_year_secondary = self.event_config.get("shows_last_year_secondary", [])
+        else:
+            # Old config structure - hardcoded values for backward compatibility
+            self.main_event_name = "bva"
+            self.secondary_event_name = "lva"
+            self.shows_this_year = config.get("shows_this_year", ["BVA2025"])
+            self.shows_last_year_main = []  # Will be derived from data
+            self.shows_last_year_secondary = []  # Will be derived from data
 
         # Create output directory if it doesn't exist
         os.makedirs(self.output_dir, exist_ok=True)
@@ -99,11 +106,11 @@ class RegistrationProcessor:
         """Load all registration data files based on configuration."""
         loader = DataLoader()
 
-        # Load main event registration data
+        # Load main event registration data (BVA equivalent)
         main_event_reg_file = self.config["input_files"]["main_event_registration"]
         self.main_event_reg_data = loader.load_json(main_event_reg_file)
 
-        # Load secondary event registration data
+        # Load secondary event registration data (LVS equivalent)
         secondary_event_reg_file = self.config["input_files"]["secondary_event_registration"]
         self.secondary_event_reg_data = loader.load_json(secondary_event_reg_file)
 
@@ -116,49 +123,50 @@ class RegistrationProcessor:
         self.secondary_event_demo_data = loader.load_json(secondary_event_demo_file)
 
         # Convert to dataframes
-        self.df_main_event = pd.json_normalize(self.main_event_reg_data)
-        self.df_secondary_event = pd.json_normalize(self.secondary_event_reg_data)
-        self.df_main_event_demo = pd.json_normalize(self.main_event_demo_data)
-        self.df_secondary_event_demo = pd.json_normalize(self.secondary_event_demo_data)
+        self.df_bva = pd.json_normalize(self.main_event_reg_data)  # Keep old naming for compatibility
+        self.df_lvs = pd.json_normalize(self.secondary_event_reg_data)  # Keep old naming for compatibility
+        self.df_bva_demo = pd.json_normalize(self.main_event_demo_data)  # Keep old naming for compatibility
+        self.df_lvs_demo = pd.json_normalize(self.secondary_event_demo_data)  # Keep old naming for compatibility
 
         self.logger.info(
-            f"Loaded {len(self.df_main_event)} {self.main_event_name} registration records and {len(self.df_secondary_event)} {self.secondary_event_name} registration records"
+            f"Loaded {len(self.df_bva)} {self.main_event_name} registration records and {len(self.df_lvs)} {self.secondary_event_name} registration records"
         )
         self.logger.info(
-            f"Loaded {len(self.df_main_event_demo)} {self.main_event_name} demographic records and {len(self.df_secondary_event_demo)} {self.secondary_event_name} demographic records"
+            f"Loaded {len(self.df_bva_demo)} {self.main_event_name} demographic records and {len(self.df_lvs_demo)} {self.secondary_event_name} demographic records"
         )
 
     def save_initial_data(self) -> None:
         """Save the initial raw data to CSV files."""
-        main_event_csv = os.path.join(self.output_dir, "csv", f"Registration_data_{self.main_event_name.lower()}.csv")
-        secondary_event_csv = os.path.join(self.output_dir, "csv", f"Registration_data_{self.secondary_event_name.lower()}.csv")
-        main_event_demo_csv = os.path.join(
-            self.output_dir, "csv", f"Registration_demographicdata_{self.main_event_name.lower()}.csv"
+        # Keep original file names for backward compatibility
+        bva_csv = os.path.join(self.output_dir, "csv", "Registration_data_bva.csv")
+        lvs_csv = os.path.join(self.output_dir, "csv", "Registration_data_lva.csv")
+        bva_demo_csv = os.path.join(
+            self.output_dir, "csv", "Registration_demographicdata_bva.csv"
         )
-        secondary_event_demo_csv = os.path.join(
-            self.output_dir, "csv", f"Registration_demographicdata_{self.secondary_event_name.lower()}.csv"
+        lvs_demo_csv = os.path.join(
+            self.output_dir, "csv", "Registration_demographicdata_lva.csv"
         )
 
-        self.df_main_event.to_csv(main_event_csv, index=False)
-        self.df_secondary_event.to_csv(secondary_event_csv, index=False)
-        self.df_main_event_demo.to_csv(main_event_demo_csv, index=False)
-        self.df_secondary_event_demo.to_csv(secondary_event_demo_csv, index=False)
+        self.df_bva.to_csv(bva_csv, index=False)
+        self.df_lvs.to_csv(lvs_csv, index=False)
+        self.df_bva_demo.to_csv(bva_demo_csv, index=False)
+        self.df_lvs_demo.to_csv(lvs_demo_csv, index=False)
 
         self.logger.info(f"Saved initial data to CSV files in {self.output_dir}/csv/")
 
     def preprocess_data(self) -> None:
         """Preprocess the registration data."""
         # Clean email and name fields - create copies to avoid warnings
-        self.df_main_event = self.df_main_event.dropna(subset=["Email", "Forename", "Surname"]).copy()
-        self.df_secondary_event = self.df_secondary_event.dropna(subset=["Email", "Forename", "Surname"]).copy()
+        self.df_bva = self.df_bva.dropna(subset=["Email", "Forename", "Surname"]).copy()
+        self.df_lvs = self.df_lvs.dropna(subset=["Email", "Forename", "Surname"]).copy()
 
         # Normalize job titles - use loc to avoid SettingWithCopyWarning
-        self.df_main_event.loc[:, "JobTitle"] = self.df_main_event["JobTitle"].str.lower()
-        self.df_main_event.loc[:, "JobTitle"] = self.df_main_event["JobTitle"].fillna("NA")
+        self.df_bva.loc[:, "JobTitle"] = self.df_bva["JobTitle"].str.lower()
+        self.df_bva.loc[:, "JobTitle"] = self.df_bva["JobTitle"].fillna("NA")
 
         # Save unique job titles for reference
         job_titles = pd.DataFrame(
-            data=list(self.df_main_event["JobTitle"].unique()), columns=["JobTitle"]
+            data=list(self.df_bva["JobTitle"].unique()), columns=["JobTitle"]
         )
         job_titles.to_csv(
             os.path.join(self.output_dir, "list_of_professions.csv"), index=False
@@ -166,23 +174,23 @@ class RegistrationProcessor:
 
         # Preprocess demographic data
         # Remove punctuation from QuestionText
-        self.df_main_event_demo.loc[:, "QuestionText"] = self.df_main_event_demo[
+        self.df_bva_demo.loc[:, "QuestionText"] = self.df_bva_demo[
             "QuestionText"
         ].apply(self.remove_punctuation)
-        self.df_secondary_event_demo.loc[:, "QuestionText"] = self.df_secondary_event_demo[
+        self.df_lvs_demo.loc[:, "QuestionText"] = self.df_lvs_demo[
             "QuestionText"
         ].apply(self.remove_punctuation)
 
         # Create backup of AnswerText
-        self.df_main_event_demo.loc[:, "AnswerText_backup"] = self.df_main_event_demo[
+        self.df_bva_demo.loc[:, "AnswerText_backup"] = self.df_bva_demo[
             "AnswerText"
         ].astype(str)
-        self.df_secondary_event_demo.loc[:, "AnswerText_backup"] = self.df_secondary_event_demo[
+        self.df_lvs_demo.loc[:, "AnswerText_backup"] = self.df_lvs_demo[
             "AnswerText"
         ].astype(str)
 
         self.logger.info(
-            f"Preprocessed data - {self.main_event_name}: {len(self.df_main_event)} records, {self.secondary_event_name}: {len(self.df_secondary_event)} records"
+            f"Preprocessed data - {self.main_event_name}: {len(self.df_bva)} records, {self.secondary_event_name}: {len(self.df_lvs)} records"
         )
         self.logger.info(f"Found {len(job_titles)} unique job titles")
 
@@ -225,60 +233,50 @@ class RegistrationProcessor:
         # Create a copy of the DataFrame to avoid SettingWithCopyWarning
         df_copy = df.copy()
 
-        # Initialize the Days_since_registration column with default values
-        df_copy['Days_since_registration'] = 0
-
         # Check if date_column exists in the DataFrame
         if date_column not in df_copy.columns:
             logger.warning(
-                f"Date column '{date_column}' not found in DataFrame. Using default values (0)."
+                f"Date column '{date_column}' not found in DataFrame. Adding dummy values."
             )
+            df_copy.loc[:, "Days_since_registration"] = 0
             return df_copy
 
         # Convert the given date to datetime
-        try:
-            given_date = datetime.strptime(given_date_str, "%Y-%m-%d")
-        except Exception as e:
-            logger.error(f"Error parsing given date '{given_date_str}': {e}")
-            return df_copy
+        given_date = datetime.strptime(given_date_str, "%Y-%m-%d")
 
-        # Process dates
+        # Convert the column to datetime, with error handling
         try:
             # Handle potential NaN values
             mask = df_copy[date_column].notna()
-            valid_dates_count = mask.sum()
-            
-            if valid_dates_count == 0:
+            if not mask.any():
                 logger.warning(
-                    f"No valid dates found in '{date_column}'. Using default values (0)."
+                    f"No valid dates found in '{date_column}'. Adding dummy values."
                 )
+                df_copy.loc[:, "Days_since_registration"] = 0
                 return df_copy
 
-            logger.info(f"Processing {valid_dates_count} valid dates in '{date_column}'")
+            # Initialize Days_since_registration column with default value
+            df_copy.loc[:, "Days_since_registration"] = 0
 
             # For each row with a non-null date, calculate days difference
             for idx in df_copy[mask].index:
                 try:
                     date_val = df_copy.loc[idx, date_column]
-                    
-                    # Convert to datetime if it's not already
+                    # Make sure we have a proper datetime object
                     if not isinstance(date_val, datetime):
                         date_val = pd.to_datetime(date_val, errors="coerce")
 
                     if pd.notna(date_val):
-                        # Calculate days difference
+                        # Calculate days difference directly without using .dt accessor
                         days_diff = (given_date - date_val).days
-                        df_copy.loc[idx, 'Days_since_registration'] = days_diff
-                        
+                        df_copy.loc[idx, "Days_since_registration"] = days_diff
                 except Exception as e:
                     logger.warning(f"Error processing date for row {idx}: {e}")
-                    # Keep default value (0) for this row
 
         except Exception as e:
             logger.error(f"Error calculating date difference: {e}", exc_info=True)
-            # Column already initialized with default values, so we can continue
+            # Keep default values to continue processing
 
-        logger.info(f"Date calculation completed. Column 'Days_since_registration' added with shape {df_copy.shape}")
         return df_copy
 
     @staticmethod
@@ -292,14 +290,9 @@ class RegistrationProcessor:
         Returns:
             String concatenation of lowercase forename, surname and email
         """
-        try:
-            forename = str(row['Forename']).lower() if pd.notna(row['Forename']) else ""
-            surname = str(row['Surname']).lower() if pd.notna(row['Surname']) else ""
-            email = str(row['Email']).lower() if pd.notna(row['Email']) else ""
-            return f"{forename}_{surname}_{email}"
-        except Exception as e:
-            # Return a fallback ID if there's an error
-            return f"error_{str(hash(str(row)))}"
+        return (
+            f"{row['Forename'].lower()}_{row['Surname'].lower()}_{row['Email'].lower()}"
+        )
 
     @staticmethod
     def extract_email_domain(email: str) -> str:
@@ -336,89 +329,67 @@ class RegistrationProcessor:
         )
         return df_copy
 
-    def split_and_process_main_event_data(self) -> None:
-        """Split main event data by year and process it."""
+    def split_and_process_bva_data(self) -> None:
+        """Split BVA data by year and process it."""
         # Define valid badge types
         valid_badge_types = self.config.get(
             "valid_badge_types", ["Delegate", "Delegate - Group"]
         )
 
-        # Split registration data by year
-        self.df_main_event_this_year = self.df_main_event[self.df_main_event.ShowRef.isin(self.shows_this_year)]
-        self.df_main_event_last_year = self.df_main_event[
-            self.df_main_event.ShowRef.isin(self.shows_last_year_main)
-        ]
+        # Split registration data by year - using exact logic from old processor
+        self.df_bva_this_year = self.df_bva[self.df_bva.ShowRef.isin(self.shows_this_year)]
+        self.df_bva_last_year = self.df_bva[~(self.df_bva.ShowRef.isin(self.shows_this_year))]
 
         # Split demographic data by year
-        self.df_main_event_demo_this_year = self.df_main_event_demo[
-            self.df_main_event_demo.showref.isin(self.shows_this_year)
+        self.df_bva_demo_this_year = self.df_bva_demo[
+            self.df_bva_demo.showref.isin(self.shows_this_year)
         ]
-        self.df_main_event_demo_last_year = self.df_main_event_demo[
-            self.df_main_event_demo.showref.isin(self.shows_last_year_main)
-        ]
-
-        # Filter secondary event data (only last year)
-        self.df_secondary_event_last_year = self.df_secondary_event[
-            self.df_secondary_event.ShowRef.isin(self.shows_last_year_secondary)
+        self.df_bva_demo_last_year = self.df_bva_demo[
+            ~(self.df_bva_demo.showref.isin(self.shows_this_year))
         ]
 
+        # Process LVS data (only last year) - using exact logic from old processor
+        self.df_lvs_last_year = self.df_lvs[
+            self.df_lvs["BadgeType"].isin(valid_badge_types)
+        ]
+
         self.logger.info(
-            f"Split {self.main_event_name} data: {len(self.df_main_event_this_year)} records for this year, {len(self.df_main_event_last_year)} records for last year"
+            f"Split {self.main_event_name} data: {len(self.df_bva_this_year)} records for this year, {len(self.df_bva_last_year)} records for last year"
         )
         self.logger.info(
-            f"Split {self.main_event_name} demo data: {len(self.df_main_event_demo_this_year)} records for this year, {len(self.df_main_event_demo_last_year)} records for last year"
-        )
-        self.logger.info(
-            f"Filtered {self.secondary_event_name} data: {len(self.df_secondary_event_last_year)} records for last year"
+            f"Split {self.main_event_name} demo data: {len(self.df_bva_demo_this_year)} records for this year, {len(self.df_bva_demo_last_year)} records for last year"
         )
 
         # Filter by valid badge types
-        self.df_main_event_this_year = self.df_main_event_this_year[
-            self.df_main_event_this_year["BadgeType"].isin(valid_badge_types)
+        self.df_bva_this_year = self.df_bva_this_year[
+            self.df_bva_this_year["BadgeType"].isin(valid_badge_types)
         ]
-        self.df_main_event_last_year = self.df_main_event_last_year[
-            self.df_main_event_last_year["BadgeType"].isin(valid_badge_types)
-        ]
-        self.df_secondary_event_last_year = self.df_secondary_event_last_year[
-            self.df_secondary_event_last_year["BadgeType"].isin(valid_badge_types)
+        self.df_bva_last_year = self.df_bva_last_year[
+            self.df_bva_last_year["BadgeType"].isin(valid_badge_types)
         ]
 
         # Remove duplicates
-        self.df_main_event_this_year = self.df_main_event_this_year.drop_duplicates(
+        self.df_bva_this_year = self.df_bva_this_year.drop_duplicates(
             subset="BadgeId", keep="first"
         )
-        self.df_main_event_last_year = self.df_main_event_last_year.drop_duplicates(
+        self.df_bva_last_year = self.df_bva_last_year.drop_duplicates(
             subset="BadgeId", keep="first"
         )
-        self.df_secondary_event_last_year = self.df_secondary_event_last_year.drop_duplicates(
+        self.df_lvs_last_year = self.df_lvs_last_year.drop_duplicates(
             subset="BadgeId", keep="first"
         )
 
         self.logger.info(
-            f"After filtering and deduplication: {self.main_event_name} this year: {len(self.df_main_event_this_year)}, {self.main_event_name} last year: {len(self.df_main_event_last_year)}, {self.secondary_event_name} last year: {len(self.df_secondary_event_last_year)}"
+            f"After filtering and deduplication: {self.main_event_name} this year: {len(self.df_bva_this_year)}, {self.main_event_name} last year: {len(self.df_bva_last_year)}, {self.secondary_event_name} last year: {len(self.df_lvs_last_year)}"
         )
 
         # Create ID for matching visitors across years
         # Use loc to avoid SettingWithCopyWarning
-        for df_name in ["df_main_event_this_year", "df_main_event_last_year", "df_secondary_event_last_year"]:
+        for df_name in ["df_bva_this_year", "df_bva_last_year", "df_lvs_last_year"]:
             df = getattr(self, df_name)
             df_copy = df.copy()
-            
-            # Create unique ID - handle potential errors
-            try:
-                unique_ids = df_copy.apply(self.create_unique_id, axis=1)
-                df_copy.loc[:, "id_both_years"] = unique_ids
-            except Exception as e:
-                self.logger.error(f"Error creating unique IDs for {df_name}: {e}")
-                # Fallback: create IDs manually
-                df_copy.loc[:, "id_both_years"] = (
-                    df_copy["Forename"].str.lower() + "_" + 
-                    df_copy["Surname"].str.lower() + "_" + 
-                    df_copy["Email"].str.lower()
-                )
-            
-            # Extract email domain
-            df_copy.loc[:, "Email_domain"] = df_copy["Email"].apply(
+            df_copy.loc[:, "id_both_years"] = df.apply(self.create_unique_id, axis=1)
+            df_copy.loc[:, "Email_domain"] = df["Email"].apply(
                 self.extract_email_domain
             )
             setattr(self, df_name, df_copy)
@@ -426,66 +397,67 @@ class RegistrationProcessor:
     def identify_returning_visitors(self) -> None:
         """Identify visitors who attended previous year's events."""
         # Get unique IDs for each year
-        ids_main_event_last_year = set(self.df_main_event_last_year["id_both_years"].unique())
-        ids_main_event_this_year = set(self.df_main_event_this_year["id_both_years"].unique())
-        ids_secondary_event_last_year = set(self.df_secondary_event_last_year["id_both_years"].unique())
+        ids_bva_last_year = set(self.df_bva_last_year["id_both_years"].unique())
+        ids_bva_this_year = set(self.df_bva_this_year["id_both_years"].unique())
+        ids_lvs_last_year = set(self.df_lvs_last_year["id_both_years"].unique())
 
-        # Find intersections
-        self.main_event_returning_visitors = ids_main_event_this_year.intersection(ids_main_event_last_year)
-        self.secondary_event_returning_visitors = ids_main_event_this_year.intersection(ids_secondary_event_last_year)
+        # Find intersections - keep old variable names for compatibility
+        self.bva_returning_visitors = ids_bva_this_year.intersection(ids_bva_last_year)
+        self.lvs_returning_visitors = ids_bva_this_year.intersection(ids_lvs_last_year)
 
         # Union of all returning visitors
-        self.all_returning_visitors = self.main_event_returning_visitors.union(
-            self.secondary_event_returning_visitors
+        self.all_returning_visitors = self.bva_returning_visitors.union(
+            self.lvs_returning_visitors
         )
 
         self.logger.info(
-            f"Identified {len(self.main_event_returning_visitors)} returning visitors from {self.main_event_name} and {len(self.secondary_event_returning_visitors)} from {self.secondary_event_name}"
+            f"Identified {len(self.bva_returning_visitors)} returning visitors from {self.main_event_name} and {len(self.lvs_returning_visitors)} from {self.secondary_event_name}"
         )
         self.logger.info(
             f"Total unique returning visitors: {len(self.all_returning_visitors)}"
         )
 
-        # Create dataframes for returning visitors
-        self.df_main_event_returning = self.df_main_event_last_year[
-            self.df_main_event_last_year["id_both_years"].isin(self.main_event_returning_visitors)
+        # Create dataframes for returning visitors - keep old variable names
+        self.df_bva_returning = self.df_bva_last_year[
+            self.df_bva_last_year["id_both_years"].isin(self.bva_returning_visitors)
         ]
-        self.df_secondary_event_returning = self.df_secondary_event_last_year[
-            self.df_secondary_event_last_year["id_both_years"].isin(self.secondary_event_returning_visitors)
+        self.df_lvs_returning = self.df_lvs_last_year[
+            self.df_lvs_last_year["id_both_years"].isin(self.lvs_returning_visitors)
         ]
 
     def add_badge_history(self) -> None:
         """Add badge history information to current year data."""
         # Create index dataframes
-        badge_last_year_main = self.df_main_event_returning[["BadgeId", "id_both_years"]].copy()
-        badge_last_year_secondary = self.df_secondary_event_returning[["BadgeId", "id_both_years"]].copy()
+        badge_last_year_bva = self.df_bva_returning[["BadgeId", "id_both_years"]].copy()
+        badge_last_year_lvs = self.df_lvs_returning[["BadgeId", "id_both_years"]].copy()
 
-        # Rename columns with event-specific names
-        badge_last_year_main.columns = [f"BadgeId_last_year_{self.main_event_name.lower()}", "id_both_years"]
-        badge_last_year_secondary.columns = [f"BadgeId_last_year_{self.secondary_event_name.lower()}", "id_both_years"]
+        # Rename columns - keep original naming for compatibility
+        badge_last_year_bva.columns = ["BadgeId_last_year_bva", "id_both_years"]
+        badge_last_year_lvs.columns = ["BadgeId_last_year_lva", "id_both_years"]
 
         # Merge with current year data
-        self.df_main_event_this_year = pd.merge(
-            self.df_main_event_this_year, badge_last_year_main, on=["id_both_years"], how="left"
+        self.df_bva_this_year = pd.merge(
+            self.df_bva_this_year, badge_last_year_bva, on=["id_both_years"], how="left"
         )
-        self.df_main_event_this_year = pd.merge(
-            self.df_main_event_this_year, badge_last_year_secondary, on=["id_both_years"], how="left"
+        self.df_bva_this_year = pd.merge(
+            self.df_bva_this_year, badge_last_year_lvs, on=["id_both_years"], how="left"
         )
 
         # Fill missing values - use loc to avoid SettingWithCopyWarning
-        main_col = f"BadgeId_last_year_{self.main_event_name.lower()}"
-        secondary_col = f"BadgeId_last_year_{self.secondary_event_name.lower()}"
-        
-        self.df_main_event_this_year.loc[:, main_col] = self.df_main_event_this_year[main_col].fillna("NA")
-        self.df_main_event_this_year.loc[:, secondary_col] = self.df_main_event_this_year[secondary_col].fillna("NA")
+        self.df_bva_this_year.loc[:, "BadgeId_last_year_bva"] = self.df_bva_this_year[
+            "BadgeId_last_year_bva"
+        ].fillna("NA")
+        self.df_bva_this_year.loc[:, "BadgeId_last_year_lva"] = self.df_bva_this_year[
+            "BadgeId_last_year_lva"
+        ].fillna("NA")
 
         self.logger.info("Added badge history information to current year data")
         # Log the number of matched records for verification
         self.logger.info(
-            f"Number of unique {main_col} values: {len(self.df_main_event_this_year[main_col].unique())}"
+            f"Number of unique BadgeId_last_year_bva values: {len(self.df_bva_this_year['BadgeId_last_year_bva'].unique())}"
         )
         self.logger.info(
-            f"Number of unique {secondary_col} values: {len(self.df_main_event_this_year[secondary_col].unique())}"
+            f"Number of unique BadgeId_last_year_lva values: {len(self.df_bva_this_year['BadgeId_last_year_lva'].unique())}"
         )
 
     def calculate_event_dates(self) -> None:
@@ -493,41 +465,33 @@ class RegistrationProcessor:
         event_date_this_year = self.config.get("event_date_this_year", "2025-06-12")
         event_date_last_year = self.config.get("event_date_last_year", "2024-06-12")
 
-        # Calculate for all dataframes and ensure they all get the Days_since_registration column
-        dataframes_to_process = [
-            (self.df_main_event_this_year, "RegistrationDate", event_date_this_year, "df_main_event_this_year"),
-            (self.df_main_event_last_year, "RegistrationDate", event_date_this_year, "df_main_event_last_year"),
-            (self.df_main_event_returning, "RegistrationDate", event_date_last_year, "df_main_event_returning"),
-            (self.df_secondary_event_returning, "RegistrationDate", event_date_last_year, "df_secondary_event_returning"),
-        ]
-        
-        for df, date_column, event_date, df_name in dataframes_to_process:
-            try:
-                processed_df = self.calculate_date_difference(df, date_column, event_date)
-                setattr(self, df_name, processed_df)
-                self.logger.info(f"Processed {df_name}: {processed_df.shape}, has Days_since_registration: {'Days_since_registration' in processed_df.columns}")
-            except Exception as e:
-                self.logger.error(f"Error processing {df_name}: {e}")
-                # Ensure the column exists even if calculation fails
-                if 'Days_since_registration' not in df.columns:
-                    df = df.copy()
-                    df['Days_since_registration'] = 0
-                    setattr(self, df_name, df)
+        self.df_bva_this_year = self.calculate_date_difference(
+            self.df_bva_this_year, "RegistrationDate", event_date_this_year
+        )
+        self.df_bva_last_year = self.calculate_date_difference(
+            self.df_bva_last_year, "RegistrationDate", event_date_this_year
+        )
+        self.df_bva_returning = self.calculate_date_difference(
+            self.df_bva_returning, "RegistrationDate", event_date_last_year
+        )
+        self.df_lvs_returning = self.calculate_date_difference(
+            self.df_lvs_returning, "RegistrationDate", event_date_last_year
+        )
 
         self.logger.info("Calculated days until event for all datasets")
 
     def flag_all_returning_visitors(self) -> None:
         """Flag all returning visitors in current year data."""
-        self.df_main_event_this_year = self.flag_returning_visitors(
-            self.df_main_event_this_year, self.all_returning_visitors
+        self.df_bva_this_year = self.flag_returning_visitors(
+            self.df_bva_this_year, self.all_returning_visitors
         )
         self.logger.info(
-            f"Returning visitors: {self.df_main_event_this_year['assist_year_before'].sum()} out of {len(self.df_main_event_this_year)}"
+            f"Returning visitors: {self.df_bva_this_year['assist_year_before'].sum()} out of {len(self.df_bva_this_year)}"
         )
 
     def select_and_save_final_data(self) -> None:
         """Select relevant columns and save final processed data."""
-        # Define columns to keep
+        # Define columns to keep - keep original column names for compatibility
         columns_this_year = [
             "Email",
             "Email_domain",
@@ -540,8 +504,8 @@ class RegistrationProcessor:
             "Source",
             "Days_since_registration",
             "assist_year_before",
-            f"BadgeId_last_year_{self.main_event_name.lower()}",
-            f"BadgeId_last_year_{self.secondary_event_name.lower()}",
+            "BadgeId_last_year_bva",
+            "BadgeId_last_year_lva",
         ]
 
         columns_last_year = [
@@ -557,76 +521,53 @@ class RegistrationProcessor:
             "Days_since_registration",
         ]
 
-        # Filter columns to only include those that exist in the dataframes
-        def filter_existing_columns(df, columns):
-            existing_columns = [col for col in columns if col in df.columns]
-            missing_columns = [col for col in columns if col not in df.columns]
-            if missing_columns:
-                self.logger.warning(f"Missing columns in dataframe: {missing_columns}")
-            return existing_columns
+        # Select columns
+        df_this_year_final = self.df_bva_this_year[columns_this_year]
+        df_last_year_final = self.df_bva_last_year[columns_last_year]
+        df_bva_returning_final = self.df_bva_returning[columns_last_year]
+        df_lvs_returning_final = self.df_lvs_returning[columns_last_year]
 
-        # Select columns for this year data
-        existing_columns_this_year = filter_existing_columns(self.df_main_event_this_year, columns_this_year)
-        df_this_year_final = self.df_main_event_this_year[existing_columns_this_year]
-
-        # Select columns for last year data
-        existing_columns_last_year = filter_existing_columns(self.df_main_event_last_year, columns_last_year)
-        df_last_year_final = self.df_main_event_last_year[existing_columns_last_year]
-
-        # Select columns for returning visitors
-        existing_columns_main_returning = filter_existing_columns(self.df_main_event_returning, columns_last_year)
-        df_main_event_returning_final = self.df_main_event_returning[existing_columns_main_returning]
-
-        existing_columns_secondary_returning = filter_existing_columns(self.df_secondary_event_returning, columns_last_year)
-        df_secondary_event_returning_final = self.df_secondary_event_returning[existing_columns_secondary_returning]
-
-        # Save files with event-specific names
+        # Save files - keep original file names for compatibility
         output_files = {
             "this_year": os.path.join(
-                self.output_dir, "csv", f"Registration_data_{self.main_event_name.lower()}_25_only_valid.csv"
+                self.output_dir, "csv", "Registration_data_bva_25_only_valid.csv"
             ),
             "last_year": os.path.join(
-                self.output_dir, "csv", f"Registration_data_{self.main_event_name.lower()}_24_only_valid.csv"
+                self.output_dir, "csv", "Registration_data_bva_24_only_valid.csv"
             ),
-            "main_event_returning": os.path.join(
-                self.output_dir, "csv", f"Registration_data_{self.main_event_name.lower()}_24_25_only_valid.csv"
+            "bva_returning": os.path.join(
+                self.output_dir, "csv", "Registration_data_bva_24_25_only_valid.csv"
             ),
-            "secondary_event_returning": os.path.join(
-                self.output_dir, "csv", f"Registration_data_{self.secondary_event_name.lower()}_24_25_only_valid.csv"
+            "lvs_returning": os.path.join(
+                self.output_dir, "csv", "Registration_data_lva_24_25_only_valid.csv"
             ),
         }
 
         df_this_year_final.to_csv(output_files["this_year"], index=False)
         df_last_year_final.to_csv(output_files["last_year"], index=False)
-        df_main_event_returning_final.to_csv(output_files["main_event_returning"], index=False)
-        df_secondary_event_returning_final.to_csv(output_files["secondary_event_returning"], index=False)
+        df_bva_returning_final.to_csv(output_files["bva_returning"], index=False)
+        df_lvs_returning_final.to_csv(output_files["lvs_returning"], index=False)
 
         self.logger.info(f"Saved final processed data to {self.output_dir}/csv/")
-        self.logger.info(f"Files saved: {list(output_files.keys())}")
-        for key, path in output_files.items():
-            if os.path.exists(path):
-                self.logger.info(f"  {key}: {path} (exists)")
-            else:
-                self.logger.error(f"  {key}: {path} (NOT CREATED)")
-
 
     def save_demographic_data(self) -> None:
         """Save demographic data to CSV files."""
-        self.df_main_event_demo_this_year.to_csv(
+        # Keep original file names for compatibility
+        self.df_bva_demo_this_year.to_csv(
             os.path.join(
-                self.output_dir, "csv", f"Registration_demographicdata_{self.main_event_name.lower()}_25_raw.csv"
+                self.output_dir, "csv", "Registration_demographicdata_bva_25_raw.csv"
             ),
             index=False,
         )
-        self.df_main_event_demo_last_year.to_csv(
+        self.df_bva_demo_last_year.to_csv(
             os.path.join(
-                self.output_dir, "csv", f"Registration_demographicdata_{self.main_event_name.lower()}_24_raw.csv"
+                self.output_dir, "csv", "Registration_demographicdata_bva_24_raw.csv"
             ),
             index=False,
         )
-        self.df_secondary_event_demo.to_csv(
+        self.df_lvs_demo.to_csv(
             os.path.join(
-                self.output_dir, "csv", f"Registration_demographicdata_{self.secondary_event_name.lower()}_24_raw.csv"
+                self.output_dir, "csv", "Registration_demographicdata_lva_24_raw.csv"
             ),
             index=False,
         )
@@ -641,42 +582,42 @@ class RegistrationProcessor:
         list_keep_past = questions_to_keep.get("past", [])
 
         # Extract specialization data
-        df_spe_this = self.df_main_event_demo_this_year[
-            self.df_main_event_demo_this_year["QuestionText"] == list_keep_this[0]
+        df_spe_this = self.df_bva_demo_this_year[
+            self.df_bva_demo_this_year["QuestionText"] == list_keep_this[0]
         ]
-        df_spe_last_main = self.df_main_event_demo_last_year[
-            self.df_main_event_demo_last_year["QuestionText"] == list_keep_past[0]
+        df_spe_last_bva = self.df_bva_demo_last_year[
+            self.df_bva_demo_last_year["QuestionText"] == list_keep_past[0]
         ]
-        df_spe_last_secondary = self.df_secondary_event_demo[
-            self.df_secondary_event_demo["QuestionText"] == list_keep_past[0]
+        df_spe_last_lvs = self.df_lvs_demo[
+            self.df_lvs_demo["QuestionText"] == list_keep_past[0]
         ]
 
         # Extract unique specializations
         specializations_this = self.extract_unique_classes(
             df_spe_this["AnswerText"].unique()
         )
-        specializations_last_main = self.extract_unique_classes(
-            df_spe_last_main["AnswerText"].unique()
+        specializations_last_bva = self.extract_unique_classes(
+            df_spe_last_bva["AnswerText"].unique()
         )
-        specializations_last_secondary = self.extract_unique_classes(
-            df_spe_last_secondary["AnswerText"].unique()
+        specializations_last_lvs = self.extract_unique_classes(
+            df_spe_last_lvs["AnswerText"].unique()
         )
 
         self.logger.info(
             f"Extracted {len(specializations_this)} unique specializations for this year"
         )
         self.logger.info(
-            f"Extracted {len(specializations_last_main)} unique specializations for {self.main_event_name} last year"
+            f"Extracted {len(specializations_last_bva)} unique specializations for {self.main_event_name} last year"
         )
         self.logger.info(
-            f"Extracted {len(specializations_last_secondary)} unique specializations for {self.secondary_event_name} last year"
+            f"Extracted {len(specializations_last_lvs)} unique specializations for {self.secondary_event_name} last year"
         )
 
-        # Save specializations to JSON
+        # Save specializations to JSON - keep original structure for compatibility
         specializations = {
             "this_year": specializations_this,
-            f"last_year_{self.main_event_name.lower()}": specializations_last_main,
-            f"last_year_{self.secondary_event_name.lower()}": specializations_last_secondary,
+            "last_year_bva": specializations_last_bva,
+            "last_year_lvs": specializations_last_lvs,
         }
 
         with open(
@@ -713,27 +654,25 @@ class RegistrationProcessor:
 
     def extract_job_roles(self) -> None:
         """Extract and analyze job roles."""
-        # Extract job role data using event-specific question names
-        job_question_name = self.event_config.get("job_role_question", "Job Role")
-        
-        job_records_this = self.df_main_event_demo_this_year[
-            self.df_main_event_demo_this_year["QuestionText"] == job_question_name
+        # Extract job role data
+        job_records_this = self.df_bva_demo_this_year[
+            self.df_bva_demo_this_year["QuestionText"] == "Job Role"
         ]
-        job_records_last_main = self.df_main_event_demo_last_year[
-            self.df_main_event_demo_last_year["QuestionText"] == job_question_name
+        job_records_last_bva = self.df_bva_demo_last_year[
+            self.df_bva_demo_last_year["QuestionText"] == "Job Role"
         ]
-        job_records_last_secondary = self.df_secondary_event_demo[
-            self.df_secondary_event_demo["QuestionText"] == job_question_name
+        job_records_last_lvs = self.df_lvs_demo[
+            self.df_lvs_demo["QuestionText"] == "Job Role"
         ]
 
         # Extract unique job roles
         job_roles_this = set(list(job_records_this["AnswerText"].unique()))
-        job_roles_last_main = set(list(job_records_last_main["AnswerText"].unique()))
-        job_roles_last_secondary = set(list(job_records_last_secondary["AnswerText"].unique()))
+        job_roles_last_bva = set(list(job_records_last_bva["AnswerText"].unique()))
+        job_roles_last_lvs = set(list(job_records_last_lvs["AnswerText"].unique()))
 
         # Combine all job roles
         all_job_roles = list(
-            job_roles_this.union(job_roles_last_main).union(job_roles_last_secondary)
+            job_roles_this.union(job_roles_last_bva).union(job_roles_last_lvs)
         )
 
         self.logger.info(f"Extracted {len(all_job_roles)} unique job roles")
@@ -746,81 +685,81 @@ class RegistrationProcessor:
         """Find demographic data for returning visitors."""
         # Get badge IDs for returning visitors - store these in class variables
         # so they can be used later in the combine_demographic_with_registration method
-        self.list_badgeid_24_25_main = list(self.df_main_event_returning["BadgeId"].unique())
-        self.list_badgeid_24_25_secondary = list(self.df_secondary_event_returning["BadgeId"].unique())
+        self.list_badgeid_24_25_bva = list(self.df_bva_returning["BadgeId"].unique())
+        self.list_badgeid_24_25_lva = list(self.df_lvs_returning["BadgeId"].unique())
 
-        self.logger.info(f"{self.main_event_name} returning visitors: {len(self.list_badgeid_24_25_main)}")
-        self.logger.info(f"{self.secondary_event_name} returning visitors: {len(self.list_badgeid_24_25_secondary)}")
+        self.logger.info(f"BVA returning visitors: {len(self.list_badgeid_24_25_bva)}")
+        self.logger.info(f"LVA returning visitors: {len(self.list_badgeid_24_25_lva)}")
 
         # Filter demographic data for returning visitors
-        df_demo_24_25_main = self.df_main_event_demo_last_year[
-            self.df_main_event_demo_last_year["BadgeId"].isin(self.list_badgeid_24_25_main)
+        df_demo_24_25_bva = self.df_bva_demo_last_year[
+            self.df_bva_demo_last_year["BadgeId"].isin(self.list_badgeid_24_25_bva)
         ]
-        df_demo_24_25_secondary = self.df_secondary_event_demo[
-            self.df_secondary_event_demo["BadgeId"].isin(self.list_badgeid_24_25_secondary)
+        df_demo_24_25_lva = self.df_lvs_demo[
+            self.df_lvs_demo["BadgeId"].isin(self.list_badgeid_24_25_lva)
         ]
 
-        # Save filtered demographic data
-        df_demo_24_25_main.to_csv(
+        # Save filtered demographic data - keep original file names
+        df_demo_24_25_bva.to_csv(
             os.path.join(
-                self.output_dir, "csv", f"Registration_demographicdata_{self.main_event_name.lower()}_24_25.csv"
+                self.output_dir, "csv", "Registration_demographicdata_bva_24_25.csv"
             ),
             index=False,
         )
-        df_demo_24_25_secondary.to_csv(
+        df_demo_24_25_lva.to_csv(
             os.path.join(
-                self.output_dir, "csv", f"Registration_demographicdata_{self.secondary_event_name.lower()}_24_25.csv"
+                self.output_dir, "csv", "Registration_demographicdata_lva_24_25.csv"
             ),
             index=False,
         )
 
         self.logger.info(
-            f"Found demographic data for {len(df_demo_24_25_main)} returning {self.main_event_name} visitors"
+            f"Found demographic data for {len(df_demo_24_25_bva)} returning BVA visitors"
         )
         self.logger.info(
-            f"Found demographic data for {len(df_demo_24_25_secondary)} returning {self.secondary_event_name} visitors"
+            f"Found demographic data for {len(df_demo_24_25_lva)} returning LVS visitors"
         )
 
     def find_registration_with_demographic_data(self) -> None:
         """Find registration records that have demographic data."""
         # Get badge IDs with demographic data
-        demo_badge_id_25 = list(self.df_main_event_demo_this_year["BadgeId"].unique())
-        demo_badge_id_24_main = list(self.df_main_event_demo_last_year["BadgeId"].unique())
-        demo_badge_id_24_secondary = list(self.df_secondary_event_demo["BadgeId"].unique())
+        demo_badge_id_25 = list(self.df_bva_demo_this_year["BadgeId"].unique())
+        demo_badge_id_24_bva = list(self.df_bva_demo_last_year["BadgeId"].unique())
+        demo_badge_id_24_lva = list(self.df_lvs_demo["BadgeId"].unique())
 
         # Filter registration data for records with demographic data
-        df_reg_25_wdemo_data = self.df_main_event_this_year[
-            self.df_main_event_this_year["BadgeId"].isin(demo_badge_id_25)
+        df_reg_25_wdemo_data = self.df_bva_this_year[
+            self.df_bva_this_year["BadgeId"].isin(demo_badge_id_25)
         ]
-        df_reg_24_wdemo_data_main = self.df_main_event_returning[
-            self.df_main_event_returning["BadgeId"].isin(demo_badge_id_24_main)
+        df_reg_24_wdemo_data_bva = self.df_bva_returning[
+            self.df_bva_returning["BadgeId"].isin(demo_badge_id_24_bva)
         ]
-        df_reg_24_wdemo_data_secondary = self.df_secondary_event_returning[
-            self.df_secondary_event_returning["BadgeId"].isin(demo_badge_id_24_secondary)
+        df_reg_24_wdemo_data_lva = self.df_lvs_returning[
+            self.df_lvs_returning["BadgeId"].isin(demo_badge_id_24_lva)
         ]
 
-        # Save filtered registration data
+        # Save filtered registration data - keep original file names
         df_reg_25_wdemo_data.to_csv(
             os.path.join(
                 self.output_dir,
                 "output",
-                f"Registration_data_with_demographicdata_{self.main_event_name.lower()}_this.csv",
+                "Registration_data_with_demographicdata_bva_this.csv",
             ),
             index=False,
         )
-        df_reg_24_wdemo_data_main.to_csv(
+        df_reg_24_wdemo_data_bva.to_csv(
             os.path.join(
                 self.output_dir,
                 "output",
-                f"Registration_data_with_demographicdata_{self.main_event_name.lower()}_last.csv",
+                "Registration_data_with_demographicdata_bva_last.csv",
             ),
             index=False,
         )
-        df_reg_24_wdemo_data_secondary.to_csv(
+        df_reg_24_wdemo_data_lva.to_csv(
             os.path.join(
                 self.output_dir,
                 "output",
-                f"Registration_data_with_demographicdata_{self.secondary_event_name.lower()}_last.csv",
+                "Registration_data_with_demographicdata_lva_last.csv",
             ),
             index=False,
         )
@@ -829,19 +768,22 @@ class RegistrationProcessor:
             f"Found {len(df_reg_25_wdemo_data)} registration records with demographic data for this year"
         )
         self.logger.info(
-            f"Found {len(df_reg_24_wdemo_data_main)} registration records with demographic data for {self.main_event_name} last year"
+            f"Found {len(df_reg_24_wdemo_data_bva)} registration records with demographic data for BVA last year"
         )
         self.logger.info(
-            f"Found {len(df_reg_24_wdemo_data_secondary)} registration records with demographic data for {self.secondary_event_name} last year"
+            f"Found {len(df_reg_24_wdemo_data_lva)} registration records with demographic data for LVS last year"
         )
-        
+        # Get unique badge IDs again after concatenating with demo data
+        demo_badge_id_25 = list(df_reg_25_wdemo_data["BadgeId"].unique())
+        demo_badge_id_24_bva = list(df_reg_24_wdemo_data_bva["BadgeId"].unique())
+        demo_badge_id_24_lva = list(df_reg_24_wdemo_data_lva["BadgeId"].unique())
         # Store for later use
         self.df_reg_25_wdemo_data = df_reg_25_wdemo_data
-        self.df_reg_24_wdemo_data_main = df_reg_24_wdemo_data_main
-        self.df_reg_24_wdemo_data_secondary = df_reg_24_wdemo_data_secondary
+        self.df_reg_24_wdemo_data_bva = df_reg_24_wdemo_data_bva
+        self.df_reg_24_wdemo_data_lva = df_reg_24_wdemo_data_lva
         self.demo_badge_id_25 = demo_badge_id_25
-        self.demo_badge_id_24_main = demo_badge_id_24_main
-        self.demo_badge_id_24_secondary = demo_badge_id_24_secondary
+        self.demo_badge_id_24_bva = demo_badge_id_24_bva
+        self.demo_badge_id_24_lva = demo_badge_id_24_lva
 
     def concatenate_qa_registration_data(self, df_registration, list_badge_id_events):
         """
@@ -902,42 +844,42 @@ class RegistrationProcessor:
 
         # Create valid column dataframes
         df_reg_25_valid_columns = self.df_reg_25_wdemo_data[valid_columns]
-        df_reg_24_25_main_valid_columns = self.df_reg_24_wdemo_data_main[valid_columns]
-        df_reg_24_25_secondary_valid_columns = self.df_reg_24_wdemo_data_secondary[valid_columns]
+        df_reg_24_25_bva_valid_columns = self.df_reg_24_wdemo_data_bva[valid_columns]
+        df_reg_24_25_lva_valid_columns = self.df_reg_24_wdemo_data_lva[valid_columns]
 
         # Create concatenated registration data
         reg_data_list_this_year = self.concatenate_qa_registration_data(
             df_reg_25_valid_columns, self.demo_badge_id_25
         )
-        reg_data_list_past_year_main = self.concatenate_qa_registration_data(
-            df_reg_24_25_main_valid_columns, self.demo_badge_id_24_main
+        reg_data_list_past_year_bva = self.concatenate_qa_registration_data(
+            df_reg_24_25_bva_valid_columns, self.demo_badge_id_24_bva
         )
-        reg_data_list_past_year_secondary = self.concatenate_qa_registration_data(
-            df_reg_24_25_secondary_valid_columns, self.demo_badge_id_24_secondary
+        reg_data_list_past_year_lva = self.concatenate_qa_registration_data(
+            df_reg_24_25_lva_valid_columns, self.demo_badge_id_24_lva
         )
 
-        # Save concatenated registration data
+        # Save concatenated registration data - keep original file names
         with open(
             os.path.join(
-                self.output_dir, "output", f"{self.main_event_name.lower()}_registration_data_this_year.json"
+                self.output_dir, "output", "bva_registration_data_this_year.json"
             ),
             "w",
         ) as f:
             json.dump(reg_data_list_this_year, f, indent=4)
         with open(
             os.path.join(
-                self.output_dir, "output", f"{self.main_event_name.lower()}_registration_data_past_year.json"
+                self.output_dir, "output", "bva_registration_data_past_year.json"
             ),
             "w",
         ) as f:
-            json.dump(reg_data_list_past_year_main, f, indent=4)
+            json.dump(reg_data_list_past_year_bva, f, indent=4)
         with open(
             os.path.join(
-                self.output_dir, "output", f"{self.secondary_event_name.lower()}_registration_data_past_year.json"
+                self.output_dir, "output", "lva_registration_data_past_year.json"
             ),
             "w",
         ) as f:
-            json.dump(reg_data_list_past_year_secondary, f, indent=4)
+            json.dump(reg_data_list_past_year_lva, f, indent=4)
 
         self.logger.info("Saved concatenated registration data to JSON files")
 
@@ -990,30 +932,30 @@ class RegistrationProcessor:
 
         # Process demographic data
         demo_data_this = self.concatenate_qa_demographic_data(
-            self.df_main_event_demo_this_year, self.demo_badge_id_25, list_keep_this
+            self.df_bva_demo_this_year, self.demo_badge_id_25, list_keep_this
         )
-        demo_data_last_main = self.concatenate_qa_demographic_data(
-            self.df_main_event_demo_last_year, self.demo_badge_id_24_main, list_keep_past
+        demo_data_last_bva = self.concatenate_qa_demographic_data(
+            self.df_bva_demo_last_year, self.demo_badge_id_24_bva, list_keep_past
         )
-        demo_data_last_secondary = self.concatenate_qa_demographic_data(
-            self.df_secondary_event_demo, self.demo_badge_id_24_secondary, list_keep_past
+        demo_data_last_lva = self.concatenate_qa_demographic_data(
+            self.df_lvs_demo, self.demo_badge_id_24_lva, list_keep_past
         )
 
-        # Save demographic data
+        # Save demographic data - keep original file names
         with open(
             os.path.join(self.output_dir, "output", "demographic_data_this.json"), "w"
         ) as f:
             json.dump(demo_data_this, f, indent=4)
         with open(
-            os.path.join(self.output_dir, "output", f"demographic_data_last_{self.main_event_name.lower()}.json"),
+            os.path.join(self.output_dir, "output", "demographic_data_last_bva.json"),
             "w",
         ) as f:
-            json.dump(demo_data_last_main, f, indent=4)
+            json.dump(demo_data_last_bva, f, indent=4)
         with open(
-            os.path.join(self.output_dir, "output", f"demographic_data_last_{self.secondary_event_name.lower()}.json"),
+            os.path.join(self.output_dir, "output", "demographic_data_last_lva.json"),
             "w",
         ) as f:
-            json.dump(demo_data_last_secondary, f, indent=4)
+            json.dump(demo_data_last_lva, f, indent=4)
 
         self.logger.info("Saved demographic data to JSON files")
 
@@ -1085,14 +1027,15 @@ class RegistrationProcessor:
         Returns:
             DataFrame with processed job roles
         """
+
         # Make a copy to avoid modifying the original dataframe
         df_copy = df.copy()
 
         # Only process rows where job_role is "NA"
         mask = df_copy["job_role"] == "NA"
 
-        # Get potential roles from config
-        potential_roles = self.event_config.get("potential_job_roles", [
+        # Define potential roles
+        potential_roles = [
             "Student",
             "Other (please specify)",
             "Receptionist",
@@ -1107,32 +1050,28 @@ class RegistrationProcessor:
             "Locum Vet",
             "Practice Manager",
             "Locum RVN",
-        ])
-
-        # Get job role mapping rules from config
-        job_role_rules = self.event_config.get("job_role_rules", {
-            "surgeon": "Vet/Vet Surgeon",
-            "nurse": "Vet Nurse",
-            "rvn": "Vet Nurse",
-            "locum": "Locum Vet",
-            "student": "Student",
-            "assistant": "Assistant Vet"
-        })
+        ]
 
         # Apply each rule in sequence
         for idx in df_copy[mask].index:
             job_title = str(df_copy.loc[idx, "JobTitle"]).lower()
 
-            # Apply rule-based matching first
-            matched = False
-            for keyword, role in job_role_rules.items():
-                if keyword in job_title:
-                    df_copy.loc[idx, "job_role"] = role
-                    matched = True
-                    break
-            
-            if not matched:
-                # Use text similarity to find the best matching role
+            # Rule 1-6: Check for specific strings in JobTitle
+            if "surgeon" in job_title:
+                df_copy.loc[idx, "job_role"] = "Vet/Vet Surgeon"
+            elif "nurse" in job_title:
+                df_copy.loc[idx, "job_role"] = "Vet Nurse"
+            elif "rvn" in job_title:
+                df_copy.loc[idx, "job_role"] = "Vet Nurse"
+            elif "locum" in job_title:
+                df_copy.loc[idx, "job_role"] = "Locum Vet"
+            elif "student" in job_title:
+                df_copy.loc[idx, "job_role"] = "Student"
+            elif "assistant" in job_title:
+                df_copy.loc[idx, "job_role"] = "Assistant Vet"
+            else:
+                # Rule 7: Use text similarity to find the best matching role
+
                 # Clean the job title: remove common words that might interfere with matching
                 cleaned_title = re.sub(r"\b(and|the|of|in|at|for)\b", "", job_title)
 
@@ -1166,20 +1105,17 @@ class RegistrationProcessor:
                         best_match = role
 
                 # If similarity is above threshold, use the best match
-                similarity_threshold = self.event_config.get("job_role_similarity_threshold", 0.3)
-                if best_score > similarity_threshold:
+                if best_score > 0.3:  # Adjustable threshold
                     df_copy.loc[idx, "job_role"] = best_match
                 else:
                     # Default to "Other" if no good match
-                    default_role = self.event_config.get("default_job_role", "Other (please specify)")
-                    df_copy.loc[idx, "job_role"] = default_role
+                    df_copy.loc[idx, "job_role"] = "Other (please specify)"
 
-        # Final rule: Replace any occurrence of "Other" with the default role
-        default_role = self.event_config.get("default_job_role", "Other (please specify)")
+        # Final rule: Replace any occurrence of "Other" with "Other (please specify)"
         other_mask = df_copy["job_role"].str.contains(
             "Other", case=False, na=False
-        ) & ~df_copy["job_role"].eq(default_role)
-        df_copy.loc[other_mask, "job_role"] = default_role
+        ) & ~df_copy["job_role"].eq("Other (please specify)")
+        df_copy.loc[other_mask, "job_role"] = "Other (please specify)"
 
         self.logger.info(f"Processed job roles for {mask.sum()} records")
         return df_copy
@@ -1196,6 +1132,7 @@ class RegistrationProcessor:
         Returns:
             DataFrame with filled practice types
         """
+
         # Create a copy of the input dataframe to avoid modifying the original
         df_copy = df.copy()
 
@@ -1203,23 +1140,17 @@ class RegistrationProcessor:
         missing_idx = df_copy[column] == "NA"
         companies_to_match = df_copy.loc[missing_idx, "Company"].tolist()
 
-        # Get practice type column name from config
-        practice_type_column = self.event_config.get("practice_type_column", "Main Type of Veterinary Practice")
-        company_name_column = self.event_config.get("company_name_column", "Company Name")
-
         # Create a dictionary of company names from practices dataframe
         practice_types_dict = dict(
             zip(
-                practices[company_name_column], practices[practice_type_column]
+                practices["Company Name"], practices["Main Type of Veterinary Practice"]
             )
         )
 
         # List of all company names in practices dataframe for fuzzy matching
-        all_practice_companies = practices[company_name_column].tolist()
+        all_practice_companies = practices["Company Name"].tolist()
 
         match_count = 0
-        match_threshold = self.event_config.get("practice_match_threshold", 95)
-        
         # For each company with "NA" practice type, find the best match
         for idx, company in zip(df_copy.loc[missing_idx].index, companies_to_match):
             # Skip if company name is missing or empty
@@ -1230,7 +1161,7 @@ class RegistrationProcessor:
             best_match, score = process.extractOne(company, all_practice_companies)
 
             # Only update if match score is good enough
-            if score >= match_threshold:
+            if score >= 95:  # 95% match threshold
                 df_copy.loc[idx, column] = practice_types_dict[best_match]
                 match_count += 1
 
@@ -1260,9 +1191,9 @@ class RegistrationProcessor:
             "BadgeId",
             "Source",
             "Days_since_registration",
-            "assist_year_before",
-            f"BadgeId_last_year_{self.main_event_name.lower()}",
-            f"BadgeId_last_year_{self.secondary_event_name.lower()}",
+            "assist_year_before",  # Make sure to include this
+            "BadgeId_last_year_bva",  # Add this
+            "BadgeId_last_year_lva",  # Add this
         ]
 
         # Ensure we have all the columns in the dataframe
@@ -1270,8 +1201,8 @@ class RegistrationProcessor:
             if col not in self.df_reg_25_wdemo_data.columns:
                 self.logger.warning(f"Column {col} not in df_reg_25_wdemo_data")
                 if col in [
-                    f"BadgeId_last_year_{self.main_event_name.lower()}",
-                    f"BadgeId_last_year_{self.secondary_event_name.lower()}",
+                    "BadgeId_last_year_bva",
+                    "BadgeId_last_year_lva",
                     "assist_year_before",
                 ]:
                     self.logger.info(f"Adding missing column {col}")
@@ -1289,17 +1220,21 @@ class RegistrationProcessor:
             for col in valid_columns
             if col
             not in [
-                f"BadgeId_last_year_{self.main_event_name.lower()}",
-                f"BadgeId_last_year_{self.secondary_event_name.lower()}",
+                "BadgeId_last_year_bva",
+                "BadgeId_last_year_lva",
                 "assist_year_before",
             ]
         ]
 
+        # CRITICAL CHANGE: For previous year visitors, we need to start with the original BVA and LVS registration data
+        # rather than the filtered demo data. This ensures we include ALL visitors from previous years.
+
         # Create valid column dataframes for returning visitors
-        df_reg_24_25_main_valid_columns = self.df_main_event_returning[
+        # Use the returning visitors dataframes directly instead of the filtered ones with demo data
+        df_reg_24_25_bva_valid_columns = self.df_bva_returning[
             past_valid_columns
         ].copy()
-        df_reg_24_25_secondary_valid_columns = self.df_secondary_event_returning[
+        df_reg_24_25_lva_valid_columns = self.df_lvs_returning[
             past_valid_columns
         ].copy()
 
@@ -1310,78 +1245,74 @@ class RegistrationProcessor:
 
         # Log initial counts before any filtering
         self.logger.info(
-            f"Initial counts - {self.main_event_name} returning: {len(self.df_main_event_returning)}, {self.secondary_event_name} returning: {len(self.df_secondary_event_returning)}"
+            f"Initial counts - BVA returning: {len(self.df_bva_returning)}, LVS returning: {len(self.df_lvs_returning)}"
         )
 
         # Log the lengths after filtering
         self.logger.info(
-            f"After filtering: current year: {len(df_reg_25_valid_columns)}, {self.main_event_name} last year: {len(df_reg_24_25_main_valid_columns)}, {self.secondary_event_name} last year: {len(df_reg_24_25_secondary_valid_columns)}"
+            f"After filtering: current year: {len(df_reg_25_valid_columns)}, BVA last year: {len(df_reg_24_25_bva_valid_columns)}, LVA last year: {len(df_reg_24_25_lva_valid_columns)}"
         )
 
         # Process demographic data
         demo_data_this = self.concatenate_qa_demographic_data(
-            self.df_main_event_demo_this_year, self.demo_badge_id_25, list_keep_this
+            self.df_bva_demo_this_year, self.demo_badge_id_25, list_keep_this
         )
 
         # For past years, we still need demographic data, but we'll apply it to all returning visitors
-        demo_data_last_main = self.concatenate_qa_demographic_data(
-            self.df_main_event_demo_last_year, self.demo_badge_id_24_main, list_keep_past
+        # not just those with demo data from previous year
+        demo_data_last_bva = self.concatenate_qa_demographic_data(
+            self.df_bva_demo_last_year, self.demo_badge_id_24_bva, list_keep_past
         )
-        demo_data_last_secondary = self.concatenate_qa_demographic_data(
-            self.df_secondary_event_demo, self.demo_badge_id_24_secondary, list_keep_past
+        demo_data_last_lva = self.concatenate_qa_demographic_data(
+            self.df_lvs_demo, self.demo_badge_id_24_lva, list_keep_past
         )
 
         self.logger.info(
-            f"Processed demographic data. Created demographic data for {len(demo_data_this)} this year, {len(demo_data_last_main)} last year {self.main_event_name}, and {len(demo_data_last_secondary)} last year {self.secondary_event_name}"
+            f"Processed demographic data. Created demographic data for {len(demo_data_this)} this year, {len(demo_data_last_bva)} last year BVA, and {len(demo_data_last_lva)} last year LVS"
         )
-        
         # Create combined registration and demographic data
         df_reg_demo_this = self.create_democols_in_registration_data(
             df_reg_25_valid_columns, demo_data_this, list_keep_this
         )
-        df_reg_demo_last_main = self.create_democols_in_registration_data(
-            df_reg_24_25_main_valid_columns, demo_data_last_main, list_keep_past
+        df_reg_demo_last_bva = self.create_democols_in_registration_data(
+            df_reg_24_25_bva_valid_columns, demo_data_last_bva, list_keep_past
         )
-        df_reg_demo_last_secondary = self.create_democols_in_registration_data(
-            df_reg_24_25_secondary_valid_columns, demo_data_last_secondary, list_keep_past
+        df_reg_demo_last_lva = self.create_democols_in_registration_data(
+            df_reg_24_25_lva_valid_columns, demo_data_last_lva, list_keep_past
         )
 
         # Process job roles
         df_reg_demo_this = self.process_job_roles(df_reg_demo_this)
-        df_reg_demo_last_main = self.process_job_roles(df_reg_demo_last_main)
-        df_reg_demo_last_secondary = self.process_job_roles(df_reg_demo_last_secondary)
-        
+        df_reg_demo_last_bva = self.process_job_roles(df_reg_demo_last_bva)
+        df_reg_demo_last_lva = self.process_job_roles(df_reg_demo_last_lva)
         self.logger.info("Processed job roles for all demographic data entries")
         self.logger.info("Length of df_reg_demo_this: " + str(len(df_reg_demo_this)))
         self.logger.info(
-            f"Length of df_reg_demo_last_{self.main_event_name.lower()}: " + str(len(df_reg_demo_last_main))
+            "Length of df_reg_demo_last_bva: " + str(len(df_reg_demo_last_bva))
         )
         self.logger.info(
-            f"Length of df_reg_demo_last_{self.secondary_event_name.lower()}: " + str(len(df_reg_demo_last_secondary))
+            "Length of df_reg_demo_last_lva: " + str(len(df_reg_demo_last_lva))
         )
 
         # Check for badge history columns
-        main_badge_col = f"BadgeId_last_year_{self.main_event_name.lower()}"
-        secondary_badge_col = f"BadgeId_last_year_{self.secondary_event_name.lower()}"
-        
-        if main_badge_col in df_reg_demo_this.columns:
-            self.logger.info(f"{main_badge_col} column exists in final dataframe")
+        if "BadgeId_last_year_bva" in df_reg_demo_this.columns:
+            self.logger.info("BadgeId_last_year_bva column exists in final dataframe")
             self.logger.info(
-                f"Number of unique {main_badge_col} values: {len(df_reg_demo_this[main_badge_col].unique())}"
+                f"Number of unique BadgeId_last_year_bva values: {len(df_reg_demo_this['BadgeId_last_year_bva'].unique())}"
             )
         else:
             self.logger.warning(
-                f"{main_badge_col} column missing from final dataframe"
+                "BadgeId_last_year_bva column missing from final dataframe"
             )
 
-        if secondary_badge_col in df_reg_demo_this.columns:
-            self.logger.info(f"{secondary_badge_col} column exists in final dataframe")
+        if "BadgeId_last_year_lva" in df_reg_demo_this.columns:
+            self.logger.info("BadgeId_last_year_lva column exists in final dataframe")
             self.logger.info(
-                f"Number of unique {secondary_badge_col} values: {len(df_reg_demo_this[secondary_badge_col].unique())}"
+                f"Number of unique BadgeId_last_year_lva values: {len(df_reg_demo_this['BadgeId_last_year_lva'].unique())}"
             )
         else:
             self.logger.warning(
-                f"{secondary_badge_col} column missing from final dataframe"
+                "BadgeId_last_year_lva column missing from final dataframe"
             )
 
         # Load practice data for filling missing practice types
@@ -1390,59 +1321,55 @@ class RegistrationProcessor:
             try:
                 practices = pd.read_csv(practices_file)
 
-                # Get column names from config
-                current_specialization_col = self.event_config.get("current_specialization_column", "what_type_does_your_practice_specialise_in")
-                past_specialization_col = self.event_config.get("past_specialization_column", "what_areas_do_you_specialise_in")
-
                 # Fill missing practice types
                 df_reg_demo_this = self.fill_missing_practice_types(
                     df_reg_demo_this,
                     practices,
-                    column=current_specialization_col,
+                    column="what_type_does_your_practice_specialise_in",
                 )
-                df_reg_demo_last_main = self.fill_missing_practice_types(
-                    df_reg_demo_last_main,
+                df_reg_demo_last_bva = self.fill_missing_practice_types(
+                    df_reg_demo_last_bva,
                     practices,
-                    column=past_specialization_col,
+                    column="what_areas_do_you_specialise_in",
                 )
-                df_reg_demo_last_secondary = self.fill_missing_practice_types(
-                    df_reg_demo_last_secondary,
+                df_reg_demo_last_lva = self.fill_missing_practice_types(
+                    df_reg_demo_last_lva,
                     practices,
-                    column=past_specialization_col,
+                    column="what_areas_do_you_specialise_in",
                 )
 
                 self.logger.info("Filled missing practice types using practices data")
             except Exception as e:
                 self.logger.error(f"Error loading or processing practices data: {e}")
 
-        # Save combined data
+        # Save combined data - keep original file names
         df_reg_demo_this.to_csv(
             os.path.join(self.output_dir, "output", "df_reg_demo_this.csv"), index=False
         )
-        df_reg_demo_last_main.to_csv(
-            os.path.join(self.output_dir, "output", f"df_reg_demo_last_{self.main_event_name.lower()}.csv"),
+        df_reg_demo_last_bva.to_csv(
+            os.path.join(self.output_dir, "output", "df_reg_demo_last_bva.csv"),
             index=False,
         )
-        df_reg_demo_last_secondary.to_csv(
-            os.path.join(self.output_dir, "output", f"df_reg_demo_last_{self.secondary_event_name.lower()}.csv"),
+        df_reg_demo_last_lva.to_csv(
+            os.path.join(self.output_dir, "output", "df_reg_demo_last_lva.csv"),
             index=False,
         )
         self.logger.info(
             "Saved combined demographic and registration data to CSV files"
         )
 
-        # Store for potential further use
+        # Store for potential further use - keep original variable names for backward compatibility
         self.df_reg_demo_this = df_reg_demo_this
-        self.df_reg_demo_last_main = df_reg_demo_last_main
-        self.df_reg_demo_last_secondary = df_reg_demo_last_secondary
+        self.df_reg_demo_last_bva = df_reg_demo_last_bva
+        self.df_reg_demo_last_lva = df_reg_demo_last_lva
 
         self.logger.info("Finished combining demographic with registration data")
 
         # Return statistics
         return {
             "this_year": len(df_reg_demo_this),
-            f"last_year_{self.main_event_name.lower()}": len(df_reg_demo_last_main),
-            f"last_year_{self.secondary_event_name.lower()}": len(df_reg_demo_last_secondary),
+            "last_year_bva": len(df_reg_demo_last_bva),
+            "last_year_lva": len(df_reg_demo_last_lva),
         }
 
     def process(self) -> None:
@@ -1452,7 +1379,7 @@ class RegistrationProcessor:
         self.load_data()
         self.save_initial_data()
         self.preprocess_data()
-        self.split_and_process_main_event_data()
+        self.split_and_process_bva_data()
         self.identify_returning_visitors()
         self.add_badge_history()
         self.calculate_event_dates()
