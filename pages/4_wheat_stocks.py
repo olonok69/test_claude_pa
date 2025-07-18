@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 from datetime import datetime
 import sys
 import os
@@ -17,10 +18,24 @@ from wheat_helpers.common_functions import (
     style_change_column,
 )
 
+
+def style_percentage_column(val):
+    """Style function for percentage columns"""
+    if pd.isna(val) or val == "-" or val == "":
+        return ""
+    try:
+        # Extract numeric value
+        if isinstance(val, str) and "%" in val:
+            return "color: #1f77b4; font-weight: normal"
+        return ""
+    except:
+        return ""
+
+
 # Page configuration
 st.set_page_config(
-    page_title="Wheat Exports Dashboard",
-    page_icon="📦",
+    page_title="Wheat Ending Stocks Dashboard",
+    page_icon="🏢",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -55,18 +70,8 @@ if not st.session_state.get("authentication_status"):
         st.switch_page("app.py")
     st.stop()
 
-# Define allowed countries for exports (different from production)
-ALLOWED_EXPORT_COUNTRIES = [
-    "WORLD",
-    "China",
-    "European Union",
-    "India",
-    "Russia",
-    "United States",
-    "Australia",
-    "Canada",
-]
-allowed_countries = [
+# Define allowed countries (exactly as requested)
+ALLOWED_COUNTRIES = [
     "WORLD",
     "China",
     "European Union",
@@ -115,15 +120,15 @@ with st.sidebar:
     with col1:
         if st.button("🌾 Production", use_container_width=True):
             st.switch_page("pages/1_wheat_production.py")
-        if st.button("🏢 Stocks", use_container_width=True):
-            st.switch_page("pages/4_wheat_stocks.py")
+        if st.button("📥 Imports", use_container_width=True):
+            st.switch_page("pages/3_wheat_imports.py")
         if st.button("🌾 Acreage", use_container_width=True):
             st.switch_page("pages/6_wheat_acreage.py")
         if st.button("🌍 World Demand", use_container_width=True):
             st.switch_page("pages/8_wheat_world_demand.py")
     with col2:
-        if st.button("📥 Imports", use_container_width=True):
-            st.switch_page("pages/3_wheat_imports.py")
+        if st.button("📦 Exports", use_container_width=True):
+            st.switch_page("pages/2_wheat_exports.py")
         if st.button("📊 S/U Ratio", use_container_width=True):
             st.switch_page("pages/5_stock_to_use_ratio.py")
         if st.button("🌱 Yield", use_container_width=True):
@@ -137,7 +142,7 @@ with st.sidebar:
         st.switch_page("pages/9_mcp_app.py")
 
     st.markdown("---")
-    st.markdown("### 📦 Exports Dashboard")
+    st.markdown("### 🏢 Stocks Dashboard")
 
     # Add current date in sidebar
     st.markdown("---")
@@ -156,44 +161,44 @@ def get_database():
     return WheatProductionDB()
 
 
-# Load export data from database with filtering
+# Load stocks data from database with filtering
 @st.cache_data
-def load_export_data():
-    """Load export data from database"""
+def load_stocks_data():
+    """Load ending stocks data from database"""
     db = get_database()
     if not db:
         return None, None, None
 
     try:
-        # Get all export data
-        all_export_data = db.get_all_export_data()
+        # Get all stocks data
+        all_stocks_data = db.get_all_stocks_data()
 
         # Filter to keep only allowed countries
-        export_data = {
+        stocks_data = {
             country: data
-            for country, data in all_export_data.items()
-            if country in ALLOWED_EXPORT_COUNTRIES
+            for country, data in all_stocks_data.items()
+            if country in ALLOWED_COUNTRIES
         }
 
         # Get metadata
         metadata = db.get_metadata()
 
-        # Get current year configuration
+        # Get current year configuration - NOW WITH 2025/2026
         current_config = {
             "display_years": metadata.get(
-                "export_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
+                "stocks_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
             ).split(","),
             "year_status": json.loads(
                 metadata.get(
-                    "export_year_status",
+                    "stocks_year_status",
                     '{"2022/2023": "actual", "2023/2024": "actual", "2024/2025": "estimate", "2025/2026": "projection"}',
                 )
             ),
         }
 
-        return export_data, metadata, current_config
+        return stocks_data, metadata, current_config
     except Exception as e:
-        st.error(f"❌ Error loading export data from database: {e}")
+        st.error(f"❌ Error loading stocks data from database: {e}")
         return None, None, None
 
 
@@ -212,7 +217,7 @@ def can_initialize_year():
         return False, "Database not available"
 
     metadata = db.get_metadata()
-    last_init = metadata.get("export_last_year_initialization")
+    last_init = metadata.get("stocks_last_year_initialization")
 
     # Check if already initialized this year
     if last_init:
@@ -227,7 +232,7 @@ def can_initialize_year():
             pass
 
     # Get current configuration
-    display_years = metadata.get("export_display_years", "").split(",")
+    display_years = metadata.get("stocks_display_years", "").split(",")
     if not display_years:
         return False, "No year configuration found"
 
@@ -262,11 +267,11 @@ def initialize_new_year():
         # Get current configuration from metadata
         metadata = db.get_metadata()
         current_display_years = metadata.get(
-            "export_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
+            "stocks_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
         ).split(",")
 
         # Check what years actually exist in the database
-        cursor.execute("SELECT DISTINCT year FROM wheat_exports ORDER BY year")
+        cursor.execute("SELECT DISTINCT year FROM wheat_stocks ORDER BY year")
         all_years = [row[0] for row in cursor.fetchall()]
 
         print(f"Current display years: {current_display_years}")
@@ -299,21 +304,21 @@ def initialize_new_year():
             # Insert data for new year by copying from previous year
             cursor.execute(
                 """
-                INSERT INTO wheat_exports (country, year, export_value, percentage_world, change_value, status)
-                SELECT country, ?, export_value, percentage_world, 0, 'projection'
-                FROM wheat_exports
+                INSERT INTO wheat_stocks (country, year, stock_value, percentage_world, change_value, stock_to_use_ratio, status)
+                SELECT country, ?, stock_value, percentage_world, 0, stock_to_use_ratio, 'projection'
+                FROM wheat_stocks
                 WHERE year = ? AND country IN ({})
             """.format(
-                    ",".join(["?"] * len(ALLOWED_EXPORT_COUNTRIES))
+                    ",".join(["?"] * len(ALLOWED_COUNTRIES))
                 ),
-                [new_year, prev_year] + ALLOWED_EXPORT_COUNTRIES,
+                [new_year, prev_year] + ALLOWED_COUNTRIES,
             )
 
         # Update statuses for all years
         for year, status in new_year_status.items():
             cursor.execute(
                 """
-                UPDATE wheat_exports 
+                UPDATE wheat_stocks 
                 SET status = ?, updated_at = ?
                 WHERE year = ?
             """,
@@ -328,7 +333,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "export_display_years",
+                "stocks_display_years",
                 ",".join(new_display_years),
                 datetime.now().isoformat(),
             ),
@@ -340,7 +345,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "export_year_status",
+                "stocks_year_status",
                 json.dumps(new_year_status),
                 datetime.now().isoformat(),
             ),
@@ -352,7 +357,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "export_last_year_initialization",
+                "stocks_last_year_initialization",
                 datetime.now().isoformat(),
                 datetime.now().isoformat(),
             ),
@@ -383,19 +388,19 @@ def initialize_new_year():
 # Initialize session state
 def initialize_session_state():
     """Initialize session state with database data"""
-    if "export_data_loaded" not in st.session_state:
-        export_data, metadata, current_config = load_export_data()
+    if "stocks_data_loaded" not in st.session_state:
+        stocks_data, metadata, current_config = load_stocks_data()
 
-        if export_data and metadata:
-            st.session_state.export_data = export_data
-            st.session_state.export_metadata = metadata
-            st.session_state.export_current_config = current_config
-            st.session_state.export_data_loaded = True
+        if stocks_data and metadata:
+            st.session_state.stocks_data = stocks_data
+            st.session_state.stocks_metadata = metadata
+            st.session_state.stocks_current_config = current_config
+            st.session_state.stocks_data_loaded = True
         else:
             # Fallback to empty data
-            st.session_state.export_data = {}
-            st.session_state.export_metadata = {}
-            st.session_state.export_current_config = {
+            st.session_state.stocks_data = {}
+            st.session_state.stocks_metadata = {}
+            st.session_state.stocks_current_config = {
                 "display_years": ["2022/2023", "2023/2024", "2024/2025", "2025/2026"],
                 "year_status": {
                     "2022/2023": "actual",
@@ -404,29 +409,35 @@ def initialize_session_state():
                     "2025/2026": "projection",
                 },
             }
-            st.session_state.export_data_loaded = False
+            st.session_state.stocks_data_loaded = False
 
 
 # Initialize session state
 initialize_session_state()
 
 # Title and header
-st.title("📦 Wheat Exports Dashboard")
-st.markdown("### Major Wheat Exporters Data Management")
+st.title("🏢 Wheat Ending Stocks Dashboard")
+st.markdown("### Global Wheat Stocks Management and Analysis")
 
 # Database status indicator
-if st.session_state.export_data_loaded:
+if st.session_state.stocks_data_loaded:
     st.sidebar.success("🗄️ Connected to Database")
 else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
 # Main content area
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "💾 Data Export"]
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    [
+        "📈 Data Overview",
+        "✏️ Edit Projections",
+        "📊 Visualizations",
+        "📐 Stock-to-Use Analysis",
+        "💾 Data Export",
+    ]
 )
 
 with tab1:
-    st.header("Global Wheat Exports")
+    st.header("Global Wheat Ending Stocks")
 
     # Year initialization section
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -452,12 +463,12 @@ with tab1:
             st.rerun()
 
     # Display dynamic status indicators based on current configuration
-    if "export_current_config" in st.session_state:
+    if "stocks_current_config" in st.session_state:
         st.markdown("### Status Information")
         status_cols = st.columns(4)
 
-        display_years = st.session_state.export_current_config["display_years"]
-        year_status = st.session_state.export_current_config["year_status"]
+        display_years = st.session_state.stocks_current_config["display_years"]
+        year_status = st.session_state.stocks_current_config["year_status"]
 
         for i, year in enumerate(display_years):
             if i < len(status_cols):
@@ -472,29 +483,37 @@ with tab1:
 
     st.markdown("---")
 
+    # Key insights
+    st.info(
+        """
+    **Key Insights:**
+    - Ending stocks represent the total quantity of wheat held in storage at the end of each marketing year
+    - China holds over 50% of global wheat stocks
+    - Stock-to-use ratio indicates supply security (higher = more buffer)
+    """
+    )
+
     # Create enhanced table
-    st.markdown("### Export Data (Million Metric Tons)")
+    st.markdown("### Ending Stocks Data (Million Metric Tons)")
 
     # Get display years from configuration
-    display_years = st.session_state.export_current_config.get(
+    display_years = st.session_state.stocks_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
     # Create the data table with proper formatting and change calculations
     table_data = []
 
-    # First, get WORLD for the first year to calculate percentages
-    total_exports_first_year = None
+    # First, get WORLD total for the first year to calculate percentages
+    world_total_first_year = None
     if (
-        "WORLD" in st.session_state.export_data
-        and display_years[0] in st.session_state.export_data["WORLD"]
+        "WORLD" in st.session_state.stocks_data
+        and display_years[0] in st.session_state.stocks_data["WORLD"]
     ):
-        total_exports_first_year = st.session_state.export_data["WORLD"][
-            display_years[0]
-        ]
+        world_total_first_year = st.session_state.stocks_data["WORLD"][display_years[0]]
 
-    for country, data in st.session_state.export_data.items():
-        if country not in ALLOWED_EXPORT_COUNTRIES:
+    for country, data in st.session_state.stocks_data.items():
+        if country not in ALLOWED_COUNTRIES:
             continue
 
         row = {"Country": country}
@@ -508,10 +527,10 @@ with tab1:
                     # For first year, show % World instead of Change
                     if (
                         country != "WORLD"
-                        and total_exports_first_year
-                        and total_exports_first_year > 0
+                        and world_total_first_year
+                        and world_total_first_year > 0
                     ):
-                        percentage = (data[year] / total_exports_first_year) * 100
+                        percentage = (data[year] / world_total_first_year) * 100
                         row["% World"] = f"{percentage:.1f}%"
                     else:
                         row["% World"] = "-"
@@ -542,10 +561,7 @@ with tab1:
 
     # Style % World column if it exists
     if "% World" in df_display.columns:
-        styled_df = styled_df.map(
-            lambda x: "color: #1f77b4; font-weight: normal" if x != "-" else "",
-            subset=["% World"],
-        )
+        styled_df = styled_df.map(style_percentage_column, subset=["% World"])
 
     # Apply general styling
     styled_df = styled_df.set_properties(**{"text-align": "center"}).set_properties(
@@ -564,85 +580,93 @@ with tab1:
 
     with col1:
         if (
-            "WORLD" in st.session_state.export_data
-            and latest_year in st.session_state.export_data["WORLD"]
+            "WORLD" in st.session_state.stocks_data
+            and latest_year in st.session_state.stocks_data["WORLD"]
         ):
-            total_latest = st.session_state.export_data["WORLD"][latest_year]
-            st.metric(f"Total Major Exports {latest_year}", f"{total_latest:.1f} Mt")
+            world_latest = st.session_state.stocks_data["WORLD"][latest_year]
+            st.metric(f"Global Stocks {latest_year}", f"{world_latest:.1f} Mt")
 
     with col2:
         if (
-            "WORLD" in st.session_state.export_data
-            and latest_year in st.session_state.export_data["WORLD"]
-            and prev_year in st.session_state.export_data["WORLD"]
+            "WORLD" in st.session_state.stocks_data
+            and latest_year in st.session_state.stocks_data["WORLD"]
+            and prev_year in st.session_state.stocks_data["WORLD"]
         ):
-            total_change = (
-                st.session_state.export_data["WORLD"][latest_year]
-                - st.session_state.export_data["WORLD"][prev_year]
+            world_change = (
+                st.session_state.stocks_data["WORLD"][latest_year]
+                - st.session_state.stocks_data["WORLD"][prev_year]
             )
-            st.metric("Change from Previous Year", f"{total_change:+.1f} Mt")
+            st.metric("Change from Previous Year", f"{world_change:+.1f} Mt")
 
     with col3:
-        # Find top exporter (excluding TOTAL)
-        countries_only = {
-            k: v
-            for k, v in st.session_state.export_data.items()
-            if k != "WORLD" and k in ALLOWED_EXPORT_COUNTRIES
-        }
-        if countries_only and latest_year in next(iter(countries_only.values())):
-            top_exporter = max(
-                countries_only.items(), key=lambda x: x[1].get(latest_year, 0)
-            )
-            st.metric(f"Top Exporter {latest_year}", top_exporter[0])
+        # China's share of global stocks
+        if (
+            "China" in st.session_state.stocks_data
+            and latest_year in st.session_state.stocks_data["China"]
+            and "WORLD" in st.session_state.stocks_data
+            and latest_year in st.session_state.stocks_data["WORLD"]
+        ):
+            china_stocks = st.session_state.stocks_data["China"][latest_year]
+            world_stocks = st.session_state.stocks_data["WORLD"][latest_year]
+            china_share = (china_stocks / world_stocks * 100) if world_stocks > 0 else 0
+            st.metric("China's Share of Stocks", f"{china_share:.1f}%")
 
     with col4:
-        if countries_only and latest_year in top_exporter[1]:
-            top_export = top_exporter[1][latest_year]
-            st.metric("Top Export Volume", f"{top_export:.1f} Mt")
+        # Find country with highest stocks (excluding WORLD)
+        countries_only = {
+            k: v
+            for k, v in st.session_state.stocks_data.items()
+            if k != "WORLD" and k in ALLOWED_COUNTRIES
+        }
+        if countries_only and latest_year in next(iter(countries_only.values())):
+            top_holder = max(
+                countries_only.items(), key=lambda x: x[1].get(latest_year, 0)
+            )
+            st.metric(f"Top Stock Holder", top_holder[0])
 
 with tab2:
     # Get the projection year (last year in display_years)
-    display_years = st.session_state.export_current_config.get(
+    display_years = st.session_state.stocks_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
     projection_year = display_years[-1]
     estimate_year = display_years[-2]
 
-    st.header(f"Edit {projection_year} Export Projections")
+    st.header(f"Edit {projection_year} Stock Projections")
     st.markdown(
         f"**Note:** Historical data ({', '.join(display_years[:-1])}) is static and cannot be modified."
     )
 
     # Create form for editing projections
-    with st.form("export_projection_form"):
-        st.markdown(f"### Update Export Projections for {projection_year}")
+    with st.form("stocks_projection_form"):
+        st.markdown(f"### Update Stock Projections for {projection_year}")
 
         # Create input fields for each country
         updated_values = {}
 
-        # Filter countries to allowed list only (excluding TOTAL)
+        # Filter countries to allowed list only (excluding WORLD for editing)
         filtered_countries = [
             c
-            for c in st.session_state.export_data.keys()
-            if c in ALLOWED_EXPORT_COUNTRIES and c != "WORLD"
+            for c in st.session_state.stocks_data.keys()
+            if c in ALLOWED_COUNTRIES and c != "WORLD"
         ]
 
         for country in filtered_countries:
-            if projection_year not in st.session_state.export_data[country]:
+            if projection_year not in st.session_state.stocks_data[country]:
                 continue
 
-            current_value = st.session_state.export_data[country][projection_year]
+            current_value = st.session_state.stocks_data[country][projection_year]
 
             # Calculate change from estimate year
-            estimate_value = st.session_state.export_data[country].get(estimate_year, 0)
+            estimate_value = st.session_state.stocks_data[country].get(estimate_year, 0)
             current_change = current_value - estimate_value if estimate_value else 0
 
             # Show historical trend
             historical_values = []
             for year in display_years[:-1]:
-                if year in st.session_state.export_data[country]:
+                if year in st.session_state.stocks_data[country]:
                     historical_values.append(
-                        st.session_state.export_data[country][year]
+                        st.session_state.stocks_data[country][year]
                     )
 
             st.subheader(f"{country}")
@@ -650,12 +674,12 @@ with tab2:
 
             with col1:
                 updated_values[country] = st.number_input(
-                    f"Exports (Mt)",
+                    f"Stocks (Mt)",
                     value=float(current_value),
                     min_value=0.0,
                     step=0.1,
                     format="%.1f",
-                    key=f"export_{country}",
+                    key=f"stocks_{country}",
                     help=(
                         f"Historical: {' → '.join([f'{v:.1f}' for v in historical_values])}"
                         if historical_values
@@ -675,85 +699,80 @@ with tab2:
                         st.info("Change: 0.0")
 
         # Submit button
-        if st.form_submit_button("Update Export Projections", type="primary"):
+        if st.form_submit_button("Update Stock Projections", type="primary"):
             # Update the data
             db = get_database()
 
             # Update individual countries
             for country, value in updated_values.items():
-                st.session_state.export_data[country][projection_year] = value
+                st.session_state.stocks_data[country][projection_year] = value
 
                 # Calculate change from estimate year
-                if estimate_year in st.session_state.export_data[country]:
+                if estimate_year in st.session_state.stocks_data[country]:
                     change = (
-                        value - st.session_state.export_data[country][estimate_year]
+                        value - st.session_state.stocks_data[country][estimate_year]
                     )
                 else:
                     change = 0
 
                 # Save to database
                 if db:
-                    db.update_export_value(country, projection_year, value, change)
+                    db.update_stocks_value(
+                        country, projection_year, value, change, None
+                    )
 
-            # Calculate and update total
-            total_exports = sum(updated_values.values())
-            if estimate_year in st.session_state.export_data.get("WORLD", {}):
-                total_change = (
-                    total_exports - st.session_state.export_data["WORLD"][estimate_year]
+            # Calculate and update WORLD total
+            world_total = sum(updated_values.values())
+            if estimate_year in st.session_state.stocks_data.get("WORLD", {}):
+                world_change = (
+                    world_total - st.session_state.stocks_data["WORLD"][estimate_year]
                 )
             else:
-                total_change = 0
+                world_change = 0
 
-            if "WORLD" not in st.session_state.export_data:
-                st.session_state.export_data["WORLD"] = {}
+            if "WORLD" not in st.session_state.stocks_data:
+                st.session_state.stocks_data["WORLD"] = {}
 
-            st.session_state.export_data["WORLD"][projection_year] = total_exports
+            st.session_state.stocks_data["WORLD"][projection_year] = world_total
 
             if db:
-                db.update_export_value(
-                    "WORLD",
-                    projection_year,
-                    total_exports,
-                    total_change,
+                db.update_stocks_value(
+                    "WORLD", projection_year, world_total, world_change, None
                 )
 
-            st.success("✅ Export projections updated successfully!")
+            st.success("✅ Stock projections updated successfully!")
             if db:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
 with tab3:
-    st.header("Export Visualizations")
+    st.header("Stock Visualizations")
 
     # Get display years from configuration
-    display_years = st.session_state.export_current_config.get(
+    display_years = st.session_state.stocks_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
     # Time series plot
-    st.subheader("Export Trends Over Time")
+    st.subheader("Ending Stocks Trends Over Time")
 
     # Select countries to display - filtered to allowed countries only
     available_countries = [
-        c
-        for c in st.session_state.export_data.keys()
-        if c in ALLOWED_EXPORT_COUNTRIES and c != "WORLD"
+        c for c in st.session_state.stocks_data.keys() if c in ALLOWED_COUNTRIES
     ]
 
     countries_to_plot = st.multiselect(
-        "Select countries to display:",
+        "Select countries/regions to display:",
         options=available_countries,
         default=[
             c
             for c in [
                 "WORLD",
                 "China",
+                "United States",
                 "European Union",
                 "India",
                 "Russia",
-                "United States",
-                "Australia",
-                "Canada",
             ]
             if c in available_countries
         ],
@@ -768,8 +787,8 @@ with tab3:
             years_with_data = []
 
             for year in display_years:
-                if year in st.session_state.export_data[country]:
-                    values.append(st.session_state.export_data[country][year])
+                if year in st.session_state.stocks_data[country]:
+                    values.append(st.session_state.stocks_data[country][year])
                     years_with_data.append(year)
 
             if values:
@@ -781,38 +800,14 @@ with tab3:
                         name=country,
                         hovertemplate=f"<b>{country}</b><br>"
                         + "Year: %{x}<br>"
-                        + "Exports: %{y:.1f} Mt<extra></extra>",
+                        + "Stocks: %{y:.1f} Mt<extra></extra>",
                     )
                 )
 
-        # Add total line if requested
-        if st.checkbox("Show WORLD"):
-            if "WORLD" in st.session_state.export_data:
-                total_values = []
-                total_years = []
-                for year in display_years:
-                    if year in st.session_state.export_data["WORLD"]:
-                        total_values.append(st.session_state.export_data["WORLD"][year])
-                        total_years.append(year)
-
-                if total_values:
-                    fig.add_trace(
-                        go.Scatter(
-                            x=total_years,
-                            y=total_values,
-                            mode="lines+markers",
-                            name="WORLD",
-                            line=dict(dash="dash", width=3),
-                            hovertemplate="<b>TOTAL</b><br>"
-                            + "Year: %{x}<br>"
-                            + "Exports: %{y:.1f} Mt<extra></extra>",
-                        )
-                    )
-
         fig.update_layout(
-            title="Wheat Export Trends by Major Exporters",
+            title="Wheat Ending Stocks Trends",
             xaxis_title="Year",
-            yaxis_title="Exports (Million Metric Tons)",
+            yaxis_title="Ending Stocks (Million Metric Tons)",
             hovermode="x unified",
             height=500,
         )
@@ -822,7 +817,7 @@ with tab3:
             # Find the index where projection starts
             for i, year in enumerate(display_years):
                 if (
-                    st.session_state.export_current_config["year_status"].get(year)
+                    st.session_state.stocks_current_config["year_status"].get(year)
                     == "projection"
                 ):
                     fig.add_vline(
@@ -836,14 +831,14 @@ with tab3:
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # Market share visualization
-    st.subheader(f"Export Market Share ({display_years[-1]})")
+    # Stock distribution pie chart
+    st.subheader(f"Global Stock Distribution ({display_years[-1]})")
 
-    # Prepare data for pie chart
+    # Prepare data for pie chart (excluding WORLD)
     countries_only = {
         k: v
-        for k, v in st.session_state.export_data.items()
-        if k != "WORLD" and k in ALLOWED_EXPORT_COUNTRIES
+        for k, v in st.session_state.stocks_data.items()
+        if k != "WORLD" and k in ALLOWED_COUNTRIES
     }
 
     latest_year = display_years[-1]
@@ -862,23 +857,22 @@ with tab3:
                     labels=pie_labels,
                     values=pie_data,
                     hovertemplate="<b>%{label}</b><br>"
-                    + "Exports: %{value:.1f} Mt<br>"
+                    + "Stocks: %{value:.1f} Mt<br>"
                     + "Share: %{percent}<extra></extra>",
                 )
             ]
         )
 
         fig_pie.update_layout(
-            title=f"Export Market Share - {latest_year} Projection", height=500
+            title=f"Distribution of Global Wheat Stocks - {latest_year} Projection",
+            height=500,
         )
 
         st.plotly_chart(fig_pie, use_container_width=True)
 
     # Change analysis - filtered to allowed countries
     filtered_data = {
-        k: v
-        for k, v in st.session_state.export_data.items()
-        if k in ALLOWED_EXPORT_COUNTRIES
+        k: v for k, v in st.session_state.stocks_data.items() if k in ALLOWED_COUNTRIES
     }
 
     # Calculate changes for visualization
@@ -887,10 +881,38 @@ with tab3:
             if i > 0 and year in data and display_years[i - 1] in data:
                 data[f"{year}_change"] = data[year] - data[display_years[i - 1]]
 
-    create_change_visualization(filtered_data, "Exports", exclude=["WORLD"])
+    create_change_visualization(filtered_data, "Stocks", exclude=["WORLD"])
 
 with tab4:
-    st.header("Export Data Management")
+    st.header("Stock-to-Use Ratio Analysis")
+
+    st.markdown(
+        """
+    **Stock-to-Use (S/U) Ratio** indicates the level of carryover stock as a percentage of total use.
+    - **< 20%**: Tight supplies, potential price volatility
+    - **20-30%**: Adequate supplies for most countries
+    - **> 30%**: Comfortable buffer stocks
+    - **> 50%**: High stock levels (common for strategic reserves)
+    """
+    )
+
+    # Get display years from configuration
+    display_years = st.session_state.stocks_current_config.get(
+        "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
+    )
+    latest_year = display_years[-1]
+
+    # S/U Ratio comparison
+    st.subheader(f"Stock-to-Use Ratios by Country ({latest_year})")
+
+    # For now, show a placeholder message since S/U ratios may need separate calculation
+    st.info(
+        "Stock-to-Use ratios require additional data (domestic consumption, exports) for calculation. "
+        "This feature will be available once the full supply and demand data is integrated."
+    )
+
+with tab5:
+    st.header("Stock Data Management")
 
     # Export options
     col1, col2 = st.columns(2)
@@ -899,72 +921,72 @@ with tab4:
         st.subheader("Export Current Data")
 
         # Filter data for export
-        export_wheat_data = {
+        export_stocks_data = {
             country: data
-            for country, data in st.session_state.export_data.items()
-            if country in ALLOWED_EXPORT_COUNTRIES
+            for country, data in st.session_state.stocks_data.items()
+            if country in ALLOWED_COUNTRIES
         }
 
         # Prepare export data
         export_data = {
-            "wheat_export_data": export_wheat_data,
-            "metadata": st.session_state.export_metadata,
-            "current_config": st.session_state.export_current_config,
+            "wheat_stocks_data": export_stocks_data,
+            "metadata": st.session_state.stocks_metadata,
+            "current_config": st.session_state.stocks_current_config,
             "export_timestamp": datetime.now().isoformat(),
             "data_source": (
-                "database" if st.session_state.export_data_loaded else "local"
+                "database" if st.session_state.stocks_data_loaded else "local"
             ),
             "user": st.session_state.get("username", "unknown"),
         }
 
         # JSON export
         st.download_button(
-            label="📥 Download Export Data as JSON",
+            label="📥 Download Stocks Data as JSON",
             data=json.dumps(export_data, indent=2),
-            file_name=f"wheat_export_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            file_name=f"wheat_stocks_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
         )
 
         # CSV export
-        df_export = pd.DataFrame(export_wheat_data).T
+        df_export = pd.DataFrame(export_stocks_data).T
         csv_data = df_export.to_csv()
         st.download_button(
-            label="📥 Download Export Data as CSV",
+            label="📥 Download Stocks Data as CSV",
             data=csv_data,
-            file_name=f"wheat_export_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"wheat_stocks_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
         )
 
     with col2:
         st.subheader("Import Data")
 
-        uploaded_file = st.file_uploader("Upload JSON export data file", type=["json"])
+        uploaded_file = st.file_uploader("Upload JSON stocks data file", type=["json"])
 
         if uploaded_file is not None:
             try:
                 uploaded_data = json.load(uploaded_file)
 
-                if st.button("Import Export Data"):
-                    if "wheat_export_data" in uploaded_data:
+                if st.button("Import Stocks Data"):
+                    if "wheat_stocks_data" in uploaded_data:
                         # Filter imported data to allowed countries
                         filtered_data = {
                             country: data
                             for country, data in uploaded_data[
-                                "wheat_export_data"
+                                "wheat_stocks_data"
                             ].items()
-                            if country in ALLOWED_EXPORT_COUNTRIES
+                            if country in ALLOWED_COUNTRIES
                         }
-                        st.session_state.export_data = filtered_data
+                        st.session_state.stocks_data = filtered_data
 
                     if "metadata" in uploaded_data:
-                        st.session_state.export_metadata = uploaded_data["metadata"]
+                        st.session_state.stocks_metadata = uploaded_data["metadata"]
 
                     if "current_config" in uploaded_data:
-                        st.session_state.export_current_config = uploaded_data[
+                        st.session_state.stocks_current_config = uploaded_data[
                             "current_config"
                         ]
 
-                    st.success("Export data imported successfully!")
+                    st.success("Stocks data imported successfully!")
                     st.rerun()
 
             except json.JSONDecodeError:
@@ -974,14 +996,14 @@ with tab4:
 st.markdown("---")
 status_text = (
     "🗄️ Database Connected"
-    if st.session_state.export_data_loaded
+    if st.session_state.stocks_data_loaded
     else "💾 Local Data Mode"
 )
 user_info = f"👤 {st.session_state.get('name', 'User')}"
 st.markdown(
     f"""
     <div style='text-align: center; color: #666; font-size: 0.8em;'>
-    📦 Wheat Exports Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
+    🏢 Wheat Ending Stocks Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
     </div>
     """,
     unsafe_allow_html=True,

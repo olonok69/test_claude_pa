@@ -105,11 +105,12 @@ with st.sidebar:
     with col1:
         if st.button("🌽 Production", use_container_width=True):
             st.switch_page("pages/10_corn_production.py")
-        st.info("🏢 Stocks - Coming Soon")
+        if st.button("📥 Imports", use_container_width=True):
+            st.switch_page("pages/12_corn_imports.py")
         st.info("🌽 Acreage - Coming Soon")
         st.info("🌍 World Demand - Coming Soon")
     with col2:
-        st.info("📥 Imports - Coming Soon")
+        st.info("🏢 Stocks - Coming Soon")
         st.info("📊 S/U Ratio - Coming Soon")
         st.info("🌱 Yield - Coming Soon")
 

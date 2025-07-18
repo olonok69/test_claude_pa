@@ -200,7 +200,10 @@ def main():
                     "📦 Exports", use_container_width=True, key="nav_corn_exp"
                 ):
                     navigate_to_page("pages/11_corn_exports.py")
-                st.info("📥 Imports - Coming Soon")
+                if st.button(
+                    "📥 Imports", use_container_width=True, key="nav_corn_imp"
+                ):
+                    navigate_to_page("pages/12_corn_imports.py")
                 st.info("🏢 Ending Stocks - Coming Soon")
                 st.info("📊 Stock-to-Use Ratio - Coming Soon")
                 st.info("🌽 Acreage - Coming Soon")
