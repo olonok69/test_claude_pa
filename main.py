@@ -1,4 +1,5 @@
 import argparse
+import os
 from utils.logging_utils import setup_logging
 from utils.config_utils import load_config
 from utils.summary_utils import generate_and_save_summary
@@ -13,6 +14,13 @@ from pipeline import (
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Process and upload data to Neo4j.")
+    parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default="config/config.yaml",
+        help="Path to the configuration file (default: config/config.yaml)",
+    )
     parser.add_argument(
         "--recreate-all",
         action="store_true",
@@ -33,11 +41,32 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Get create_only_new from config, but allow command line to override
+    # Validate config file exists
+    if not os.path.exists(args.config):
+        print(f"Error: Configuration file '{args.config}' not found.")
+        print("Please create a configuration file or specify a valid path with --config")
+        exit(1)
+
     # Set up logging first to load config
     logger = setup_logging(log_file="logs/data_processing.log")
-    config = load_config("config/config.yaml")
+    
+    try:
+        # Load the configuration
+        config = load_config(args.config)
+        logger.info(f"Loaded configuration from: {args.config}")
+        
+        # Log event information
+        event_config = config.get("event", {})
+        main_event_name = event_config.get("main_event_name", "main")
+        secondary_event_name = event_config.get("secondary_event_name", "secondary")
+        logger.info(f"Processing data for {main_event_name} event (with {secondary_event_name} as secondary event)")
+        
+    except Exception as e:
+        logger.error(f"Error loading configuration from '{args.config}': {e}")
+        print(f"Error loading configuration: {e}")
+        exit(1)
 
+    # Get create_only_new from config, but allow command line to override
     # If --recreate-all is specified, create_only_new is False
     # Otherwise, use the value from config (default True)
     if args.recreate_all:
@@ -48,9 +77,6 @@ if __name__ == "__main__":
     logger.info(f"Running with create_only_new={create_only_new}")
 
     try:
-        # Load the configuration
-        config = load_config("config/config.yaml")
-
         # Determine which steps to run
         steps_to_run = []
         if args.only_steps:
@@ -187,3 +213,4 @@ if __name__ == "__main__":
         logger.error(f"Error in data processing: {e}", exc_info=True)
         print(f"Error: {e}")
         print("See logs/data_processing.log for details")
+        exit(1)
