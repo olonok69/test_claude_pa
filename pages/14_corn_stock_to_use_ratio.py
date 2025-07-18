@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 from datetime import datetime
 import sys
 import os
@@ -13,14 +14,13 @@ from corn_helpers.database_helper import CornProductionDB
 from corn_helpers.common_functions import (
     format_change,
     create_status_indicators,
-    create_change_visualization,
     style_change_column,
 )
 
 # Page configuration
 st.set_page_config(
-    page_title="Corn Exports Dashboard",
-    page_icon="📦",
+    page_title="Corn Stock-to-Use Ratio Dashboard",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -55,8 +55,8 @@ if not st.session_state.get("authentication_status"):
         st.switch_page("app.py")
     st.stop()
 
-# Define allowed countries for corn exports (based on create_corn_database.py)
-ALLOWED_EXPORT_COUNTRIES = [
+# Define allowed countries (based on create_corn_database.py)
+ALLOWED_COUNTRIES = [
     "WORLD",
     "China",
     "European Union",
@@ -109,12 +109,12 @@ with st.sidebar:
             st.switch_page("pages/12_corn_imports.py")
         if st.button("🏢 Stocks", use_container_width=True):
             st.switch_page("pages/13_corn_stocks.py")
-        if st.button("📊 S/U Ratio", use_container_width=True):
-            st.switch_page("pages/14_corn_stock_to_use_ratio.py")
+        st.info("🌍 World Demand - Coming Soon")
     with col2:
+        if st.button("📦 Exports", use_container_width=True):
+            st.switch_page("pages/11_corn_exports.py")
         st.info("🌽 Acreage - Coming Soon")
         st.info("🌱 Yield - Coming Soon")
-        st.info("🌍 World Demand - Coming Soon")
 
     st.markdown("---")
 
@@ -124,7 +124,7 @@ with st.sidebar:
         st.switch_page("pages/9_mcp_app.py")
 
     st.markdown("---")
-    st.markdown("### 📦 Corn Exports Dashboard")
+    st.markdown("### 📊 Corn S/U Ratio Dashboard")
 
     # Add current date in sidebar
     st.markdown("---")
@@ -143,44 +143,44 @@ def get_database():
     return CornProductionDB()
 
 
-# Load export data from database with filtering
+# Load S/U ratio data from database with filtering
 @st.cache_data
-def load_export_data():
-    """Load export data from database"""
+def load_su_ratio_data():
+    """Load stock-to-use ratio data from database"""
     db = get_database()
     if not db:
         return None, None, None
 
     try:
-        # Get all export data
-        all_export_data = db.get_all_export_data()
+        # Get all S/U ratio data
+        all_su_data = db.get_all_su_ratio_data()
 
         # Filter to keep only allowed countries
-        export_data = {
+        su_data = {
             country: data
-            for country, data in all_export_data.items()
-            if country in ALLOWED_EXPORT_COUNTRIES
+            for country, data in all_su_data.items()
+            if country in ALLOWED_COUNTRIES
         }
 
         # Get metadata
         metadata = db.get_metadata()
 
-        # Get current year configuration
+        # Get current year configuration - NOW WITH 2025/2026
         current_config = {
             "display_years": metadata.get(
-                "export_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
+                "su_ratio_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
             ).split(","),
             "year_status": json.loads(
                 metadata.get(
-                    "export_year_status",
+                    "su_ratio_year_status",
                     '{"2022/2023": "actual", "2023/2024": "actual", "2024/2025": "estimate", "2025/2026": "projection"}',
                 )
             ),
         }
 
-        return export_data, metadata, current_config
+        return su_data, metadata, current_config
     except Exception as e:
-        st.error(f"❌ Error loading export data from database: {e}")
+        st.error(f"❌ Error loading S/U ratio data from database: {e}")
         return None, None, None
 
 
@@ -199,7 +199,7 @@ def can_initialize_year():
         return False, "Database not available"
 
     metadata = db.get_metadata()
-    last_init = metadata.get("export_last_year_initialization")
+    last_init = metadata.get("su_ratio_last_year_initialization")
 
     # Check if already initialized this year
     if last_init:
@@ -214,7 +214,7 @@ def can_initialize_year():
             pass
 
     # Get current configuration
-    display_years = metadata.get("export_display_years", "").split(",")
+    display_years = metadata.get("su_ratio_display_years", "").split(",")
     if not display_years:
         return False, "No year configuration found"
 
@@ -249,11 +249,11 @@ def initialize_new_year():
         # Get current configuration from metadata
         metadata = db.get_metadata()
         current_display_years = metadata.get(
-            "export_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
+            "su_ratio_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
         ).split(",")
 
         # Check what years actually exist in the database
-        cursor.execute("SELECT DISTINCT year FROM corn_exports ORDER BY year")
+        cursor.execute("SELECT DISTINCT year FROM corn_su_ratio ORDER BY year")
         all_years = [row[0] for row in cursor.fetchall()]
 
         print(f"Current display years: {current_display_years}")
@@ -286,21 +286,21 @@ def initialize_new_year():
             # Insert data for new year by copying from previous year
             cursor.execute(
                 """
-                INSERT INTO corn_exports (country, year, export_value, percentage_world, change_value, status)
-                SELECT country, ?, export_value, percentage_world, 0, 'projection'
-                FROM corn_exports
+                INSERT INTO corn_su_ratio (country, year, su_ratio, change_value, category, status)
+                SELECT country, ?, su_ratio, 0, category, 'projection'
+                FROM corn_su_ratio
                 WHERE year = ? AND country IN ({})
             """.format(
-                    ",".join(["?"] * len(ALLOWED_EXPORT_COUNTRIES))
+                    ",".join(["?"] * len(ALLOWED_COUNTRIES))
                 ),
-                [new_year, prev_year] + ALLOWED_EXPORT_COUNTRIES,
+                [new_year, prev_year] + ALLOWED_COUNTRIES,
             )
 
         # Update statuses for all years
         for year, status in new_year_status.items():
             cursor.execute(
                 """
-                UPDATE corn_exports 
+                UPDATE corn_su_ratio 
                 SET status = ?, updated_at = ?
                 WHERE year = ?
             """,
@@ -315,7 +315,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "export_display_years",
+                "su_ratio_display_years",
                 ",".join(new_display_years),
                 datetime.now().isoformat(),
             ),
@@ -327,7 +327,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "export_year_status",
+                "su_ratio_year_status",
                 json.dumps(new_year_status),
                 datetime.now().isoformat(),
             ),
@@ -339,7 +339,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "export_last_year_initialization",
+                "su_ratio_last_year_initialization",
                 datetime.now().isoformat(),
                 datetime.now().isoformat(),
             ),
@@ -367,22 +367,37 @@ def initialize_new_year():
         return False, str(e)
 
 
+# Function to get category for S/U ratio
+def get_category(ratio):
+    """Determine category based on S/U ratio value"""
+    if ratio >= 50:
+        return "Strategic Reserve"
+    elif ratio >= 30:
+        return "Comfortable"
+    elif ratio >= 20:
+        return "Adequate"
+    elif ratio >= 10:
+        return "Tight"
+    else:
+        return "Critical"
+
+
 # Initialize session state
 def initialize_session_state():
     """Initialize session state with database data"""
-    if "corn_export_data_loaded" not in st.session_state:
-        export_data, metadata, current_config = load_export_data()
+    if "corn_su_ratio_data_loaded" not in st.session_state:
+        su_data, metadata, current_config = load_su_ratio_data()
 
-        if export_data and metadata:
-            st.session_state.corn_export_data = export_data
-            st.session_state.corn_export_metadata = metadata
-            st.session_state.corn_export_current_config = current_config
-            st.session_state.corn_export_data_loaded = True
+        if su_data and metadata:
+            st.session_state.corn_su_ratio_data = su_data
+            st.session_state.corn_su_ratio_metadata = metadata
+            st.session_state.corn_su_ratio_current_config = current_config
+            st.session_state.corn_su_ratio_data_loaded = True
         else:
             # Fallback to empty data
-            st.session_state.corn_export_data = {}
-            st.session_state.corn_export_metadata = {}
-            st.session_state.corn_export_current_config = {
+            st.session_state.corn_su_ratio_data = {}
+            st.session_state.corn_su_ratio_metadata = {}
+            st.session_state.corn_su_ratio_current_config = {
                 "display_years": ["2022/2023", "2023/2024", "2024/2025", "2025/2026"],
                 "year_status": {
                     "2022/2023": "actual",
@@ -391,29 +406,35 @@ def initialize_session_state():
                     "2025/2026": "projection",
                 },
             }
-            st.session_state.corn_export_data_loaded = False
+            st.session_state.corn_su_ratio_data_loaded = False
 
 
 # Initialize session state
 initialize_session_state()
 
 # Title and header
-st.title("📦 Corn Exports Dashboard")
-st.markdown("### Major Corn Exporters Data Management")
+st.title("📊 Corn Stock-to-Use Ratio Dashboard")
+st.markdown("### Global Corn Market Tightness Analysis")
 
 # Database status indicator
-if st.session_state.corn_export_data_loaded:
+if st.session_state.corn_su_ratio_data_loaded:
     st.sidebar.success("🗄️ Connected to Database")
 else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
 # Main content area
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "💾 Data Export"]
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    [
+        "📈 Data Overview",
+        "✏️ Edit Projections",
+        "📊 Visualizations",
+        "🌍 Regional Insights",
+        "💾 Data Export",
+    ]
 )
 
 with tab1:
-    st.header("Global Corn Exports")
+    st.header("Global Corn Stock-to-Use Ratios")
 
     # Year initialization section
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -439,12 +460,12 @@ with tab1:
             st.rerun()
 
     # Display dynamic status indicators based on current configuration
-    if "corn_export_current_config" in st.session_state:
+    if "corn_su_ratio_current_config" in st.session_state:
         st.markdown("### Status Information")
         status_cols = st.columns(4)
 
-        display_years = st.session_state.corn_export_current_config["display_years"]
-        year_status = st.session_state.corn_export_current_config["year_status"]
+        display_years = st.session_state.corn_su_ratio_current_config["display_years"]
+        year_status = st.session_state.corn_su_ratio_current_config["year_status"]
 
         for i, year in enumerate(display_years):
             if i < len(status_cols):
@@ -459,29 +480,46 @@ with tab1:
 
     st.markdown("---")
 
+    # Key insights and explanation
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.info(
+            """
+        **Stock-to-Use (S/U) Ratio** measures ending stocks as a percentage of total consumption.
+        It's a critical indicator of market supply security and price volatility risk.
+        
+        The ratio helps assess whether markets are:
+        - **Well-supplied** (high ratio) → Lower price volatility
+        - **Tight** (low ratio) → Higher price volatility risk
+        """
+        )
+
+    with col2:
+        st.markdown("### Category Thresholds")
+        st.markdown(
+            """
+        - 🟢 **Strategic Reserve**: ≥50%
+        - 🔵 **Comfortable**: 30-50%
+        - 🟡 **Adequate**: 20-30%
+        - 🟠 **Tight**: 10-20%
+        - 🔴 **Critical**: <10%
+        """
+        )
+
     # Create enhanced table
-    st.markdown("### Export Data (Million Metric Tons)")
+    st.markdown("### Stock-to-Use Ratio Data (%)")
 
     # Get display years from configuration
-    display_years = st.session_state.corn_export_current_config.get(
+    display_years = st.session_state.corn_su_ratio_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
     # Create the data table with proper formatting and change calculations
     table_data = []
 
-    # First, get WORLD for the first year to calculate percentages
-    total_exports_first_year = None
-    if (
-        "WORLD" in st.session_state.corn_export_data
-        and display_years[0] in st.session_state.corn_export_data["WORLD"]
-    ):
-        total_exports_first_year = st.session_state.corn_export_data["WORLD"][
-            display_years[0]
-        ]
-
-    for country, data in st.session_state.corn_export_data.items():
-        if country not in ALLOWED_EXPORT_COUNTRIES:
+    for country, data in st.session_state.corn_su_ratio_data.items():
+        if country not in ALLOWED_COUNTRIES:
             continue
 
         row = {"Country": country}
@@ -489,27 +527,21 @@ with tab1:
         # Add data for display years only
         for i, year in enumerate(display_years):
             if year in data:
-                row[year] = f"{data[year]:.1f}"
+                row[year] = f"{data[year]:.1f}%"
 
-                if i == 0:
-                    # For first year, show % World instead of Change
-                    if (
-                        country != "WORLD"
-                        and total_exports_first_year
-                        and total_exports_first_year > 0
-                    ):
-                        percentage = (data[year] / total_exports_first_year) * 100
-                        row["% World"] = f"{percentage:.1f}%"
-                    else:
-                        row["% World"] = "-"
-                else:
-                    # For other years, calculate change from previous year
+                if i > 0:
+                    # Calculate change from previous year
                     prev_year = display_years[i - 1]
                     if prev_year in data:
                         change = data[year] - data[prev_year]
                         row[f"Change{' ' * i}"] = format_change(change)
                     else:
                         row[f"Change{' ' * i}"] = "-"
+
+        # Get current category
+        latest_year = display_years[-1]
+        if latest_year in data:
+            row["Category"] = get_category(data[latest_year])
 
         table_data.append(row)
 
@@ -520,19 +552,29 @@ with tab1:
         col for col in df_display.columns if col.strip().startswith("Change")
     ]
 
-    # Apply different styling to % World and Change columns
+    def style_category(val):
+        """Style function for category column"""
+        if val == "Strategic Reserve":
+            return "background-color: #90EE90"
+        elif val == "Comfortable":
+            return "background-color: #87CEEB"
+        elif val == "Adequate":
+            return "background-color: #F0E68C"
+        elif val == "Tight":
+            return "background-color: #FFB366"
+        elif val == "Critical":
+            return "background-color: #FFB6C1"
+        return ""
+
     styled_df = df_display.style
 
     # Style change columns
     for col in change_columns:
         styled_df = styled_df.map(style_change_column, subset=[col])
 
-    # Style % World column if it exists
-    if "% World" in df_display.columns:
-        styled_df = styled_df.map(
-            lambda x: "color: #1f77b4; font-weight: normal" if x != "-" else "",
-            subset=["% World"],
-        )
+    # Style category column if it exists
+    if "Category" in df_display.columns:
+        styled_df = styled_df.map(style_category, subset=["Category"])
 
     # Apply general styling
     styled_df = styled_df.set_properties(**{"text-align": "center"}).set_properties(
@@ -542,7 +584,7 @@ with tab1:
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # Summary statistics
-    st.markdown("### Summary Statistics")
+    st.markdown("### Key Metrics")
     col1, col2, col3, col4 = st.columns(4)
 
     # Get the latest projection year
@@ -551,77 +593,97 @@ with tab1:
 
     with col1:
         if (
-            "WORLD" in st.session_state.corn_export_data
-            and latest_year in st.session_state.corn_export_data["WORLD"]
+            "WORLD" in st.session_state.corn_su_ratio_data
+            and latest_year in st.session_state.corn_su_ratio_data["WORLD"]
         ):
-            total_latest = st.session_state.corn_export_data["WORLD"][latest_year]
-            st.metric(f"World Exports {latest_year}", f"{total_latest:.1f} Mt")
+            world_su = st.session_state.corn_su_ratio_data["WORLD"][latest_year]
+            world_change = 0
+            if prev_year and prev_year in st.session_state.corn_su_ratio_data["WORLD"]:
+                world_change = (
+                    world_su - st.session_state.corn_su_ratio_data["WORLD"][prev_year]
+                )
+            st.metric("Global S/U Ratio", f"{world_su:.1f}%", f"{world_change:+.1f}%")
 
     with col2:
-        if (
-            "WORLD" in st.session_state.corn_export_data
-            and latest_year in st.session_state.corn_export_data["WORLD"]
-            and prev_year in st.session_state.corn_export_data["WORLD"]
-        ):
-            total_change = (
-                st.session_state.corn_export_data["WORLD"][latest_year]
-                - st.session_state.corn_export_data["WORLD"][prev_year]
-            )
-            st.metric("Change from Previous Year", f"{total_change:+.1f} Mt")
+        # Count critical countries
+        critical_count = sum(
+            1
+            for country, data in st.session_state.corn_su_ratio_data.items()
+            if country in ALLOWED_COUNTRIES
+            and country != "WORLD"
+            and latest_year in data
+            and get_category(data[latest_year]) == "Critical"
+        )
+        st.metric(
+            "Critical Countries",
+            critical_count,
+            help="Countries with S/U ratio below 10%",
+        )
 
     with col3:
-        # Find top exporter (excluding WORLD)
+        # Highest S/U ratio (excluding WORLD)
         countries_only = {
             k: v
-            for k, v in st.session_state.corn_export_data.items()
-            if k != "WORLD" and k in ALLOWED_EXPORT_COUNTRIES
+            for k, v in st.session_state.corn_su_ratio_data.items()
+            if k != "WORLD" and k in ALLOWED_COUNTRIES
         }
         if countries_only and latest_year in next(iter(countries_only.values())):
-            top_exporter = max(
+            max_country = max(
                 countries_only.items(), key=lambda x: x[1].get(latest_year, 0)
             )
-            st.metric(f"Top Exporter {latest_year}", top_exporter[0])
+            st.metric(
+                "Highest S/U Ratio",
+                f"{max_country[0]}: {max_country[1][latest_year]:.1f}%",
+            )
 
     with col4:
-        if countries_only and latest_year in top_exporter[1]:
-            top_export = top_exporter[1][latest_year]
-            st.metric("Top Export Volume", f"{top_export:.1f} Mt")
+        # Lowest S/U ratio (excluding WORLD)
+        if countries_only and latest_year in next(iter(countries_only.values())):
+            min_country = min(
+                countries_only.items(), key=lambda x: x[1].get(latest_year, 100)
+            )
+            st.metric(
+                "Lowest S/U Ratio",
+                f"{min_country[0]}: {min_country[1][latest_year]:.1f}%",
+            )
 
 with tab2:
     # Get the projection year (last year in display_years)
-    display_years = st.session_state.corn_export_current_config.get(
+    display_years = st.session_state.corn_su_ratio_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
     projection_year = display_years[-1]
     estimate_year = display_years[-2]
 
-    st.header(f"Edit {projection_year} Export Projections")
+    st.header(f"Edit {projection_year} S/U Ratio Projections")
     st.markdown(
         f"**Note:** Historical data ({', '.join(display_years[:-1])}) is static and cannot be modified."
     )
 
     # Create form for editing projections
-    with st.form("corn_export_projection_form"):
-        st.markdown(f"### Update Export Projections for {projection_year}")
+    with st.form("corn_su_ratio_projection_form"):
+        st.markdown(f"### Update S/U Ratio Projections for {projection_year}")
 
         # Create input fields for each country
         updated_values = {}
 
-        # Filter countries to allowed list only (excluding WORLD)
+        # Filter countries to allowed list only (excluding WORLD for editing)
         filtered_countries = [
             c
-            for c in st.session_state.corn_export_data.keys()
-            if c in ALLOWED_EXPORT_COUNTRIES and c != "WORLD"
+            for c in st.session_state.corn_su_ratio_data.keys()
+            if c in ALLOWED_COUNTRIES and c != "WORLD"
         ]
 
         for country in filtered_countries:
-            if projection_year not in st.session_state.corn_export_data[country]:
+            if projection_year not in st.session_state.corn_su_ratio_data[country]:
                 continue
 
-            current_value = st.session_state.corn_export_data[country][projection_year]
+            current_value = st.session_state.corn_su_ratio_data[country][
+                projection_year
+            ]
 
             # Calculate change from estimate year
-            estimate_value = st.session_state.corn_export_data[country].get(
+            estimate_value = st.session_state.corn_su_ratio_data[country].get(
                 estimate_year, 0
             )
             current_change = current_value - estimate_value if estimate_value else 0
@@ -629,24 +691,25 @@ with tab2:
             # Show historical trend
             historical_values = []
             for year in display_years[:-1]:
-                if year in st.session_state.corn_export_data[country]:
+                if year in st.session_state.corn_su_ratio_data[country]:
                     historical_values.append(
-                        st.session_state.corn_export_data[country][year]
+                        st.session_state.corn_su_ratio_data[country][year]
                     )
 
             st.subheader(f"{country}")
-            col1, col2 = st.columns([2, 1])
+            col1, col2, col3 = st.columns([2, 1, 1])
 
             with col1:
                 updated_values[country] = st.number_input(
-                    f"Exports (Mt)",
+                    f"S/U Ratio (%)",
                     value=float(current_value),
                     min_value=0.0,
+                    max_value=200.0,
                     step=0.1,
                     format="%.1f",
-                    key=f"corn_export_{country}",
+                    key=f"corn_su_{country}",
                     help=(
-                        f"Historical: {' → '.join([f'{v:.1f}' for v in historical_values])}"
+                        f"Historical: {' → '.join([f'{v:.1f}%' for v in historical_values])}"
                         if historical_values
                         else "No historical data"
                     ),
@@ -663,87 +726,93 @@ with tab2:
                     else:
                         st.info("Change: 0.0")
 
+            with col3:
+                # Show new category
+                new_category = get_category(updated_values[country])
+                category_color = {
+                    "Strategic Reserve": "🟢",
+                    "Comfortable": "🔵",
+                    "Adequate": "🟡",
+                    "Tight": "🟠",
+                    "Critical": "🔴",
+                }.get(new_category, "⚪")
+                st.markdown(f"**Category**: {category_color} {new_category}")
+
         # Submit button
-        if st.form_submit_button("Update Export Projections", type="primary"):
+        if st.form_submit_button("Update S/U Ratio Projections", type="primary"):
             # Update the data
             db = get_database()
 
             # Update individual countries
             for country, value in updated_values.items():
-                st.session_state.corn_export_data[country][projection_year] = value
+                st.session_state.corn_su_ratio_data[country][projection_year] = value
 
                 # Calculate change from estimate year
-                if estimate_year in st.session_state.corn_export_data[country]:
+                if estimate_year in st.session_state.corn_su_ratio_data[country]:
                     change = (
                         value
-                        - st.session_state.corn_export_data[country][estimate_year]
+                        - st.session_state.corn_su_ratio_data[country][estimate_year]
                     )
                 else:
                     change = 0
 
                 # Save to database
                 if db:
-                    db.update_export_value(country, projection_year, value, change)
+                    db.update_su_ratio_value(country, projection_year, value, change)
 
-            # Calculate and update total
-            total_exports = sum(updated_values.values())
-            if estimate_year in st.session_state.corn_export_data.get("WORLD", {}):
-                total_change = (
-                    total_exports
-                    - st.session_state.corn_export_data["WORLD"][estimate_year]
+            # Calculate and update WORLD average
+            world_avg = sum(updated_values.values()) / len(updated_values)
+            if estimate_year in st.session_state.corn_su_ratio_data.get("WORLD", {}):
+                world_change = (
+                    world_avg
+                    - st.session_state.corn_su_ratio_data["WORLD"][estimate_year]
                 )
             else:
-                total_change = 0
+                world_change = 0
 
-            if "WORLD" not in st.session_state.corn_export_data:
-                st.session_state.corn_export_data["WORLD"] = {}
+            if "WORLD" not in st.session_state.corn_su_ratio_data:
+                st.session_state.corn_su_ratio_data["WORLD"] = {}
 
-            st.session_state.corn_export_data["WORLD"][projection_year] = total_exports
+            st.session_state.corn_su_ratio_data["WORLD"][projection_year] = world_avg
 
             if db:
-                db.update_export_value(
-                    "WORLD",
-                    projection_year,
-                    total_exports,
-                    total_change,
+                db.update_su_ratio_value(
+                    "WORLD", projection_year, world_avg, world_change
                 )
 
-            st.success("✅ Export projections updated successfully!")
+            st.success("✅ S/U ratio projections updated successfully!")
             if db:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
 with tab3:
-    st.header("Export Visualizations")
+    st.header("S/U Ratio Visualizations")
 
     # Get display years from configuration
-    display_years = st.session_state.corn_export_current_config.get(
+    display_years = st.session_state.corn_su_ratio_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
     # Time series plot
-    st.subheader("Export Trends Over Time")
+    st.subheader("S/U Ratio Trends Over Time")
 
     # Select countries to display - filtered to allowed countries only
     available_countries = [
-        c
-        for c in st.session_state.corn_export_data.keys()
-        if c in ALLOWED_EXPORT_COUNTRIES and c != "WORLD"
+        c for c in st.session_state.corn_su_ratio_data.keys() if c in ALLOWED_COUNTRIES
     ]
 
     countries_to_plot = st.multiselect(
-        "Select countries to display:",
+        "Select countries/regions to display:",
         options=available_countries,
         default=[
             c
             for c in [
+                "WORLD",
                 "China",
+                "United States",
                 "European Union",
                 "India",
                 "Russia",
-                "United States",
-                "Australia",
-                "Canada",
             ]
             if c in available_countries
         ],
@@ -758,8 +827,8 @@ with tab3:
             years_with_data = []
 
             for year in display_years:
-                if year in st.session_state.corn_export_data[country]:
-                    values.append(st.session_state.corn_export_data[country][year])
+                if year in st.session_state.corn_su_ratio_data[country]:
+                    values.append(st.session_state.corn_su_ratio_data[country][year])
                     years_with_data.append(year)
 
             if values:
@@ -771,40 +840,44 @@ with tab3:
                         name=country,
                         hovertemplate=f"<b>{country}</b><br>"
                         + "Year: %{x}<br>"
-                        + "Exports: %{y:.1f} Mt<extra></extra>",
+                        + "S/U Ratio: %{y:.1f}%<extra></extra>",
                     )
                 )
 
-        # Add total line if requested
-        if st.checkbox("Show WORLD Total"):
-            if "WORLD" in st.session_state.corn_export_data:
-                total_values = []
-                total_years = []
-                for year in display_years:
-                    if year in st.session_state.corn_export_data["WORLD"]:
-                        total_values.append(
-                            st.session_state.corn_export_data["WORLD"][year]
-                        )
-                        total_years.append(year)
-
-                if total_values:
-                    fig.add_trace(
-                        go.Scatter(
-                            x=total_years,
-                            y=total_values,
-                            mode="lines+markers",
-                            name="WORLD",
-                            line=dict(dash="dash", width=3),
-                            hovertemplate="<b>WORLD</b><br>"
-                            + "Year: %{x}<br>"
-                            + "Exports: %{y:.1f} Mt<extra></extra>",
-                        )
-                    )
+        # Add reference lines for categories
+        fig.add_hline(
+            y=50,
+            line_dash="dash",
+            line_color="green",
+            annotation_text="Strategic Reserve (≥50%)",
+            annotation_position="right",
+        )
+        fig.add_hline(
+            y=30,
+            line_dash="dash",
+            line_color="blue",
+            annotation_text="Comfortable (30%)",
+            annotation_position="right",
+        )
+        fig.add_hline(
+            y=20,
+            line_dash="dash",
+            line_color="orange",
+            annotation_text="Adequate (20%)",
+            annotation_position="right",
+        )
+        fig.add_hline(
+            y=10,
+            line_dash="dash",
+            line_color="red",
+            annotation_text="Tight (10%)",
+            annotation_position="right",
+        )
 
         fig.update_layout(
-            title="Corn Export Trends by Major Exporters",
+            title="Corn Stock-to-Use Ratio Trends",
             xaxis_title="Year",
-            yaxis_title="Exports (Million Metric Tons)",
+            yaxis_title="Stock-to-Use Ratio (%)",
             hovermode="x unified",
             height=500,
         )
@@ -814,7 +887,9 @@ with tab3:
             # Find the index where projection starts
             for i, year in enumerate(display_years):
                 if (
-                    st.session_state.corn_export_current_config["year_status"].get(year)
+                    st.session_state.corn_su_ratio_current_config["year_status"].get(
+                        year
+                    )
                     == "projection"
                 ):
                     fig.add_vline(
@@ -828,61 +903,205 @@ with tab3:
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # Market share visualization
-    st.subheader(f"Export Market Share ({display_years[-1]})")
+    # Category distribution
+    st.subheader(f"S/U Ratio Category Distribution ({display_years[-1]})")
 
-    # Prepare data for pie chart
+    # Count countries by category
+    category_counts = {}
+    latest_year = display_years[-1]
+
+    # Filter countries to allowed list only (excluding WORLD)
     countries_only = {
         k: v
-        for k, v in st.session_state.corn_export_data.items()
-        if k != "WORLD" and k in ALLOWED_EXPORT_COUNTRIES
+        for k, v in st.session_state.corn_su_ratio_data.items()
+        if k != "WORLD" and k in ALLOWED_COUNTRIES
     }
-
-    latest_year = display_years[-1]
-    pie_data = []
-    pie_labels = []
 
     for country, data in countries_only.items():
         if latest_year in data:
-            pie_data.append(data[latest_year])
-            pie_labels.append(country)
+            category = get_category(data[latest_year])
+            category_counts[category] = category_counts.get(category, 0) + 1
 
-    if pie_data:
+    if category_counts:
+        # Create pie chart
         fig_pie = go.Figure(
             data=[
                 go.Pie(
-                    labels=pie_labels,
-                    values=pie_data,
+                    labels=list(category_counts.keys()),
+                    values=list(category_counts.values()),
+                    marker_colors=[
+                        "#90EE90",
+                        "#87CEEB",
+                        "#F0E68C",
+                        "#FFB366",
+                        "#FFB6C1",
+                    ],
                     hovertemplate="<b>%{label}</b><br>"
-                    + "Exports: %{value:.1f} Mt<br>"
+                    + "Countries: %{value}<br>"
                     + "Share: %{percent}<extra></extra>",
                 )
             ]
         )
 
         fig_pie.update_layout(
-            title=f"Export Market Share - {latest_year} Projection", height=500
+            title=f"Distribution of Countries by S/U Ratio Category - {latest_year}",
+            height=400,
         )
 
         st.plotly_chart(fig_pie, use_container_width=True)
 
-    # Change analysis - filtered to allowed countries
-    filtered_data = {
-        k: v
-        for k, v in st.session_state.corn_export_data.items()
-        if k in ALLOWED_EXPORT_COUNTRIES
-    }
+    # Scatter plot: S/U Ratio vs Change
+    st.subheader("S/U Ratio vs Year-over-Year Change")
 
-    # Calculate changes for visualization
-    for country, data in filtered_data.items():
-        for i, year in enumerate(display_years):
-            if i > 0 and year in data and display_years[i - 1] in data:
-                data[f"{year}_change"] = data[year] - data[display_years[i - 1]]
+    scatter_data = []
+    prev_year = display_years[-2] if len(display_years) > 1 else None
 
-    create_change_visualization(filtered_data, "Exports", exclude=["WORLD"])
+    for country, data in countries_only.items():
+        if latest_year in data:
+            change = 0
+            if prev_year and prev_year in data:
+                change = data[latest_year] - data[prev_year]
+
+            scatter_data.append(
+                {
+                    "Country": country,
+                    "S/U Ratio": data[latest_year],
+                    "Change": change,
+                    "Category": get_category(data[latest_year]),
+                }
+            )
+
+    if scatter_data:
+        df_scatter = pd.DataFrame(scatter_data)
+
+        fig_scatter = px.scatter(
+            df_scatter,
+            x="S/U Ratio",
+            y="Change",
+            color="Category",
+            size=[10] * len(df_scatter),
+            hover_data=["Country"],
+            color_discrete_map={
+                "Strategic Reserve": "#90EE90",
+                "Comfortable": "#87CEEB",
+                "Adequate": "#F0E68C",
+                "Tight": "#FFB366",
+                "Critical": "#FFB6C1",
+            },
+        )
+
+        fig_scatter.update_layout(
+            title=f"S/U Ratio vs Change ({latest_year})",
+            xaxis_title="Stock-to-Use Ratio (%)",
+            yaxis_title="Year-over-Year Change (%)",
+            height=400,
+        )
+
+        # Add quadrant lines
+        fig_scatter.add_hline(y=0, line_dash="dash", line_color="gray")
+        fig_scatter.add_vline(x=30, line_dash="dash", line_color="gray")
+
+        st.plotly_chart(fig_scatter, use_container_width=True)
 
 with tab4:
-    st.header("Export Data Management")
+    st.header("Regional S/U Ratio Insights")
+
+    # Get display years from configuration
+    display_years = st.session_state.corn_su_ratio_current_config.get(
+        "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
+    )
+    latest_year = display_years[-1]
+
+    # Regional groupings - only include allowed countries
+    regions = {
+        "Major Exporters": [
+            c
+            for c in ["United States", "Canada", "Australia", "Russia"]
+            if c in ALLOWED_COUNTRIES
+        ],
+        "Major Importers": [
+            c for c in ["China", "India", "European Union"] if c in ALLOWED_COUNTRIES
+        ],
+    }
+
+    # Display regional analysis
+    for region_name, countries in regions.items():
+        if not countries:
+            continue
+
+        st.subheader(f"{region_name}")
+
+        # Calculate regional metrics
+        region_data = []
+        for country in countries:
+            if (
+                country in st.session_state.corn_su_ratio_data
+                and latest_year in st.session_state.corn_su_ratio_data[country]
+            ):
+                data = st.session_state.corn_su_ratio_data[country]
+                region_data.append(
+                    {
+                        "Country": country,
+                        f"{latest_year} S/U Ratio": data[latest_year],
+                        "Category": get_category(data[latest_year]),
+                    }
+                )
+
+        if region_data:
+            df_region = pd.DataFrame(region_data)
+
+            # Create bar chart
+            fig_region = px.bar(
+                df_region,
+                x="Country",
+                y=f"{latest_year} S/U Ratio",
+                color="Category",
+                color_discrete_map={
+                    "Strategic Reserve": "#90EE90",
+                    "Comfortable": "#87CEEB",
+                    "Adequate": "#F0E68C",
+                    "Tight": "#FFB366",
+                    "Critical": "#FFB6C1",
+                },
+                title=f"{region_name} - S/U Ratios {latest_year}",
+            )
+
+            fig_region.update_layout(
+                xaxis_title="Country", yaxis_title="Stock-to-Use Ratio (%)", height=300
+            )
+
+            # Add reference line at 30%
+            fig_region.add_hline(
+                y=30,
+                line_dash="dash",
+                line_color="gray",
+                annotation_text="Comfortable threshold",
+            )
+
+            st.plotly_chart(fig_region, use_container_width=True)
+
+            # Summary metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                avg_su = df_region[f"{latest_year} S/U Ratio"].mean()
+                st.metric(f"Average S/U Ratio", f"{avg_su:.1f}%")
+            with col2:
+                max_su = df_region[f"{latest_year} S/U Ratio"].max()
+                max_country = df_region[
+                    df_region[f"{latest_year} S/U Ratio"] == max_su
+                ]["Country"].values[0]
+                st.metric("Highest", f"{max_country}: {max_su:.1f}%")
+            with col3:
+                min_su = df_region[f"{latest_year} S/U Ratio"].min()
+                min_country = df_region[
+                    df_region[f"{latest_year} S/U Ratio"] == min_su
+                ]["Country"].values[0]
+                st.metric("Lowest", f"{min_country}: {min_su:.1f}%")
+
+        st.markdown("---")
+
+with tab5:
+    st.header("S/U Ratio Data Management")
 
     # Export options
     col1, col2 = st.columns(2)
@@ -891,74 +1110,76 @@ with tab4:
         st.subheader("Export Current Data")
 
         # Filter data for export
-        export_corn_data = {
+        export_su_data = {
             country: data
-            for country, data in st.session_state.corn_export_data.items()
-            if country in ALLOWED_EXPORT_COUNTRIES
+            for country, data in st.session_state.corn_su_ratio_data.items()
+            if country in ALLOWED_COUNTRIES
         }
 
         # Prepare export data
         export_data = {
-            "corn_export_data": export_corn_data,
-            "metadata": st.session_state.corn_export_metadata,
-            "current_config": st.session_state.corn_export_current_config,
+            "corn_su_ratio_data": export_su_data,
+            "metadata": st.session_state.corn_su_ratio_metadata,
+            "current_config": st.session_state.corn_su_ratio_current_config,
             "export_timestamp": datetime.now().isoformat(),
             "data_source": (
-                "database" if st.session_state.corn_export_data_loaded else "local"
+                "database" if st.session_state.corn_su_ratio_data_loaded else "local"
             ),
             "user": st.session_state.get("username", "unknown"),
         }
 
         # JSON export
         st.download_button(
-            label="📥 Download Export Data as JSON",
+            label="📥 Download S/U Ratio Data as JSON",
             data=json.dumps(export_data, indent=2),
-            file_name=f"corn_export_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            file_name=f"corn_su_ratio_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
         )
 
         # CSV export
-        df_export = pd.DataFrame(export_corn_data).T
+        df_export = pd.DataFrame(export_su_data).T
         csv_data = df_export.to_csv()
         st.download_button(
-            label="📥 Download Export Data as CSV",
+            label="📥 Download S/U Ratio Data as CSV",
             data=csv_data,
-            file_name=f"corn_export_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"corn_su_ratio_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
         )
 
     with col2:
         st.subheader("Import Data")
 
-        uploaded_file = st.file_uploader("Upload JSON export data file", type=["json"])
+        uploaded_file = st.file_uploader(
+            "Upload JSON S/U ratio data file", type=["json"]
+        )
 
         if uploaded_file is not None:
             try:
                 uploaded_data = json.load(uploaded_file)
 
-                if st.button("Import Export Data"):
-                    if "corn_export_data" in uploaded_data:
+                if st.button("Import S/U Ratio Data"):
+                    if "corn_su_ratio_data" in uploaded_data:
                         # Filter imported data to allowed countries
                         filtered_data = {
                             country: data
                             for country, data in uploaded_data[
-                                "corn_export_data"
+                                "corn_su_ratio_data"
                             ].items()
-                            if country in ALLOWED_EXPORT_COUNTRIES
+                            if country in ALLOWED_COUNTRIES
                         }
-                        st.session_state.corn_export_data = filtered_data
+                        st.session_state.corn_su_ratio_data = filtered_data
 
                     if "metadata" in uploaded_data:
-                        st.session_state.corn_export_metadata = uploaded_data[
+                        st.session_state.corn_su_ratio_metadata = uploaded_data[
                             "metadata"
                         ]
 
                     if "current_config" in uploaded_data:
-                        st.session_state.corn_export_current_config = uploaded_data[
+                        st.session_state.corn_su_ratio_current_config = uploaded_data[
                             "current_config"
                         ]
 
-                    st.success("Export data imported successfully!")
+                    st.success("S/U ratio data imported successfully!")
                     st.rerun()
 
             except json.JSONDecodeError:
@@ -968,14 +1189,14 @@ with tab4:
 st.markdown("---")
 status_text = (
     "🗄️ Database Connected"
-    if st.session_state.corn_export_data_loaded
+    if st.session_state.corn_su_ratio_data_loaded
     else "💾 Local Data Mode"
 )
 user_info = f"👤 {st.session_state.get('name', 'User')}"
 st.markdown(
     f"""
     <div style='text-align: center; color: #666; font-size: 0.8em;'>
-    📦 Corn Exports Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
+    📊 Corn Stock-to-Use Ratio Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
     </div>
     """,
     unsafe_allow_html=True,

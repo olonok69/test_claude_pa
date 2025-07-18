@@ -204,8 +204,16 @@ def main():
                     "📥 Imports", use_container_width=True, key="nav_corn_imp"
                 ):
                     navigate_to_page("pages/12_corn_imports.py")
-                st.info("🏢 Ending Stocks - Coming Soon")
-                st.info("📊 Stock-to-Use Ratio - Coming Soon")
+                if st.button(
+                    "🏢 Ending Stocks", use_container_width=True, key="nav_corn_stocks"
+                ):
+                    navigate_to_page("pages/13_corn_stocks.py")
+                if st.button(
+                    "📊 Stock-to-Use Ratio",
+                    use_container_width=True,
+                    key="nav_corn_su",
+                ):
+                    navigate_to_page("pages/14_corn_stock_to_use_ratio.py")
                 st.info("🌽 Acreage - Coming Soon")
                 st.info("🌱 Yield - Coming Soon")
                 st.info("🌍 World Demand - Coming Soon")

@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 from datetime import datetime
 import sys
 import os
@@ -33,8 +34,8 @@ def style_percentage_column(val):
 
 # Page configuration
 st.set_page_config(
-    page_title="Wheat Imports Dashboard",
-    page_icon="📥",
+    page_title="Wheat Acreage Dashboard",
+    page_icon="🌾",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -72,14 +73,13 @@ if not st.session_state.get("authentication_status"):
 # Define allowed countries (exactly as requested)
 ALLOWED_COUNTRIES = [
     "WORLD",
-    "Egypt",
-    "Indonesia",
-    "European Union",
-    "Turkey",
-    "Philippines",
     "China",
-    "Algeria",
-    "Morocco",
+    "European Union",
+    "India",
+    "Russia",
+    "United States",
+    "Australia",
+    "Canada",
 ]
 
 # Add unified sidebar navigation
@@ -120,19 +120,19 @@ with st.sidebar:
     with col1:
         if st.button("🌾 Production", use_container_width=True):
             st.switch_page("pages/1_wheat_production.py")
-        if st.button("🏢 Stocks", use_container_width=True):
-            st.switch_page("pages/4_wheat_stocks.py")
-        if st.button("🌾 Acreage", use_container_width=True):
-            st.switch_page("pages/6_wheat_acreage.py")
+        if st.button("📥 Imports", use_container_width=True):
+            st.switch_page("pages/3_wheat_imports.py")
+        if st.button("🌱 Yield", use_container_width=True):
+            st.switch_page("pages/7_wheat_yield.py")
         if st.button("🌍 World Demand", use_container_width=True):
             st.switch_page("pages/8_wheat_world_demand.py")
     with col2:
         if st.button("📦 Exports", use_container_width=True):
             st.switch_page("pages/2_wheat_exports.py")
+        if st.button("🏢 Stocks", use_container_width=True):
+            st.switch_page("pages/4_wheat_stocks.py")
         if st.button("📊 S/U Ratio", use_container_width=True):
             st.switch_page("pages/5_stock_to_use_ratio.py")
-        if st.button("🌱 Yield", use_container_width=True):
-            st.switch_page("pages/7_wheat_yield.py")
 
     st.markdown("---")
 
@@ -142,7 +142,7 @@ with st.sidebar:
         st.switch_page("pages/9_mcp_app.py")
 
     st.markdown("---")
-    st.markdown("### 📥 Imports Dashboard")
+    st.markdown("### 🌾 Acreage Dashboard")
 
     # Add current date in sidebar
     st.markdown("---")
@@ -161,44 +161,44 @@ def get_database():
     return WheatProductionDB()
 
 
-# Load import data from database with filtering
+# Load acreage data from database with filtering
 @st.cache_data
-def load_import_data():
-    """Load import data from database"""
+def load_acreage_data():
+    """Load acreage data from database"""
     db = get_database()
     if not db:
         return None, None, None
 
     try:
-        # Get all import data
-        all_import_data = db.get_all_import_data()
+        # Get all acreage data
+        all_acreage_data = db.get_all_acreage_data()
 
         # Filter to keep only allowed countries
-        import_data = {
+        acreage_data = {
             country: data
-            for country, data in all_import_data.items()
+            for country, data in all_acreage_data.items()
             if country in ALLOWED_COUNTRIES
         }
 
         # Get metadata
         metadata = db.get_metadata()
 
-        # Get current year configuration
+        # Get current year configuration - NOW WITH 2025/2026
         current_config = {
             "display_years": metadata.get(
-                "import_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
+                "acreage_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
             ).split(","),
             "year_status": json.loads(
                 metadata.get(
-                    "import_year_status",
+                    "acreage_year_status",
                     '{"2022/2023": "actual", "2023/2024": "actual", "2024/2025": "estimate", "2025/2026": "projection"}',
                 )
             ),
         }
 
-        return import_data, metadata, current_config
+        return acreage_data, metadata, current_config
     except Exception as e:
-        st.error(f"❌ Error loading import data from database: {e}")
+        st.error(f"❌ Error loading acreage data from database: {e}")
         return None, None, None
 
 
@@ -217,7 +217,7 @@ def can_initialize_year():
         return False, "Database not available"
 
     metadata = db.get_metadata()
-    last_init = metadata.get("import_last_year_initialization")
+    last_init = metadata.get("acreage_last_year_initialization")
 
     # Check if already initialized this year
     if last_init:
@@ -232,7 +232,7 @@ def can_initialize_year():
             pass
 
     # Get current configuration
-    display_years = metadata.get("import_display_years", "").split(",")
+    display_years = metadata.get("acreage_display_years", "").split(",")
     if not display_years:
         return False, "No year configuration found"
 
@@ -267,11 +267,11 @@ def initialize_new_year():
         # Get current configuration from metadata
         metadata = db.get_metadata()
         current_display_years = metadata.get(
-            "import_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
+            "acreage_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
         ).split(",")
 
         # Check what years actually exist in the database
-        cursor.execute("SELECT DISTINCT year FROM wheat_imports ORDER BY year")
+        cursor.execute("SELECT DISTINCT year FROM wheat_acreage ORDER BY year")
         all_years = [row[0] for row in cursor.fetchall()]
 
         print(f"Current display years: {current_display_years}")
@@ -304,9 +304,9 @@ def initialize_new_year():
             # Insert data for new year by copying from previous year
             cursor.execute(
                 """
-                INSERT INTO wheat_imports (country, year, import_value, percentage_world, change_value, status)
-                SELECT country, ?, import_value, percentage_world, 0, 'projection'
-                FROM wheat_imports
+                INSERT INTO wheat_acreage (country, year, acreage_value, percentage_world, change_value, yield_per_hectare, status)
+                SELECT country, ?, acreage_value, percentage_world, 0, yield_per_hectare, 'projection'
+                FROM wheat_acreage
                 WHERE year = ? AND country IN ({})
             """.format(
                     ",".join(["?"] * len(ALLOWED_COUNTRIES))
@@ -318,7 +318,7 @@ def initialize_new_year():
         for year, status in new_year_status.items():
             cursor.execute(
                 """
-                UPDATE wheat_imports 
+                UPDATE wheat_acreage 
                 SET status = ?, updated_at = ?
                 WHERE year = ?
             """,
@@ -333,7 +333,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "import_display_years",
+                "acreage_display_years",
                 ",".join(new_display_years),
                 datetime.now().isoformat(),
             ),
@@ -345,7 +345,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "import_year_status",
+                "acreage_year_status",
                 json.dumps(new_year_status),
                 datetime.now().isoformat(),
             ),
@@ -357,7 +357,7 @@ def initialize_new_year():
             VALUES (?, ?, ?)
         """,
             (
-                "import_last_year_initialization",
+                "acreage_last_year_initialization",
                 datetime.now().isoformat(),
                 datetime.now().isoformat(),
             ),
@@ -388,19 +388,19 @@ def initialize_new_year():
 # Initialize session state
 def initialize_session_state():
     """Initialize session state with database data"""
-    if "import_data_loaded" not in st.session_state:
-        import_data, metadata, current_config = load_import_data()
+    if "acreage_data_loaded" not in st.session_state:
+        acreage_data, metadata, current_config = load_acreage_data()
 
-        if import_data and metadata:
-            st.session_state.import_data = import_data
-            st.session_state.import_metadata = metadata
-            st.session_state.import_current_config = current_config
-            st.session_state.import_data_loaded = True
+        if acreage_data and metadata:
+            st.session_state.acreage_data = acreage_data
+            st.session_state.acreage_metadata = metadata
+            st.session_state.acreage_current_config = current_config
+            st.session_state.acreage_data_loaded = True
         else:
             # Fallback to empty data
-            st.session_state.import_data = {}
-            st.session_state.import_metadata = {}
-            st.session_state.import_current_config = {
+            st.session_state.acreage_data = {}
+            st.session_state.acreage_metadata = {}
+            st.session_state.acreage_current_config = {
                 "display_years": ["2022/2023", "2023/2024", "2024/2025", "2025/2026"],
                 "year_status": {
                     "2022/2023": "actual",
@@ -409,29 +409,35 @@ def initialize_session_state():
                     "2025/2026": "projection",
                 },
             }
-            st.session_state.import_data_loaded = False
+            st.session_state.acreage_data_loaded = False
 
 
 # Initialize session state
 initialize_session_state()
 
 # Title and header
-st.title("📥 Wheat Imports Dashboard")
-st.markdown("### Major Wheat Importers Data Management")
+st.title("🌾 Wheat Acreage Dashboard")
+st.markdown("### Global Wheat Area Harvested Analysis")
 
 # Database status indicator
-if st.session_state.import_data_loaded:
+if st.session_state.acreage_data_loaded:
     st.sidebar.success("🗄️ Connected to Database")
 else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
 # Main content area
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "💾 Data Export"]
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    [
+        "📈 Data Overview",
+        "✏️ Edit Projections",
+        "📊 Visualizations",
+        "🌱 Yield Analysis",
+        "💾 Data Export",
+    ]
 )
 
 with tab1:
-    st.header("Global Wheat Imports")
+    st.header("Global Wheat Acreage (Area Harvested)")
 
     # Year initialization section
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -457,12 +463,12 @@ with tab1:
             st.rerun()
 
     # Display dynamic status indicators based on current configuration
-    if "import_current_config" in st.session_state:
+    if "acreage_current_config" in st.session_state:
         st.markdown("### Status Information")
         status_cols = st.columns(4)
 
-        display_years = st.session_state.import_current_config["display_years"]
-        year_status = st.session_state.import_current_config["year_status"]
+        display_years = st.session_state.acreage_current_config["display_years"]
+        year_status = st.session_state.acreage_current_config["year_status"]
 
         for i, year in enumerate(display_years):
             if i < len(status_cols):
@@ -477,11 +483,21 @@ with tab1:
 
     st.markdown("---")
 
-    # Create enhanced table without percentage of world
-    st.markdown("### Import Data (Million Metric Tons)")
+    # Key insights
+    st.info(
+        """
+    **Acreage (Area Harvested)** represents the total land area from which wheat is harvested.
+    - Measured in Million Hectares (Mha)
+    - Key driver of production along with yield
+    - Influenced by: crop prices, weather, government policies, competing crops
+    """
+    )
+
+    # Create enhanced table
+    st.markdown("### Acreage Data (Million Hectares)")
 
     # Get display years from configuration
-    display_years = st.session_state.import_current_config.get(
+    display_years = st.session_state.acreage_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
@@ -491,12 +507,14 @@ with tab1:
     # First, get WORLD total for the first year to calculate percentages
     world_total_first_year = None
     if (
-        "WORLD" in st.session_state.import_data
-        and display_years[0] in st.session_state.import_data["WORLD"]
+        "WORLD" in st.session_state.acreage_data
+        and display_years[0] in st.session_state.acreage_data["WORLD"]
     ):
-        world_total_first_year = st.session_state.import_data["WORLD"][display_years[0]]
+        world_total_first_year = st.session_state.acreage_data["WORLD"][
+            display_years[0]
+        ]
 
-    for country, data in st.session_state.import_data.items():
+    for country, data in st.session_state.acreage_data.items():
         if country not in ALLOWED_COUNTRIES:
             continue
 
@@ -505,7 +523,7 @@ with tab1:
         # Add data for display years only
         for i, year in enumerate(display_years):
             if year in data:
-                row[year] = f"{data[year]:.1f}"
+                row[year] = f"{data[year]:.2f}"
 
                 if i == 0:
                     # For first year, show % World instead of Change
@@ -526,6 +544,14 @@ with tab1:
                         row[f"Change{' ' * i}"] = format_change(change)
                     else:
                         row[f"Change{' ' * i}"] = "-"
+
+        # Add yield for latest year
+        latest_year = display_years[-1]
+        yield_key = f"{latest_year}_yield"
+        if yield_key in data:
+            row["Yield (t/ha)"] = f"{data[yield_key]:.2f}"
+        else:
+            row["Yield (t/ha)"] = "-"
 
         table_data.append(row)
 
@@ -564,168 +590,232 @@ with tab1:
 
     with col1:
         if (
-            "WORLD" in st.session_state.import_data
-            and latest_year in st.session_state.import_data["WORLD"]
+            "WORLD" in st.session_state.acreage_data
+            and latest_year in st.session_state.acreage_data["WORLD"]
         ):
-            world_latest = st.session_state.import_data["WORLD"][latest_year]
-            st.metric(f"Global Imports {latest_year}", f"{world_latest:.1f} Mt")
+            world_latest = st.session_state.acreage_data["WORLD"][latest_year]
+            st.metric(f"Global Acreage {latest_year}", f"{world_latest:.1f} Mha")
 
     with col2:
         if (
-            "WORLD" in st.session_state.import_data
-            and latest_year in st.session_state.import_data["WORLD"]
-            and prev_year in st.session_state.import_data["WORLD"]
+            "WORLD" in st.session_state.acreage_data
+            and latest_year in st.session_state.acreage_data["WORLD"]
+            and prev_year in st.session_state.acreage_data["WORLD"]
         ):
             world_change = (
-                st.session_state.import_data["WORLD"][latest_year]
-                - st.session_state.import_data["WORLD"][prev_year]
+                st.session_state.acreage_data["WORLD"][latest_year]
+                - st.session_state.acreage_data["WORLD"][prev_year]
             )
-            st.metric("Change from Previous Year", f"{world_change:+.1f} Mt")
+            st.metric("Change from Previous Year", f"{world_change:+.1f} Mha")
 
     with col3:
-        # Find top importer (excluding WORLD)
+        # Average yield
+        world_yield_key = f"{latest_year}_yield"
+        if (
+            "WORLD" in st.session_state.acreage_data
+            and world_yield_key in st.session_state.acreage_data["WORLD"]
+        ):
+            world_yield = st.session_state.acreage_data["WORLD"][world_yield_key]
+            st.metric("Global Avg Yield", f"{world_yield:.2f} t/ha")
+
+    with col4:
+        # Top country by acreage (excluding WORLD)
         countries_only = {
             k: v
-            for k, v in st.session_state.import_data.items()
+            for k, v in st.session_state.acreage_data.items()
             if k != "WORLD" and k in ALLOWED_COUNTRIES
         }
         if countries_only and latest_year in next(iter(countries_only.values())):
-            top_importer = max(
+            top_country = max(
                 countries_only.items(), key=lambda x: x[1].get(latest_year, 0)
             )
-            st.metric(f"Top Importer {latest_year}", f"{top_importer[0][:15]}...")
-
-    with col4:
-        if countries_only and latest_year in top_importer[1]:
-            top_import = top_importer[1][latest_year]
-            st.metric("Top Import Volume", f"{top_import:.1f} Mt")
+            st.metric(f"Largest Area", f"{top_country[0]}")
 
 with tab2:
     # Get the projection year (last year in display_years)
-    display_years = st.session_state.import_current_config.get(
+    display_years = st.session_state.acreage_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
     projection_year = display_years[-1]
     estimate_year = display_years[-2]
 
-    st.header(f"Edit {projection_year} Projections")
+    st.header(f"Edit {projection_year} Acreage Projections")
     st.markdown(
         f"**Note:** Historical data ({', '.join(display_years[:-1])}) is static and cannot be modified."
     )
 
     # Create form for editing projections
-    with st.form("import_projection_form"):
-        st.markdown(f"### Update Import Projections for {projection_year}")
+    with st.form("acreage_projection_form"):
+        st.markdown(f"### Update Acreage Projections for {projection_year}")
 
         # Create input fields for each country
         updated_values = {}
+        updated_yields = {}
 
-        # Filter countries to allowed list only (excluding WORLD)
+        # Filter countries to allowed list only (excluding WORLD for editing)
         filtered_countries = [
             c
-            for c in st.session_state.import_data.keys()
+            for c in st.session_state.acreage_data.keys()
             if c in ALLOWED_COUNTRIES and c != "WORLD"
         ]
 
         for country in filtered_countries:
-            if projection_year not in st.session_state.import_data[country]:
+            if projection_year not in st.session_state.acreage_data[country]:
                 continue
 
-            current_value = st.session_state.import_data[country][projection_year]
+            current_value = st.session_state.acreage_data[country][projection_year]
+            yield_key = f"{projection_year}_yield"
+            current_yield = st.session_state.acreage_data[country].get(yield_key, 0)
 
             # Calculate change from estimate year
-            estimate_value = st.session_state.import_data[country].get(estimate_year, 0)
+            estimate_value = st.session_state.acreage_data[country].get(
+                estimate_year, 0
+            )
             current_change = current_value - estimate_value if estimate_value else 0
 
             # Show historical trend
             historical_values = []
             for year in display_years[:-1]:
-                if year in st.session_state.import_data[country]:
+                if year in st.session_state.acreage_data[country]:
                     historical_values.append(
-                        st.session_state.import_data[country][year]
+                        st.session_state.acreage_data[country][year]
                     )
 
             st.subheader(f"{country}")
-            col1, col2 = st.columns([2, 1])
+            col1, col2, col3 = st.columns([2, 1, 1])
 
             with col1:
                 updated_values[country] = st.number_input(
-                    f"Imports (Mt)",
+                    f"Acreage (Mha)",
                     value=float(current_value),
                     min_value=0.0,
                     step=0.1,
-                    format="%.1f",
-                    key=f"import_{country}",
+                    format="%.2f",
+                    key=f"acreage_{country}",
                     help=(
-                        f"Historical: {' → '.join([f'{v:.1f}' for v in historical_values])}"
+                        f"Historical: {' → '.join([f'{v:.2f}' for v in historical_values])}"
                         if historical_values
                         else "No historical data"
                     ),
                 )
 
             with col2:
+                updated_yields[country] = st.number_input(
+                    f"Yield (t/ha)",
+                    value=float(current_yield),
+                    min_value=0.0,
+                    max_value=10.0,
+                    step=0.01,
+                    format="%.2f",
+                    key=f"yield_{country}",
+                    help="Tonnes per hectare",
+                )
+
+            with col3:
                 # Display calculated change
                 if estimate_value:
                     calc_change = updated_values[country] - estimate_value
                     if calc_change > 0:
-                        st.success(f"Change: +{calc_change:.1f}")
+                        st.success(f"Change: +{calc_change:.2f}")
                     elif calc_change < 0:
-                        st.error(f"Change: {calc_change:.1f}")
+                        st.error(f"Change: {calc_change:.2f}")
                     else:
-                        st.info("Change: 0.0")
+                        st.info("Change: 0.00")
 
         # Submit button
-        if st.form_submit_button("Update Projections", type="primary"):
+        if st.form_submit_button("Update Acreage Projections", type="primary"):
             # Update the data
             db = get_database()
+
+            # Update individual countries
             for country, value in updated_values.items():
-                st.session_state.import_data[country][projection_year] = value
+                st.session_state.acreage_data[country][projection_year] = value
+                st.session_state.acreage_data[country][f"{projection_year}_yield"] = (
+                    updated_yields[country]
+                )
 
                 # Calculate change from estimate year
-                if estimate_year in st.session_state.import_data[country]:
+                if estimate_year in st.session_state.acreage_data[country]:
                     change = (
-                        value - st.session_state.import_data[country][estimate_year]
+                        value - st.session_state.acreage_data[country][estimate_year]
                     )
                 else:
                     change = 0
 
                 # Save to database
                 if db:
-                    db.update_import_value(country, projection_year, value, change)
+                    db.update_acreage_value(
+                        country,
+                        projection_year,
+                        value,
+                        change,
+                        updated_yields[country],
+                    )
 
-            # Update WORLD total
+            # Calculate and update WORLD total
             world_total = sum(updated_values.values())
-            if "WORLD" in st.session_state.import_data:
-                st.session_state.import_data["WORLD"][projection_year] = world_total
-                if db:
-                    db.update_import_value("WORLD", projection_year, world_total, 0)
+            world_yield = (
+                sum(updated_yields.values()) / len(updated_yields)
+                if updated_yields
+                else 0
+            )
 
-            st.success("✅ Projections updated successfully!")
+            if estimate_year in st.session_state.acreage_data.get("WORLD", {}):
+                world_change = (
+                    world_total - st.session_state.acreage_data["WORLD"][estimate_year]
+                )
+            else:
+                world_change = 0
+
+            if "WORLD" not in st.session_state.acreage_data:
+                st.session_state.acreage_data["WORLD"] = {}
+
+            st.session_state.acreage_data["WORLD"][projection_year] = world_total
+            st.session_state.acreage_data["WORLD"][
+                f"{projection_year}_yield"
+            ] = world_yield
+
+            if db:
+                db.update_acreage_value(
+                    "WORLD", projection_year, world_total, world_change, world_yield
+                )
+
+            st.success("✅ Acreage projections updated successfully!")
             if db:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
 with tab3:
-    st.header("Import Visualizations")
+    st.header("Acreage Visualizations")
+
+    # Get display years from configuration
+    display_years = st.session_state.acreage_current_config.get(
+        "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
+    )
 
     # Time series plot
-    st.subheader("Import Trends Over Time")
+    st.subheader("Acreage Trends Over Time")
 
     # Select countries to display - filtered to allowed countries only
     available_countries = [
-        c
-        for c in st.session_state.import_data.keys()
-        if c in ALLOWED_COUNTRIES and c != "WORLD"
+        c for c in st.session_state.acreage_data.keys() if c in ALLOWED_COUNTRIES
     ]
 
     countries_to_plot = st.multiselect(
-        "Select countries to display:",
+        "Select countries/regions to display:",
         options=available_countries,
-        default=(
-            available_countries[:6]
-            if len(available_countries) > 6
-            else available_countries
-        ),
+        default=[
+            c
+            for c in [
+                "WORLD",
+                "India",
+                "Russia",
+                "China",
+                "European Union",
+                "United States",
+            ]
+            if c in available_countries
+        ],
     )
 
     if countries_to_plot:
@@ -737,8 +827,8 @@ with tab3:
             years_with_data = []
 
             for year in display_years:
-                if year in st.session_state.import_data[country]:
-                    values.append(st.session_state.import_data[country][year])
+                if year in st.session_state.acreage_data[country]:
+                    values.append(st.session_state.acreage_data[country][year])
                     years_with_data.append(year)
 
             if values:
@@ -750,39 +840,14 @@ with tab3:
                         name=country,
                         hovertemplate=f"<b>{country}</b><br>"
                         + "Year: %{x}<br>"
-                        + "Imports: %{y:.1f} Mt<extra></extra>",
+                        + "Acreage: %{y:.2f} Mha<extra></extra>",
                     )
                 )
 
-        # Add WORLD line if requested
-        if st.checkbox("Show WORLD Total"):
-            if "WORLD" in st.session_state.import_data:
-                world_values = []
-                years_with_data = []
-
-                for year in display_years:
-                    if year in st.session_state.import_data["WORLD"]:
-                        world_values.append(st.session_state.import_data["WORLD"][year])
-                        years_with_data.append(year)
-
-                if world_values:
-                    fig.add_trace(
-                        go.Scatter(
-                            x=years_with_data,
-                            y=world_values,
-                            mode="lines+markers",
-                            name="WORLD",
-                            line=dict(dash="dash", width=3),
-                            hovertemplate="<b>WORLD</b><br>"
-                            + "Year: %{x}<br>"
-                            + "Imports: %{y:.1f} Mt<extra></extra>",
-                        )
-                    )
-
         fig.update_layout(
-            title="Wheat Import Trends",
+            title="Wheat Acreage Trends",
             xaxis_title="Year",
-            yaxis_title="Imports (Million Metric Tons)",
+            yaxis_title="Area Harvested (Million Hectares)",
             hovermode="x unified",
             height=500,
         )
@@ -792,7 +857,7 @@ with tab3:
             # Find the index where projection starts
             for i, year in enumerate(display_years):
                 if (
-                    st.session_state.import_current_config["year_status"].get(year)
+                    st.session_state.acreage_current_config["year_status"].get(year)
                     == "projection"
                 ):
                     fig.add_vline(
@@ -806,42 +871,43 @@ with tab3:
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # Top importers bar chart
-    st.subheader(f"Top Wheat Importers ({latest_year})")
+    # Top countries by acreage
+    st.subheader(f"Top Countries by Wheat Acreage ({display_years[-1]})")
 
-    # Get countries for bar chart (excluding WORLD)
+    # Get top countries (excluding WORLD)
     countries_only = {
         k: v
-        for k, v in st.session_state.import_data.items()
+        for k, v in st.session_state.acreage_data.items()
         if k != "WORLD" and k in ALLOWED_COUNTRIES
     }
 
-    if countries_only and latest_year in next(iter(countries_only.values())):
-        sorted_importers = sorted(
-            countries_only.items(), key=lambda x: x[1].get(latest_year, 0), reverse=True
-        )
+    latest_year = display_years[-1]
+    top_countries = sorted(
+        countries_only.items(), key=lambda x: x[1].get(latest_year, 0), reverse=True
+    )
 
+    if top_countries:
         fig_bar = go.Figure(
             data=[
                 go.Bar(
-                    x=[country for country, _ in sorted_importers],
-                    y=[data.get(latest_year, 0) for _, data in sorted_importers],
+                    x=[country for country, _ in top_countries],
+                    y=[data.get(latest_year, 0) for _, data in top_countries],
                     text=[
-                        f"{data.get(latest_year, 0):.1f}"
-                        for _, data in sorted_importers
+                        f"{data.get(latest_year, 0):.1f}" for _, data in top_countries
                     ],
                     textposition="auto",
-                    marker_color="lightblue",
+                    marker_color="darkgreen",
                     hovertemplate="<b>%{x}</b><br>"
-                    + "Imports: %{y:.1f} Mt<extra></extra>",
+                    + "Acreage: %{y:.2f} Mha<br>"
+                    + "<extra></extra>",
                 )
             ]
         )
 
         fig_bar.update_layout(
-            title=f"Wheat Importers - {latest_year}",
+            title=f"Wheat Growing Countries by Area - {latest_year}",
             xaxis_title="Country",
-            yaxis_title="Imports (Million Metric Tons)",
+            yaxis_title="Area Harvested (Million Hectares)",
             height=400,
         )
 
@@ -849,9 +915,7 @@ with tab3:
 
     # Change analysis - filtered to allowed countries
     filtered_data = {
-        k: v
-        for k, v in st.session_state.import_data.items()
-        if k in ALLOWED_COUNTRIES and k != "WORLD"
+        k: v for k, v in st.session_state.acreage_data.items() if k in ALLOWED_COUNTRIES
     }
 
     # Calculate changes for visualization
@@ -860,10 +924,136 @@ with tab3:
             if i > 0 and year in data and display_years[i - 1] in data:
                 data[f"{year}_change"] = data[year] - data[display_years[i - 1]]
 
-    create_change_visualization(filtered_data, "Imports", exclude=["WORLD"])
+    create_change_visualization(filtered_data, "Acreage", exclude=["WORLD"])
 
 with tab4:
-    st.header("Data Export & Import")
+    st.header("Yield Analysis")
+
+    st.markdown(
+        """
+    **Yield** (tonnes per hectare) is a key productivity indicator that combines with acreage to determine production.
+    Higher yields indicate:
+    - Better farming practices
+    - Favorable weather conditions
+    - Improved seed varieties
+    - Better irrigation and inputs
+    """
+    )
+
+    # Get display years from configuration
+    display_years = st.session_state.acreage_current_config.get(
+        "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
+    )
+    latest_year = display_years[-1]
+
+    # Yield comparison chart
+    st.subheader(f"Yield Comparison by Country ({latest_year})")
+
+    # Get yield data
+    yield_data = []
+    for country, data in st.session_state.acreage_data.items():
+        if country in ALLOWED_COUNTRIES and country != "WORLD":
+            yield_key = f"{latest_year}_yield"
+            if yield_key in data and latest_year in data:
+                yield_data.append(
+                    {
+                        "Country": country,
+                        "Yield": data[yield_key],
+                        "Acreage": data[latest_year],
+                    }
+                )
+
+    if yield_data:
+        df_yield = pd.DataFrame(yield_data)
+        df_yield = df_yield.sort_values("Yield", ascending=False)
+
+        # Create yield bar chart
+        fig_yield = px.bar(
+            df_yield,
+            x="Country",
+            y="Yield",
+            title=f"Wheat Yields by Country - {latest_year}",
+            color="Yield",
+            color_continuous_scale="Greens",
+        )
+
+        fig_yield.update_layout(
+            xaxis_title="Country", yaxis_title="Yield (tonnes per hectare)", height=400
+        )
+
+        # Add world average line
+        world_yield_key = f"{latest_year}_yield"
+        world_yield = st.session_state.acreage_data.get("WORLD", {}).get(
+            world_yield_key, 3.52
+        )
+        fig_yield.add_hline(
+            y=world_yield,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"World Average: {world_yield:.2f} t/ha",
+        )
+
+        st.plotly_chart(fig_yield, use_container_width=True)
+
+        # Scatter plot: Acreage vs Yield
+        st.subheader("Acreage vs Yield Analysis")
+
+        fig_scatter = px.scatter(
+            df_yield,
+            x="Acreage",
+            y="Yield",
+            text="Country",
+            size="Acreage",
+            title=f"Wheat Acreage vs Yield ({latest_year})",
+            labels={"Acreage": "Area Harvested (Mha)", "Yield": "Yield (t/ha)"},
+        )
+
+        fig_scatter.update_traces(textposition="top center")
+        fig_scatter.update_layout(height=500)
+
+        # Add quadrant lines
+        fig_scatter.add_hline(y=world_yield, line_dash="dash", line_color="gray")
+        fig_scatter.add_vline(x=15, line_dash="dash", line_color="gray")
+
+        # Add quadrant labels
+        fig_scatter.add_annotation(
+            x=5, y=5.5, text="High Yield<br>Small Area", showarrow=False
+        )
+        fig_scatter.add_annotation(
+            x=25, y=5.5, text="High Yield<br>Large Area", showarrow=False
+        )
+        fig_scatter.add_annotation(
+            x=5, y=1.5, text="Low Yield<br>Small Area", showarrow=False
+        )
+        fig_scatter.add_annotation(
+            x=25, y=1.5, text="Low Yield<br>Large Area", showarrow=False
+        )
+
+        st.plotly_chart(fig_scatter, use_container_width=True)
+
+        # Yield statistics
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            avg_yield = df_yield["Yield"].mean()
+            st.metric("Average Yield", f"{avg_yield:.2f} t/ha")
+
+        with col2:
+            max_yield_country = df_yield.iloc[0]
+            st.metric(
+                "Highest Yield",
+                f"{max_yield_country['Country']}: {max_yield_country['Yield']:.2f} t/ha",
+            )
+
+        with col3:
+            min_yield_country = df_yield.iloc[-1]
+            st.metric(
+                "Lowest Yield",
+                f"{min_yield_country['Country']}: {min_yield_country['Yield']:.2f} t/ha",
+            )
+
+with tab5:
+    st.header("Acreage Data Management")
 
     # Export options
     col1, col2 = st.columns(2)
@@ -872,72 +1062,72 @@ with tab4:
         st.subheader("Export Current Data")
 
         # Filter data for export
-        export_import_data = {
+        export_acreage_data = {
             country: data
-            for country, data in st.session_state.import_data.items()
+            for country, data in st.session_state.acreage_data.items()
             if country in ALLOWED_COUNTRIES
         }
 
-        # Export data
+        # Prepare export data
         export_data = {
-            "wheat_import_data": export_import_data,
-            "metadata": st.session_state.import_metadata,
-            "current_config": st.session_state.import_current_config,
+            "wheat_acreage_data": export_acreage_data,
+            "metadata": st.session_state.acreage_metadata,
+            "current_config": st.session_state.acreage_current_config,
             "export_timestamp": datetime.now().isoformat(),
             "data_source": (
-                "database" if st.session_state.import_data_loaded else "local"
+                "database" if st.session_state.acreage_data_loaded else "local"
             ),
             "user": st.session_state.get("username", "unknown"),
         }
 
         # JSON export
         st.download_button(
-            label="📥 Download as JSON",
+            label="📥 Download Acreage Data as JSON",
             data=json.dumps(export_data, indent=2),
-            file_name=f"wheat_import_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            file_name=f"wheat_acreage_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
         )
 
         # CSV export
-        df_export = pd.DataFrame(export_import_data).T
+        df_export = pd.DataFrame(export_acreage_data).T
         csv_data = df_export.to_csv()
         st.download_button(
-            label="📥 Download as CSV",
+            label="📥 Download Acreage Data as CSV",
             data=csv_data,
-            file_name=f"wheat_import_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"wheat_acreage_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
         )
 
     with col2:
         st.subheader("Import Data")
 
-        uploaded_file = st.file_uploader("Upload JSON data file", type=["json"])
+        uploaded_file = st.file_uploader("Upload JSON acreage data file", type=["json"])
 
         if uploaded_file is not None:
             try:
                 uploaded_data = json.load(uploaded_file)
 
-                if st.button("Import Data"):
-                    if "wheat_import_data" in uploaded_data:
+                if st.button("Import Acreage Data"):
+                    if "wheat_acreage_data" in uploaded_data:
                         # Filter imported data to allowed countries
                         filtered_data = {
                             country: data
                             for country, data in uploaded_data[
-                                "wheat_import_data"
+                                "wheat_acreage_data"
                             ].items()
                             if country in ALLOWED_COUNTRIES
                         }
-                        st.session_state.import_data = filtered_data
+                        st.session_state.acreage_data = filtered_data
 
                     if "metadata" in uploaded_data:
-                        st.session_state.import_metadata = uploaded_data["metadata"]
+                        st.session_state.acreage_metadata = uploaded_data["metadata"]
 
                     if "current_config" in uploaded_data:
-                        st.session_state.import_current_config = uploaded_data[
+                        st.session_state.acreage_current_config = uploaded_data[
                             "current_config"
                         ]
 
-                    st.success("Data imported successfully!")
+                    st.success("Acreage data imported successfully!")
                     st.rerun()
 
             except json.JSONDecodeError:
@@ -947,14 +1137,14 @@ with tab4:
 st.markdown("---")
 status_text = (
     "🗄️ Database Connected"
-    if st.session_state.import_data_loaded
+    if st.session_state.acreage_data_loaded
     else "💾 Local Data Mode"
 )
 user_info = f"👤 {st.session_state.get('name', 'User')}"
 st.markdown(
     f"""
     <div style='text-align: center; color: #666; font-size: 0.8em;'>
-    📥 Wheat Imports Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
+    🌾 Wheat Acreage Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
     </div>
     """,
     unsafe_allow_html=True,

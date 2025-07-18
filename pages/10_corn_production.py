@@ -121,12 +121,14 @@ with st.sidebar:
             st.switch_page("pages/11_corn_exports.py")
         if st.button("📥 Imports", use_container_width=True, key="nav_corn_imp"):
             st.switch_page("pages/12_corn_imports.py")
-        st.info("🌽 Acreage - Coming Soon")
-        st.info("🌍 World Demand - Coming Soon")
+        if st.button("🏢 Stocks", use_container_width=True, key="nav_corn_stocks"):
+            st.switch_page("pages/13_corn_stocks.py")
+        if st.button("📊 S/U Ratio", use_container_width=True, key="nav_corn_su"):
+            st.switch_page("pages/14_corn_stock_to_use_ratio.py")
     with col2:
-        st.info("🏢 Stocks - Coming Soon")
-        st.info("📊 S/U Ratio - Coming Soon")
+        st.info("🌽 Acreage - Coming Soon")
         st.info("🌱 Yield - Coming Soon")
+        st.info("🌍 World Demand - Coming Soon")
 
     st.markdown("---")
 
