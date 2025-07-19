@@ -1,0 +1,38 @@
+
+# MCP Google Search
+uv run client.py "D:\repos\mcp-google-search\build\index.js"
+  
+can you search libaries about quantum ML QML in python and create a document in markdown format of what you found containing the url a summary of the content , finalize with a summary of your findings
+can you give more details about the url  https://www.bluequbit.io/quantum-machine-learning-tools
+ 
+busca toda la informacion que puedas encontrar en google sobre el QML o Quantum Machine Learning. Creas un documento Mardown con lo que hayas encontrado , la fuente y referencieas. Al final del Documento haces un sumario y conclusiones y citas todas las fuentes de relevancia
+
+
+# MCP  Word-MCP-Server
+
+uv run client.py "D:\repos\Office-Word-MCP-Server\word_document_server\main.py"
+ 
+Create a document with what you can tell me about quantum ML . Do an Introduction , then go deep in the main topics to know and create a table with references finally the name of the document is QML.docx and 
+convert it to pdf and save it to disk
+
+# MCP Finance recomendations python
+
+uv run client.py "D:\repos\mcp-client\server\main.py"
+
+- Recommend if buy or sell same stock based in Calculations of the Bollinger Bands and Fibonacci Retracement Strategy score. data period 1 year ,   window of  20 days  for Bollinger Bands and use last 5 days to calculate the scores
+
+- Recommend if buy or sell Tesla based in Calculations of the Bollinger Z-score  within a 20 days period
+
+- Recommend if buy or sell same stock based in Calculations of the Macd Donchian combined score. Use a data period  6 months,  a window  20 days to create the Donchian channel and for Macd use fast period 12 days, slow period 26 days and signal period 9 days
+- Analyze same stock and provide a trading recommendation based on:
+                    
+                    1. Connors RSI Score calculation (with default parameters: rsi_period=3, streak_period=2, rank_period=100)
+                    2. Z-Score indicator analysis window = 20
+                    3. Combined score calculation (70% Connors RSI, 30% Z-Score)
+                    4. Final trading signal interpretation
+                    
+                    Period: 1 year
+                    
+                    Please provide detailed analysis of each component and a clear recommendation.
+
+- now considering the last 4 analysis  you provided using the last 4 scoring systems you use can you compile a markdown comprehensive document with them, create a table with outputs and made a final recommendation based on the 4 strategies/indicators you have use?
