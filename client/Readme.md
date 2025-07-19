@@ -1,91 +1,193 @@
-# Google Search MCP Client - AI Chat Interface with Authentication & SSL Support
+# 🔍 AI-Powered Search MCP Client
 
-A secure Streamlit-based chat application that connects to Google Search MCP servers to provide AI-powered web search and content extraction capabilities. Features comprehensive user authentication, session management, SSL/HTTPS support, and multi-provider AI integration.
+**A Multi-Engine Search Platform with Authentication, SSL Support & Advanced Company Tagging**
 
-## 🚀 Features
+[![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-blue.svg)](https://modelcontextprotocol.io)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.44+-red.svg)](https://streamlit.io)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://docker.com)
+[![Security](https://img.shields.io/badge/Security-SSL%2FHTTPS-green.svg)](#security-features)
 
-### **Security & Authentication**
-- **User Authentication System**: Secure login with bcrypt password hashing
-- **Session Management**: Persistent user sessions with configurable expiry
-- **SSL/HTTPS Support**: Secure connections with self-signed certificates on port 8503
-- **Role-Based Access**: Pre-authorized email domains and user management
-- **Secure Cookies**: Configurable authentication cookies with custom keys
+## 🌟 Overview
 
-### **AI & Google Search Integration**
-- **Multi-Provider AI Support**: Compatible with OpenAI and Azure OpenAI
-- **Google Search MCP Integration**: Connect to Google Search MCP server
-- **Real-time Chat Interface**: Interactive chat with conversation history
-- **Web Search Tools**: Google Custom Search API integration
-- **Content Extraction**: Clean webpage content extraction and analysis
-- **Tool Execution Tracking**: Monitor and debug tool usage
+This is a sophisticated **Model Context Protocol (MCP) client** built with Streamlit that provides AI-powered web search capabilities through multiple search engines. The application serves as a secure, enterprise-ready interface for connecting AI models to external data sources via the standardized MCP protocol introduced by Anthropic in November 2024.
 
-### **User Experience**
-- **Modern Tabbed Interface**: Configuration, Connections, Tools, and Chat tabs
-- **Responsive Design**: Modern UI with customizable themes and animations
-- **User Dashboard**: Personal information and session management
-- **Conversation Management**: Create, switch, and delete chat sessions
-- **Research Workflows**: Multi-step search and analysis capabilities
+### What is MCP?
 
-## 📋 Prerequisites
+The **Model Context Protocol (MCP)** is an open standard that enables AI applications to connect with external tools, data sources, and systems through a standardized interface. Think of it as "USB for AI integrations" - instead of building custom connectors for every AI-tool combination, MCP provides a universal protocol that transforms the complex "N×M problem" into a simpler "N+M solution."
 
-- Python 3.11+
-- Docker (optional, for containerized deployment)
-- Active Google Search MCP server
-- Google Custom Search API key and Search Engine ID
-- OpenAI API key or Azure OpenAI configuration
+## 🚀 Key Features
 
-## 🛠️ Installation
+### 🔍 **Multi-Engine Search Platform**
+- **Google Search Integration**: Comprehensive web search using Google Custom Search API
+- **Perplexity AI Search**: AI-powered search with intelligent analysis and synthesis
+- **Company Tagging Workflow**: Specialized company categorization for trade show exhibitors
+- **Real-time Content Extraction**: Clean webpage content analysis with automatic formatting
 
-### Local Development Setup
+### 🔐 **Enterprise-Grade Security**
+- **User Authentication System**: bcrypt password hashing with session management
+- **SSL/HTTPS Support**: Self-signed certificates with automatic generation
+- **Role-Based Access Control**: Pre-authorized email domains and user validation
+- **Secure Cookie Management**: Configurable authentication with custom keys
 
-1. **Clone the repository**
+### 🤖 **Advanced AI Integration**
+- **Multi-Provider Support**: OpenAI GPT-4o, Azure OpenAI, and extensible provider system
+- **LangChain Agent Framework**: Intelligent tool selection and execution
+- **Conversation Memory**: Persistent chat history with context awareness
+- **Enhanced Configuration**: Support for multiple AI providers in enhanced mode
+
+### 🏗️ **Modern Architecture**
+- **MCP Server Integration**: Support for SSE and stdio transport protocols
+- **Responsive UI**: Modern tabbed interface with customizable themes
+- **Docker Deployment**: Production-ready containerization with health checks
+- **Real-time Streaming**: Live response streaming with tool execution tracking
+
+## 📋 Table of Contents
+
+- [Architecture Overview](#architecture-overview)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage Guide](#usage-guide)
+- [MCP Server Integration](#mcp-server-integration)
+- [Security Features](#security-features)
+- [Deployment](#deployment)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+
+## 🏗️ Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Client Application"
+        A[Streamlit UI] --> B[Authentication Layer]
+        B --> C[Chat Interface]
+        C --> D[LangChain Agent]
+        D --> E[MCP Client]
+    end
+    
+    subgraph "MCP Servers"
+        F[Google Search MCP]
+        G[Perplexity MCP]
+        H[Company Tagging MCP]
+    end
+    
+    subgraph "External APIs"
+        I[Google Custom Search API]
+        J[Perplexity AI API]
+        K[Internal Taxonomy Data]
+    end
+    
+    E --> F
+    E --> G
+    E --> H
+    
+    F --> I
+    G --> J
+    H --> K
+    
+    style A fill:#ff9999
+    style E fill:#99ccff
+    style F fill:#99ff99
+    style G fill:#ffcc99
+    style H fill:#cc99ff
+```
+
+### Core Components
+
+1. **Streamlit Frontend**: Modern web interface with authentication and chat capabilities
+2. **Authentication System**: Secure user management with bcrypt and session control
+3. **MCP Client**: Universal interface for connecting to multiple MCP servers
+4. **LangChain Agent**: Intelligent routing and tool execution with conversation memory
+5. **Search Engines**: Dual-engine search with Google and Perplexity integration
+6. **Company Tagging**: Specialized workflow for trade show exhibitor categorization
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Python 3.11+**
+- **Docker** (optional, for containerized deployment)
+- **Google Custom Search API** credentials
+- **OpenAI API key** or **Azure OpenAI** configuration
+- **Perplexity API key** (optional, for Perplexity search features)
+
+### 1. Environment Setup
+
+Create a `.env` file in the project root:
+
+```env
+# AI Provider Configuration (choose one)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# OR Azure OpenAI Configuration
+AZURE_API_KEY=your_azure_api_key
+AZURE_ENDPOINT=https://your-endpoint.openai.azure.com/
+AZURE_DEPLOYMENT=your_deployment_name
+AZURE_API_VERSION=2023-12-01-preview
+
+# Google Search Configuration
+GOOGLE_API_KEY=your_google_api_key
+GOOGLE_SEARCH_ENGINE_ID=your_custom_search_engine_id
+
+# Perplexity Configuration (Optional)
+PERPLEXITY_API_KEY=your_perplexity_api_key
+PERPLEXITY_MODEL=sonar
+
+# SSL Configuration (Optional)
+SSL_ENABLED=true
+```
+
+### 2. Authentication Setup
+
+Generate user credentials:
+
+```bash
+cd client
+python simple_generate_password.py
+```
+
+This creates `keys/config.yaml` with default users:
+- **admin**: `very_Secure_p@ssword_123!`
+- **juan**: `Larisa1000@`
+- **giovanni_romero**: `MrRomero2024!`
+- **demo_user**: `strong_password_123!`
+
+### 3. Quick Launch
+
+```bash
+# Install dependencies
+pip install -r client/requirements.txt
+
+# Start the application
+cd client
+streamlit run app.py
+```
+
+Access the application:
+- **HTTP**: http://localhost:8501
+- **HTTPS**: https://localhost:8503 (if SSL enabled)
+
+## 📦 Installation
+
+### Local Development
+
+1. **Clone the Repository**
    ```bash
-   git clone <your-repo-url>
-   cd client
+   git clone <repository-url>
+   cd google-search-mcp-client
    ```
 
-2. **Install dependencies**
+2. **Install Dependencies**
    ```bash
+   cd client
    pip install -r requirements.txt
    ```
 
-3. **Configure environment variables**
+3. **Configure MCP Servers**
    
-   Create a `.env` file in the client directory:
-   ```env
-   # OpenAI Configuration (choose one)
-   OPENAI_API_KEY=your_openai_api_key_here
-   
-   # OR Azure OpenAI Configuration
-   AZURE_API_KEY=your_azure_api_key
-   AZURE_ENDPOINT=https://your-endpoint.openai.azure.com/
-   AZURE_DEPLOYMENT=your_deployment_name
-   AZURE_API_VERSION=2023-12-01-preview
-   
-   # Google Search Configuration
-   GOOGLE_API_KEY=your_google_api_key
-   GOOGLE_SEARCH_ENGINE_ID=your_custom_search_engine_id
-   
-   # SSL Configuration (Optional)
-   SSL_ENABLED=true
-   ```
-
-4. **Set up user authentication**
-   
-   Generate user credentials:
-   ```bash
-   python simple_generate_password.py
-   ```
-   
-   This creates `keys/config.yaml` with default users:
-   - **admin**: very_Secure_p@ssword_123!
-   - **juan**: Larisa1000@
-   - **giovanni_romero**: MrRomero2024!
-   - **demo_user**: strong_password_123!
-
-5. **Update MCP server configuration**
-   
-   Edit `servers_config.json` to match your Google Search MCP server endpoint:
+   Edit `servers_config.json`:
    ```json
    {
      "mcpServers": {
@@ -93,30 +195,40 @@ A secure Streamlit-based chat application that connects to Google Search MCP ser
          "transport": "sse",
          "url": "http://your-google-search-mcp-server:8002/sse",
          "timeout": 600,
-         "headers": null,
          "sse_read_timeout": 900
+       },
+       "Perplexity Search": {
+         "transport": "sse", 
+         "url": "http://your-perplexity-mcp-server:8001/sse",
+         "timeout": 600,
+         "sse_read_timeout": 900
+       },
+       "Company Tagging": {
+         "transport": "stdio",
+         "command": "python",
+         "args": ["-m", "mcp_servers.company_tagging.server"],
+         "env": {
+           "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}",
+           "PERPLEXITY_MODEL": "${PERPLEXITY_MODEL}"
+         }
        }
      }
    }
    ```
 
-6. **Run the application**
+4. **Start the Application**
    ```bash
-   # HTTP mode
    streamlit run app.py
-   
-   # HTTPS mode (if SSL certificates are set up)
-   streamlit run app.py --server.port=8503 --server.sslCertFile=ssl/cert.pem --server.sslKeyFile=ssl/private.key
    ```
 
 ### Docker Deployment
 
-1. **Build the Docker image**
+1. **Build Docker Image**
    ```bash
    docker build -t google-search-mcp-client .
    ```
 
-2. **Run with environment variables**
+2. **Run with Docker**
    ```bash
    docker run -p 8501:8501 -p 8503:8503 \
      -e OPENAI_API_KEY=your_key \
@@ -128,173 +240,228 @@ A secure Streamlit-based chat application that connects to Google Search MCP ser
      google-search-mcp-client
    ```
 
-## 🎯 Usage
+## ⚙️ Configuration
 
-### Getting Started
+### AI Provider Configuration
 
-1. **Launch the application** and navigate to:
-   - **HTTP**: `http://localhost:8501`
-   - **HTTPS**: `https://localhost:8503` (accept browser security warning)
+The application supports multiple AI providers:
 
-2. **Authenticate**:
+#### Basic Configuration (OpenAI & Azure OpenAI)
+- **OpenAI**: Requires `OPENAI_API_KEY`
+- **Azure OpenAI**: Requires `AZURE_API_KEY`, `AZURE_ENDPOINT`, `AZURE_DEPLOYMENT`, `AZURE_API_VERSION`
+
+#### Enhanced Configuration Mode
+Enable **Enhanced Mode** in the Configuration tab for support of:
+- **Anthropic Claude**: Claude 3.5 Sonnet, Claude 3 Haiku, Claude 3 Opus
+- **Google Gemini**: Gemini 1.5 Pro, Gemini 1.5 Flash, Gemini Pro
+- **Cohere**: Command R+, Command R, Command
+- **Mistral AI**: Mistral Large, Medium, Small
+- **Ollama (Local)**: Local model deployment support
+
+### Google Search Setup
+
+1. **Create Google Cloud Project**
+   - Go to [Google Cloud Console](https://console.cloud.google.com)
+   - Create a new project or select existing
+   - Enable the Custom Search API
+
+2. **Get API Credentials**
+   - Navigate to **APIs & Services > Credentials**
+   - Create API Key and restrict to Custom Search API
+
+3. **Setup Custom Search Engine**
+   - Go to [Google Custom Search](https://cse.google.com)
+   - Create a new search engine
+   - Copy the Search Engine ID
+
+### SSL/HTTPS Configuration
+
+For secure connections:
+
+1. **Enable SSL**
+   ```env
+   SSL_ENABLED=true
+   ```
+
+2. **Automatic Certificate Generation**
+   - Certificates are generated automatically on startup
+   - Accessible via https://localhost:8503
+   - Accept browser security warning for self-signed certificates
+
+3. **Custom Certificates**
+   ```bash
+   # Generate custom certificates
+   python generate_ssl_certificate.py
+   
+   # Or use shell script (Unix/Linux)
+   bash generate_ssl_certificate.sh
+   ```
+
+## 📖 Usage Guide
+
+### Authentication
+
+1. **Login Process**
    - Use the sidebar authentication panel
-   - Login with generated credentials (default: admin/very_Secure_p@ssword_123!)
-   - View welcome message and user information
+   - Enter username and password from generated credentials
+   - Session persists for 30 days (configurable)
 
-3. **Configure your AI provider** (Configuration tab):
-   - Select between OpenAI or Azure OpenAI
-   - Verify your credentials are loaded (green checkmark)
-   - Adjust model parameters (temperature, max tokens)
+2. **User Management**
+   - Modify users in `simple_generate_password.py`
+   - Regenerate `keys/config.yaml`
+   - Restart application to load changes
 
-4. **Connect to Google Search MCP server** (Connections tab):
-   - Click "Connect to MCP Server"
-   - Verify successful connection (you'll see available tools)
-   - Check server health status
+### Search Operations
 
-5. **Explore available tools** (Tools tab):
-   - Browse Google Search tools (google-search, read-webpage)
-   - View tool documentation and parameters
-   - Search for specific tools
-
-6. **Start chatting** (Chat tab):
-   - Ask questions to search the web and extract content
-   - The AI will automatically use appropriate tools to answer
-   - View tool execution history
-
-### Example Queries
-
-**Web Search Operations:**
+#### Google Search Features
 ```
 "Search for the latest developments in artificial intelligence"
 "Find recent news about climate change"
-"What are the current trends in web development?"
 "Search for Python programming tutorials"
 ```
 
-**Content Extraction Operations:**
+#### Perplexity AI Features
+```
+"What are the current trends in web development?"
+"Find and analyze multiple sources about cryptocurrency trends"
+"Research the current state of renewable energy technology"
+```
+
+#### Content Extraction
 ```
 "Search for climate reports and read the full content from the first result"
 "Find the latest tech news and extract content from TechCrunch"
 "Search for React documentation and read the official guide"
 ```
 
-**Research Workflows:**
+#### Company Tagging Workflow
 ```
-"Research the current state of renewable energy technology"
-"Find and analyze multiple sources about cryptocurrency trends"
-"Search for best practices in software engineering and summarize them"
-```
-
-**General Queries:**
-```
-"What tools are available for web search?"
-"Help me understand how to extract content from web pages"
-"Show me examples of effective search queries"
+"Tag companies for trade show categorization"
+"Categorize the following companies for CAI show"
+"Tag the following company data: [company information]"
 ```
 
-### Advanced Configuration
+### Interface Navigation
 
-**Model Parameters:**
-- **Temperature**: Control response creativity (0.0-1.0)
-- **Max Tokens**: Set response length limit (1024-10240)
+#### Configuration Tab
+- **AI Provider Selection**: Choose between OpenAI, Azure OpenAI, or enhanced providers
+- **Credentials Status**: Verify API key configuration
+- **Model Parameters**: Adjust temperature, max tokens, and other settings
+- **Enhanced Mode**: Enable multi-provider support
 
-**Chat Management:**
-- Create new conversations with "New Chat"
-- Access conversation history in the sidebar
-- Delete conversations as needed
-- Switch between conversations seamlessly
+#### Connections Tab
+- **Server Status**: View MCP server connection status
+- **Connection Controls**: Connect/disconnect from servers
+- **Server Configuration**: Manage server endpoints and settings
+- **Testing Tools**: Test individual server connections
 
-**User Management:**
-- View current user information in the sidebar
-- Monitor session time and activity
-- Secure logout functionality
+#### Tools Tab
+- **Tool Categories**: Browse Google Search, Perplexity, and Company Tagging tools
+- **Tool Documentation**: View parameters and usage examples
+- **Resource Access**: Explore available MCP resources and prompts
+- **Search Functionality**: Find specific tools by name or description
 
-## 🏗️ Architecture
+#### Chat Tab
+- **Conversation Interface**: Natural language interaction with AI
+- **Tool Execution History**: Monitor and debug tool usage
+- **Multi-Engine Search**: Automatic selection of appropriate search engines
+- **Company Tagging**: Specialized workflow for trade show categorization
 
-```
-┌───────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Streamlit UI    │    │   LangChain      │    │ Google Search   │
-│                   │◄──►│   Agent          │◄──►│ MCP Server      │
-│  - Chat Interface │    │  - Tool Routing  │    │                 │
-│  - Authentication │    │  - LLM Provider  │    │  - Web Search   │
-│  - Config Panel   │    │  - Memory Mgmt   │    │  - Content Ext  │
-│  - Tool Display   │    │                  │    │                 │
-└───────────────────┘    └──────────────────┘    └─────────────────┘
-```
+## 🔌 MCP Server Integration
 
-### Key Components
+### Supported Transport Protocols
 
-- **`app.py`**: Main Streamlit application with authentication
-- **`services/`**: Core business logic (AI, MCP, Chat management)
-- **`ui_components/`**: Reusable UI components and widgets
-- **`utils/`**: Helper functions and utilities
-- **`config.py`**: Configuration management
-- **`simple_generate_password.py`**: User credential generation
-
-### Authentication System
-
-- **Password Hashing**: bcrypt with salt for secure storage
-- **Session Management**: Streamlit-authenticator integration
-- **Cookie Configuration**: Secure, configurable authentication cookies
-- **User Validation**: Pre-authorized email domains
-
-## 🔧 Configuration
-
-### Model Providers
-
-The application supports multiple AI providers configured in `config.py`:
-
-```python
-MODEL_OPTIONS = {
-    'OpenAI': 'gpt-4o',
-    'Azure OpenAI': 'gpt-4o-mini',
+#### SSE (Server-Sent Events)
+```json
+{
+  "transport": "sse",
+  "url": "http://server:8002/sse",
+  "timeout": 600,
+  "sse_read_timeout": 900
 }
 ```
 
-### User Management
+#### STDIO (Standard Input/Output)
+```json
+{
+  "transport": "stdio",
+  "command": "python",
+  "args": ["-m", "server_module"],
+  "env": {
+    "API_KEY": "${API_KEY}"
+  }
+}
+```
 
-User credentials are managed in `keys/config.yaml`. To add/modify users:
+#### Streamable HTTP (New Protocol - March 2025)
+```json
+{
+  "transport": "streamable_http",
+  "url": "http://server:3000/mcp",
+  "timeout": 600
+}
+```
 
-1. Edit `simple_generate_password.py`
-2. Modify the `users` dictionary with desired credentials
-3. Run the script to generate new `config.yaml`
+### Available MCP Tools
 
-### Google Search MCP Server Configuration
+#### Google Search Tools
+- **google-search**: Perform Google searches (1-10 results)
+- **read-webpage**: Extract clean content from web pages
 
-Server endpoints are defined in `servers_config.json`. The server requires:
-- **transport**: Connection method ("sse")
-- **url**: Server endpoint URL (typically http://server:8002/sse)
-- **timeout**: Connection timeout in seconds
-- **sse_read_timeout**: Server-sent events timeout
+#### Perplexity AI Tools  
+- **perplexity_search_web**: AI-powered web search with citations
+- **perplexity_advanced_search**: Advanced search with model parameters
 
-### SSL Configuration
+#### Company Tagging Tools
+- **search_show_categories**: Access trade show category taxonomy
+- **tag_companies**: Systematic company categorization prompt
 
-For HTTPS support on port 8503:
-1. Set `SSL_ENABLED=true` in environment variables
-2. Certificates will be automatically generated on startup
-3. Access via https://localhost:8503 (accept browser warning for self-signed cert)
+### Custom MCP Server Development
 
-### Styling
+Create your own MCP server:
 
-Custom CSS is located in `.streamlit/style.css` for UI customization:
-- Tab styling and animations
-- Modern button designs
-- Responsive layout adjustments
-- Color scheme and themes
+```python
+from mcp.server import Server
+from mcp.types import Tool
 
-## 🔒 Security Features
+server = Server("my-custom-server")
+
+@server.list_tools()
+async def list_tools():
+    return [
+        Tool(
+            name="my_tool",
+            description="Description of what the tool does",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "param1": {"type": "string", "description": "Parameter description"}
+                },
+                "required": ["param1"]
+            }
+        )
+    ]
+
+@server.call_tool()
+async def call_tool(name: str, arguments: dict):
+    if name == "my_tool":
+        # Tool implementation
+        return [{"type": "text", "text": "Tool result"}]
+```
+
+## 🔐 Security Features
 
 ### Authentication Security
-- **Bcrypt Hashing**: Industry-standard password protection
-- **Session Timeout**: Configurable session expiry (30 days default)
-- **Secure Cookies**: HTTPOnly and secure cookie attributes
-- **Access Control**: Pre-authorized email validation
+- **Password Hashing**: Industry-standard bcrypt with salt
+- **Session Management**: Configurable timeout (30 days default)
+- **Secure Cookies**: HTTPOnly and secure attributes
+- **Access Control**: Pre-authorized email domain validation
 
 ### SSL/HTTPS Security
-- **Self-signed Certificates**: Automatic generation for development
-- **Port 8503**: Dedicated HTTPS port separate from HTTP (8501)
+- **Self-Signed Certificates**: Automatic generation for development
+- **Custom Certificates**: Support for production SSL certificates
 - **Secure Headers**: Proper SSL configuration for Streamlit
-- **Certificate Management**: Automatic renewal and permission handling
+- **Port Separation**: HTTP (8501) and HTTPS (8503) on different ports
 
 ### API Security
 - **Environment Variables**: Secure credential storage
@@ -302,116 +469,444 @@ Custom CSS is located in `.streamlit/style.css` for UI customization:
 - **Input Sanitization**: XSS and injection protection
 - **Error Handling**: Secure error messages without data exposure
 
-### Session Management
+### Data Protection
 - **User Isolation**: Separate conversation histories per user
 - **Session Tracking**: Login time and activity monitoring
-- **Automatic Cleanup**: Session data management
-- **Cross-Session Security**: Protected against session hijacking
+- **Conversation Privacy**: Isolated chat sessions per user
+- **Secure Cleanup**: Automatic session data management
+
+## 🚀 Deployment
+
+### Production Deployment
+
+#### Docker Production Setup
+
+1. **Production Dockerfile**
+   ```dockerfile
+   FROM python:3.11-slim-bullseye
+   
+   WORKDIR /app
+   
+   # Install system dependencies
+   RUN apt-get update && apt-get install -y \
+       openssl curl && rm -rf /var/lib/apt/lists/*
+   
+   COPY requirements.txt .
+   RUN pip install --no-cache-dir -r requirements.txt
+   
+   COPY . .
+   
+   # Create necessary directories
+   RUN mkdir -p keys ssl mcp_servers/company_tagging/categories
+   
+   # SSL setup
+   COPY generate_ssl_certificate.sh startup_ssl.sh ./
+   RUN chmod +x generate_ssl_certificate.sh startup_ssl.sh
+   
+   EXPOSE 8501 8503
+   
+   HEALTHCHECK --interval=30s --timeout=10s --start-period=40s \
+       CMD curl -f http://localhost:8501 || exit 1
+   
+   CMD ["./startup_ssl.sh"]
+   ```
+
+2. **Docker Compose**
+   ```yaml
+   version: '3.8'
+   services:
+     mcp-client:
+       build: .
+       ports:
+         - "8501:8501"
+         - "8503:8503"
+       environment:
+         - OPENAI_API_KEY=${OPENAI_API_KEY}
+         - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+         - GOOGLE_SEARCH_ENGINE_ID=${GOOGLE_SEARCH_ENGINE_ID}
+         - SSL_ENABLED=true
+       volumes:
+         - ./keys:/app/keys
+         - ./ssl:/app/ssl
+       restart: unless-stopped
+       healthcheck:
+         test: ["CMD", "curl", "-f", "http://localhost:8501"]
+         interval: 30s
+         timeout: 10s
+         retries: 3
+   ```
+
+#### Cloud Deployment
+
+**AWS ECS/Fargate**
+```bash
+# Build and push to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
+docker build -t mcp-client .
+docker tag mcp-client:latest <account>.dkr.ecr.us-east-1.amazonaws.com/mcp-client:latest
+docker push <account>.dkr.ecr.us-east-1.amazonaws.com/mcp-client:latest
+```
+
+**Google Cloud Run**
+```bash
+# Deploy to Cloud Run
+gcloud run deploy mcp-client \
+  --image gcr.io/PROJECT_ID/mcp-client \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --port 8501
+```
+
+**Azure Container Instances**
+```bash
+# Deploy to Azure
+az container create \
+  --resource-group myResourceGroup \
+  --name mcp-client \
+  --image myregistry.azurecr.io/mcp-client:latest \
+  --ports 8501 8503 \
+  --environment-variables \
+    OPENAI_API_KEY=your_key \
+    SSL_ENABLED=true
+```
+
+### Load Balancing & Scaling
+
+#### Nginx Configuration
+```nginx
+upstream mcp_backend {
+    server localhost:8501;
+    server localhost:8502;
+    server localhost:8503;
+}
+
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    location / {
+        proxy_pass http://mcp_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support for Streamlit
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+### Monitoring & Observability
+
+#### Health Checks
+```python
+# Add to your deployment
+@app.route('/health')
+def health_check():
+    return {
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'mcp_connections': len(st.session_state.get('tools', [])),
+        'authentication': 'enabled'
+    }
+```
+
+#### Logging Configuration
+```python
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
+```
+
+## 🛠️ Development
+
+### Development Setup
+
+1. **Development Environment**
+   ```bash
+   # Create virtual environment
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   
+   # Install dependencies
+   pip install -r requirements.txt
+   
+   # Install development dependencies
+   pip install pytest black flake8 mypy
+   ```
+
+2. **Pre-commit Hooks**
+   ```bash
+   pip install pre-commit
+   pre-commit install
+   ```
+
+3. **Environment Configuration**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
+
+### Project Structure
+
+```
+client/
+├── app.py                          # Main Streamlit application
+├── config.py                       # Configuration management
+├── requirements.txt                # Python dependencies
+├── servers_config.json             # MCP server configuration
+├── .streamlit/
+│   ├── config.toml                # Streamlit configuration
+│   └── style.css                  # Custom CSS styling
+├── services/
+│   ├── ai_service.py              # AI provider integration
+│   ├── chat_service.py            # Chat management
+│   └── mcp_service.py             # MCP client operations
+├── ui_components/
+│   ├── sidebar_components.py      # Sidebar elements
+│   ├── tab_components.py          # Tab content
+│   ├── main_components.py         # Main UI components
+│   └── enhanced_config.py         # Enhanced configuration
+├── utils/
+│   ├── ai_prompts.py              # AI prompt templates
+│   ├── async_helpers.py           # Async utilities
+│   └── tool_schema_parser.py      # Tool schema parsing
+├── mcp_servers/
+│   └── company_tagging/           # Embedded MCP server
+│       ├── server.py              # Company tagging server
+│       └── categories/
+│           └── classes.csv        # Taxonomy data
+├── keys/                          # Authentication files
+├── ssl/                           # SSL certificates
+└── icons/                         # Application icons
+```
+
+### Adding New Features
+
+#### Adding a New AI Provider
+```python
+# In ai_service.py
+def create_llm_model(llm_provider: str, **kwargs):
+    if llm_provider == "New Provider":
+        api_key = os.getenv("NEW_PROVIDER_API_KEY")
+        return NewProviderLLM(
+            api_key=api_key,
+            model="new-model",
+            temperature=kwargs.get('temperature', 0.7)
+        )
+```
+
+#### Adding a New MCP Server
+```json
+// In servers_config.json
+{
+  "mcpServers": {
+    "New Server": {
+      "transport": "sse",
+      "url": "http://new-server:8004/sse",
+      "timeout": 600,
+      "sse_read_timeout": 900
+    }
+  }
+}
+```
+
+#### Adding Custom UI Components
+```python
+# In ui_components/custom_components.py
+def create_custom_widget():
+    """Create a custom UI widget."""
+    with st.container(border=True):
+        st.subheader("Custom Feature")
+        # Your custom implementation
+```
+
+### Testing
+
+#### Unit Tests
+```bash
+# Run unit tests
+pytest tests/
+
+# Run with coverage
+pytest --cov=client tests/
+```
+
+#### Integration Tests
+```bash
+# Test MCP server connections
+python test_mcp_integration.py
+
+# Test authentication
+python test_auth_integration.py
+```
+
+#### Manual Testing
+```bash
+# Test SSL certificate generation
+python generate_ssl_certificate.py
+
+# Test password generation
+python simple_generate_password.py
+
+# Debug SSL configuration
+bash debug_ssl.sh
+```
 
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
-**Authentication Problems:**
-- Verify `keys/config.yaml` exists and is properly formatted
-- Check user credentials match the generated passwords
-- Ensure email domains are in preauthorized list
-- Clear browser cookies if experiencing login issues
+#### Authentication Problems
+```bash
+# Issue: Login fails with correct credentials
+# Solution: Regenerate password hashes
+python simple_generate_password.py
 
-**Connection Problems:**
-- Verify Google Search MCP server is running and accessible
-- Check network connectivity to server endpoint (port 8002)
-- Ensure proper server configuration in `servers_config.json`
-- Review Google API credentials and quotas
+# Issue: Session expires immediately
+# Check: keys/config.yaml cookie configuration
+```
 
-**SSL/HTTPS Issues:**
-- Certificates are automatically generated on startup
-- Accept browser security warning for self-signed certificates
-- Check container logs for certificate generation errors
-- Verify SSL_ENABLED environment variable is set to "true"
+#### MCP Connection Issues
+```bash
+# Issue: Cannot connect to MCP servers
+# Debug: Check server configuration
+cat servers_config.json
 
-**API Key Issues:**
-- Confirm Google API key and Search Engine ID are properly set
-- Check API key permissions and quotas in Google Cloud Console
-- Verify Custom Search API is enabled
-- Test API connectivity outside the application
+# Test: Server accessibility
+curl http://server:8002/sse
 
-**Tool Execution Errors:**
-- Review tool execution history in the expandable section
-- Check Google Search MCP server logs for detailed error information
-- Ensure Google Custom Search Engine is properly configured
-- Verify API quotas haven't been exceeded
+# Solution: Update server URLs in config
+```
+
+#### SSL Certificate Issues
+```bash
+# Issue: Browser shows security warnings
+# Solution: Accept self-signed certificate warning
+
+# Issue: Certificate generation fails
+# Debug: Check SSL status
+bash debug_ssl.sh
+
+# Solution: Regenerate certificates
+python generate_ssl_certificate.py
+```
+
+#### API Key Issues
+```bash
+# Issue: OpenAI API key not working
+# Check: Environment variable loading
+echo $OPENAI_API_KEY
+
+# Issue: Google Search not working
+# Verify: API key and Search Engine ID
+# Test: API quota and permissions
+```
+
+#### Performance Issues
+```bash
+# Issue: Slow response times
+# Solution: Adjust timeout settings in servers_config.json
+
+# Issue: Memory usage high
+# Solution: Restart application, check conversation history size
+
+# Issue: Tool execution fails
+# Debug: Check tool execution history in UI
+```
 
 ### Debug Mode
 
-Enable debug information by:
-1. Using the "Tool Execution History" expander
-2. Checking browser console for JavaScript errors
-3. Monitoring Streamlit logs in terminal
-4. Reviewing authentication logs
+Enable debugging:
+```python
+# In app.py
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
-### Performance Optimization
+# Enable Streamlit debug mode
+st.set_page_config(
+    page_title="Debug Mode",
+    layout='wide',
+    initial_sidebar_state="expanded"
+)
+```
 
-- Adjust `max_tokens` for faster responses
-- Use appropriate search result counts (1-10) based on needs
-- Monitor memory usage with multiple concurrent sessions
-- Optimize conversation history management
+View debug information:
+- Use "Tool Execution History" expander
+- Check browser console for JavaScript errors
+- Monitor Streamlit logs in terminal
+- Review authentication logs
 
-## 🔄 User Management
+### Log Analysis
 
-### Adding New Users
+```bash
+# Application logs
+tail -f app.log
 
-1. **Edit the password generation script**:
-   ```bash
-   # Edit simple_generate_password.py
-   # Add new users to the users dictionary
-   ```
+# Container logs (Docker)
+docker logs -f container_name
 
-2. **Generate new configuration**:
-   ```bash
-   python simple_generate_password.py
-   ```
+# SSL debug
+bash debug_ssl.sh
 
-3. **Restart the application** to load new users
+# MCP server logs
+# Check individual server documentation
+```
 
-### Managing Existing Users
+## 📚 Additional Resources
 
-- **Password Changes**: Regenerate `config.yaml` with new passwords
-- **Email Updates**: Modify user information in the generation script
-- **Access Revocation**: Remove users from the configuration and regenerate
+### Official Documentation
+- [Model Context Protocol Specification](https://spec.modelcontextprotocol.io/)
+- [Anthropic MCP Documentation](https://docs.anthropic.com/en/docs/mcp)
+- [MCP GitHub Repository](https://github.com/modelcontextprotocol)
 
-### Session Management
+### Community Resources
+- [MCP Market](https://mcpmarket.com/) - Discover MCP servers
+- [MCP Community Forum](https://github.com/modelcontextprotocol/discussions)
+- [Awesome MCP](https://github.com/punkpeye/awesome-mcp) - Curated list of MCP resources
 
-- **View Active Sessions**: Check sidebar for current user information
-- **Session Timeout**: Configure in `config.yaml` (expiry_days)
-- **Forced Logout**: Clear cookies or restart application
-
-## 🔄 Version History
-
-- **v2.0.0**: Google Search MCP integration with SSL support
-- **v1.0.0**: Initial release with authentication system
-- Basic chat interface with multi-provider AI support
-- Tool execution tracking and conversation management
+### Related Projects
+- [Claude Desktop](https://claude.ai/download) - Official MCP client
+- [Cursor IDE](https://cursor.sh/) - MCP-enabled code editor
+- [Cline](https://github.com/clinebot/cline) - VS Code MCP extension
 
 ## 🤝 Contributing
 
-### Development Guidelines
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-1. **Follow authentication patterns** when adding new features
-2. **Test with multiple user accounts** to ensure proper isolation
-3. **Maintain security best practices** for credential handling
-4. **Update documentation** for new authentication features
+### Development Workflow
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-### Security Considerations
+### Code Standards
+- Follow PEP 8 for Python code
+- Use type hints where possible
+- Write comprehensive docstrings
+- Add tests for new features
+- Update documentation
 
-- Never log or expose user passwords or session tokens
-- Validate all user inputs for security vulnerabilities
-- Follow secure coding practices for authentication flows
-- Test authentication edge cases and error conditions
+## 📄 License
 
----
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-**Version**: 2.0.0  
-**Last Updated**: June 2025  
-**Security**: Streamlit Authenticator 0.3.2, bcrypt password hashing, SSL/HTTPS support  
-**Compatibility**: Python 3.11+, Streamlit 1.44+, Google Custom Search API v1
+## 🙏 Acknowledgments
+
+- **Anthropic** for creating the Model Context Protocol
+- **Streamlit** for the excellent web framework
+- **LangChain** for the agent framework
+- **The MCP Community** for tools and inspiration
+
