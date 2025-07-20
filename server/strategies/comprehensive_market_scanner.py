@@ -1,7 +1,8 @@
-"""
-FIXED Comprehensive Market Scanner Tool for MCP Server
-This version properly implements all 5 strategies with full performance analysis
-"""
+#####
+##### Comprehensive Market Scanner Tool for MCP Server
+##### This version properly implements all 5 strategies with full performance analysis
+##### Focuses on performance metrics and backtesting
+#####
 
 import pandas as pd
 import numpy as np

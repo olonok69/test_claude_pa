@@ -11,11 +11,8 @@ from strategies.bollinger_zscore import register_bollinger_zscore_tools
 from strategies.performance_tools import add_all_performance_tools
 from strategies.comprehensive_analysis import add_comprehensive_strategy_analysis_tool
 
-# Import ORIGINAL market scanners (keep for compatibility)
-from strategies.comprehensive_market_scanner import add_comprehensive_market_scanner_tool
-from strategies.enhanced_market_scanner import add_enhanced_market_scanner_tool
-
-
+# Import UNIFIED market scanner (replaces both old scanners)
+from strategies.unified_market_scanner import add_unified_market_scanner_tool
 
 # Initialize FastMCP server
 mcp = FastMCP("finance tools", "1.0.0")
@@ -31,10 +28,8 @@ register_bollinger_zscore_tools(mcp)
 add_all_performance_tools(mcp)
 add_comprehensive_strategy_analysis_tool(mcp)
 
-# Register ALL market scanners (original + fixed)
-add_comprehensive_market_scanner_tool(mcp)
-add_enhanced_market_scanner_tool(mcp)
-
+# Register UNIFIED market scanner (replaces comprehensive_market_scanner and enhanced_market_scanner)
+add_unified_market_scanner_tool(mcp)
 
 if __name__ == "__main__":
     mcp.run(transport='stdio')

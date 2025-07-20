@@ -1,6 +1,7 @@
 """
 Enhanced Comprehensive Market Scanner Tool for MCP Server
 This version includes detailed performance analysis and individual strategy breakdowns.
+Focuses on current signals and market sentiment
 """
 
 import pandas as pd
