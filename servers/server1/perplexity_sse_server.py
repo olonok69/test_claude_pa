@@ -14,8 +14,8 @@ from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
 from starlette.responses import JSONResponse
-from perplexity_mcp import __version__
 
+__version__ = "0.1.7"
 # Load environment variables
 load_dotenv()
 
@@ -322,70 +322,6 @@ async def perplexity_advanced_search(
         logger.error(error_msg)
         return [TextContent(type="text", text=f"Error: {error_msg}")]
 
-@mcp.tool()
-async def search_show_categories(
-    show_name: Optional[str] = None,
-    industry_filter: Optional[str] = None,
-    product_filter: Optional[str] = None
-) -> list[TextContent]:
-    """Search and filter show categories from the CSV data.
-    
-    This tool uses local CSV data and doesn't make external API calls.
-    
-    Args:
-        show_name: Filter by specific show (CAI, DOL, CCSE, BDAIW, DCW)
-        industry_filter: Filter by industry name (partial match)
-        product_filter: Filter by product name (partial match)
-    
-    Returns:
-        TextContent with filtered category results
-    """
-    from .server import load_csv_data  # Import from main server module
-    
-    csv_data = load_csv_data()
-    
-    if not csv_data:
-        return [TextContent(type="text", text="No category data available.")]
-    
-    filtered_data = csv_data.copy()
-    filters_applied = []
-    
-    # Apply show filter
-    if show_name:
-        show_name_upper = show_name.upper().strip()
-        filtered_data = [row for row in filtered_data 
-                        if row.get('Show', '').upper().strip() == show_name_upper]
-        filters_applied.append(f"Show: {show_name}")
-    
-    # Apply industry filter
-    if industry_filter:
-        industry_lower = industry_filter.lower().strip()
-        filtered_data = [row for row in filtered_data 
-                        if industry_lower in row.get('Industry', '').lower()]
-        filters_applied.append(f"Industry contains: {industry_filter}")
-    
-    # Apply product filter
-    if product_filter:
-        product_lower = product_filter.lower().strip()
-        filtered_data = [row for row in filtered_data 
-                        if product_lower in row.get('Product', '').lower()]
-        filters_applied.append(f"Product contains: {product_filter}")
-    
-    # Organize results
-    result = {
-        "filters_applied": filters_applied,
-        "total_matches": len(filtered_data),
-        "original_total": len(csv_data),
-        "matches": filtered_data,
-        "data_source": "local_csv"  # Indicate this is local data
-    }
-    
-    if not filtered_data:
-        result["message"] = "No categories match the specified filters."
-        result["available_shows"] = list(set(row.get('Show', '') for row in csv_data if row.get('Show')))
-    
-    return [TextContent(type="text", text=json.dumps(result, indent=2))]
-
 # Add cache management endpoints
 @mcp.tool()
 async def clear_api_cache() -> list[TextContent]:
@@ -472,7 +408,6 @@ async def health_check(request):
             "available_tools": [
                 "perplexity_search_web",
                 "perplexity_advanced_search", 
-                "search_show_categories",
                 "clear_api_cache",
                 "get_cache_stats"
             ],
@@ -536,7 +471,6 @@ if __name__ == "__main__":
         logger.info("Available MCP tools:")
         logger.info("  - perplexity_search_web (cached)")
         logger.info("  - perplexity_advanced_search (cached)")
-        logger.info("  - search_show_categories (local CSV)")
         logger.info("  - clear_api_cache (cache management)")
         logger.info("  - get_cache_stats (cache management)")
         logger.info(f"API response cache TTL: {api_cache.ttl} seconds")

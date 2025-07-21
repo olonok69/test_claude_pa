@@ -16,7 +16,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the source code
-COPY src/ /app/src/
+
 COPY perplexity_sse_server.py /app/
 
 

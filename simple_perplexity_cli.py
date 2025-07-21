@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-COMPLETE FIXED Company Classification CLI Tool
-Fixes all ProgressTracker and data persistence issues with comprehensive error handling.
+Simple Perplexity Company Classification CLI Tool
+Direct replacement of Google search with Perplexity search - keeping everything else identical.
 """
 
 import argparse
@@ -34,7 +34,7 @@ from client.config import SERVER_CONFIG, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS
 load_dotenv()
 
 class ProgressTracker:
-    """COMPLETELY FIXED progress tracker with immediate saves and atomic operations."""
+    """Same ProgressTracker as the working Google version."""
     
     def __init__(self, output_base: str):
         self.output_base = output_base
@@ -45,10 +45,10 @@ class ProgressTracker:
         # Progress tracking
         self.processed_batches = set()
         self.failed_batches = set()
-        self.all_data_rows = []  # Store only data rows, no headers
-        self.header_row = None   # Store header separately
+        self.all_data_rows = []
+        self.header_row = None
         self.total_batches = 0
-        self.start_time = time.time()  # FIX: Initialize immediately
+        self.start_time = time.time()
         self.last_save_time = None
         
         # Error tracking
@@ -56,7 +56,7 @@ class ProgressTracker:
         self.consecutive_errors = 0
         self.max_consecutive_errors = 3
         
-        # FIX: Ensure output directory exists
+        # Ensure output directory exists
         output_dir = Path(self.output_base).parent
         output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -66,68 +66,40 @@ class ProgressTracker:
         print(f"   📄 Error log: {self.error_log_file}")
     
     def save_progress(self):
-        """FIXED: Save current progress to disk with atomic operations and proper error handling."""
+        """Save current progress to disk with atomic operations."""
         try:
-            # Prepare progress data with JSON-compatible types
             progress_data = {
-                'processed_batches': list(self.processed_batches),  # FIX: Convert set to list
-                'failed_batches': list(self.failed_batches),        # FIX: Convert set to list
+                'processed_batches': list(self.processed_batches),
+                'failed_batches': list(self.failed_batches),
                 'all_data_rows': self.all_data_rows,
                 'header_row': self.header_row,
                 'total_batches': self.total_batches,
                 'start_time': self.start_time,
                 'error_count': self.error_count,
-                'last_save_time': time.time()  # FIX: Use time.time() instead of datetime
+                'last_save_time': time.time()
             }
             
-            # FIX: Atomic save for progress file using temporary file
+            # Atomic save for progress file
             temp_progress_file = f"{self.progress_file}.tmp"
             try:
                 with open(temp_progress_file, 'wb') as f:
                     pickle.dump(progress_data, f)
-                # Atomic move
                 shutil.move(temp_progress_file, self.progress_file)
                 print(f"   💾 Progress saved to: {self.progress_file}")
             except Exception as e:
-                # Clean up temp file if it exists
                 if os.path.exists(temp_progress_file):
                     os.remove(temp_progress_file)
                 raise e
             
-            # FIX: Atomic save for human-readable results
-            if self.header_row and self.all_data_rows:
-                all_results = [self.header_row] + self.all_data_rows
-                temp_results_file = f"{self.temp_results_file}.tmp"
-                try:
-                    with open(temp_results_file, 'w', encoding='utf-8') as f:
-                        json.dump(all_results, f, indent=2, ensure_ascii=False)
-                    # Atomic move
-                    shutil.move(temp_results_file, self.temp_results_file)
-                    print(f"   💾 Temp results saved: {len(all_results)} rows")
-                except Exception as e:
-                    # Clean up temp file if it exists
-                    if os.path.exists(temp_results_file):
-                        os.remove(temp_results_file)
-                    raise e
-            
             self.last_save_time = time.time()
             return True
             
-        except PermissionError as e:
-            print(f"❌ Permission error saving progress: {e}")
-            print(f"   Check write permissions for: {Path(self.output_base).parent}")
-            return False
-        except OSError as e:
-            print(f"❌ OS error saving progress: {e}")
-            print(f"   Check disk space and file system permissions")
-            return False
         except Exception as e:
-            print(f"❌ Unexpected error saving progress: {e}")
-            print(f"   Traceback: {traceback.format_exc()}")
+            print(f"❌ Error saving progress: {e}")
             return False
     
     def load_progress(self) -> bool:
-        """FIXED: Load existing progress if available with proper error handling."""
+        """Load existing progress if available."""
         if not os.path.exists(self.progress_file):
             print(f"📂 No existing progress file found: {self.progress_file}")
             return False
@@ -136,37 +108,26 @@ class ProgressTracker:
             with open(self.progress_file, 'rb') as f:
                 data = pickle.load(f)
                 
-            # FIX: Convert lists back to sets for internal processing
             self.processed_batches = set(data.get('processed_batches', []))
             self.failed_batches = set(data.get('failed_batches', []))
             self.all_data_rows = data.get('all_data_rows', [])
             self.header_row = data.get('header_row', None)
             self.total_batches = data.get('total_batches', 0)
-            self.start_time = data.get('start_time', time.time())  # FIX: Fallback to current time
+            self.start_time = data.get('start_time', time.time())
             self.error_count = data.get('error_count', 0)
             
             print(f"📥 Progress loaded successfully:")
             print(f"   ✅ Processed batches: {len(self.processed_batches)}")
             print(f"   ❌ Failed batches: {len(self.failed_batches)}")
             print(f"   📊 Data rows: {len(self.all_data_rows)}")
-            print(f"   📋 Header: {'Yes' if self.header_row else 'No'}")
-            print(f"   🔢 Total batches: {self.total_batches}")
             return True
             
-        except (pickle.PickleError, EOFError) as e:
-            print(f"❌ Error loading progress file (corrupted): {e}")
-            print(f"   Moving corrupted file to: {self.progress_file}.corrupted")
-            try:
-                shutil.move(self.progress_file, f"{self.progress_file}.corrupted")
-            except:
-                pass
-            return False
         except Exception as e:
-            print(f"❌ Unexpected error loading progress: {e}")
+            print(f"❌ Error loading progress file: {e}")
             return False
     
     def mark_batch_completed(self, batch_num: int, parsed_rows: List[List[str]]):
-        """FIXED: Mark a batch as completed and save results with immediate persistence."""
+        """Mark a batch as completed and save results."""
         print(f"   ✅ Marking batch {batch_num} as completed...")
         
         self.processed_batches.add(batch_num)
@@ -180,77 +141,36 @@ class ProgressTracker:
             self.header_row = batch_header
             print(f"   📋 Header captured: {len(batch_header)} columns")
         
-        # Add data rows (no headers)
+        # Add data rows
         if data_rows:
             self.all_data_rows.extend(data_rows)
             print(f"   📊 Added {len(data_rows)} data rows (total: {len(self.all_data_rows)})")
         
         self.consecutive_errors = 0
         
-        # FIX: Save progress after EVERY batch completion (not just every 10)
-        print(f"   💾 Saving progress for batch {batch_num}...")
+        # Save progress
         save_success = self.save_progress()
-        
         if not save_success:
             print(f"   ⚠️  Warning: Failed to save progress for batch {batch_num}")
-            print(f"   📊 Current state: {len(self.processed_batches)} completed, {len(self.all_data_rows)} rows")
-            # FIX: Try alternative save method
-            try:
-                self.force_save_alternative()
-            except Exception as e:
-                print(f"   ❌ Alternative save also failed: {e}")
         else:
             print(f"   ✅ Progress saved successfully for batch {batch_num}")
     
     def mark_batch_failed(self, batch_num: int, error: str, traceback_str: str = ""):
-        """FIXED: Mark a batch as failed and log the error with immediate persistence."""
+        """Mark a batch as failed and log the error."""
         print(f"   ❌ Marking batch {batch_num} as failed...")
         
         self.failed_batches.add(batch_num)
         self.error_count += 1
         self.consecutive_errors += 1
         
-        # Log error immediately
+        # Log error
         self.log_error(batch_num, error, traceback_str)
         
-        # FIX: Save progress immediately after marking failure
-        print(f"   💾 Saving progress after batch {batch_num} failure...")
-        save_success = self.save_progress()
-        
-        if not save_success:
-            print(f"   ⚠️  Warning: Failed to save progress after batch {batch_num} failure")
-            # FIX: Try alternative save method
-            try:
-                self.force_save_alternative()
-            except Exception as e:
-                print(f"   ❌ Alternative save also failed: {e}")
-        else:
-            print(f"   ✅ Progress saved after failure for batch {batch_num}")
-    
-    def force_save_alternative(self):
-        """Alternative save method using a different approach."""
-        try:
-            # Create a minimal save data structure
-            minimal_data = {
-                'processed': list(self.processed_batches),
-                'failed': list(self.failed_batches),
-                'rows': len(self.all_data_rows),
-                'total': self.total_batches,
-                'timestamp': time.time()
-            }
-            
-            backup_file = f"{self.output_base}_backup.json"
-            with open(backup_file, 'w') as f:
-                json.dump(minimal_data, f)
-            
-            print(f"   🔄 Alternative save completed: {backup_file}")
-            return True
-        except Exception as e:
-            print(f"   ❌ Alternative save also failed: {e}")
-            return False
+        # Save progress
+        self.save_progress()
     
     def log_error(self, batch_num: int, error: str, traceback_str: str = ""):
-        """Log an error to the error log file with atomic write."""
+        """Log an error to the error log file."""
         try:
             error_entry = f"\n{'='*50}\n"
             error_entry += f"Batch {batch_num} Error - {datetime.now().isoformat()}\n"
@@ -259,51 +179,11 @@ class ProgressTracker:
                 error_entry += f"Traceback:\n{traceback_str}\n"
             error_entry += f"{'='*50}\n"
             
-            # FIX: Atomic write for error log
-            temp_error_file = f"{self.error_log_file}.tmp"
-            try:
-                # Append to existing content
-                existing_content = ""
-                if os.path.exists(self.error_log_file):
-                    with open(self.error_log_file, 'r', encoding='utf-8') as f:
-                        existing_content = f.read()
-                
-                with open(temp_error_file, 'w', encoding='utf-8') as f:
-                    f.write(existing_content + error_entry)
-                
-                # Atomic move
-                shutil.move(temp_error_file, self.error_log_file)
-                print(f"   📝 Error logged for batch {batch_num}")
-                
-            except Exception as e:
-                # Clean up temp file if it exists
-                if os.path.exists(temp_error_file):
-                    os.remove(temp_error_file)
-                raise e
+            with open(self.error_log_file, 'a', encoding='utf-8') as f:
+                f.write(error_entry)
                 
         except Exception as e:
             print(f"⚠️  Error writing to error log: {e}")
-    
-    def is_header_row(self, row: List[str]) -> bool:
-        """Check if a row is a header row."""
-        if not row or len(row) == 0:
-            return False
-        
-        # Check for common header indicators
-        first_cell = row[0].lower().strip()
-        header_indicators = [
-            'company name', 'account name', 'trading name', 
-            'tech industry', 'industry', 'product'
-        ]
-        
-        return any(indicator in first_cell for indicator in header_indicators)
-    
-    def is_separator_row(self, row: List[str]) -> bool:
-        """Check if a row is a markdown separator row (contains only dashes)."""
-        if not row:
-            return False
-        
-        return all(cell.strip() == '' or all(c in '-|: ' for c in cell.strip()) for cell in row)
     
     def extract_header_and_data(self, parsed_rows: List[List[str]]) -> Tuple[Optional[List[str]], List[List[str]]]:
         """Extract header and data rows from parsed table."""
@@ -323,16 +203,35 @@ class ProgressTracker:
             
             # Identify header row
             if self.is_header_row(row):
-                if header is None:  # Take the first header we find
+                if header is None:
                     header = row
-                # Skip subsequent headers (duplicates)
                 continue
             
             # This is a data row
-            if row and any(cell.strip() for cell in row):  # Has some content
+            if row and any(cell.strip() for cell in row):
                 data_rows.append(row)
         
         return header, data_rows
+    
+    def is_header_row(self, row: List[str]) -> bool:
+        """Check if a row is a header row."""
+        if not row or len(row) == 0:
+            return False
+        
+        first_cell = row[0].lower().strip()
+        header_indicators = [
+            'company name', 'account name', 'trading name', 
+            'tech industry', 'industry', 'product'
+        ]
+        
+        return any(indicator in first_cell for indicator in header_indicators)
+    
+    def is_separator_row(self, row: List[str]) -> bool:
+        """Check if a row is a markdown separator row."""
+        if not row:
+            return False
+        
+        return all(cell.strip() == '' or all(c in '-|: ' for c in cell.strip()) for cell in row)
     
     def should_stop_due_to_errors(self) -> bool:
         """Check if we should stop due to too many consecutive errors."""
@@ -372,8 +271,6 @@ class ProgressTracker:
             self.temp_results_file,
             f"{self.progress_file}.tmp",
             f"{self.temp_results_file}.tmp",
-            f"{self.error_log_file}.tmp",
-            f"{self.output_base}_backup.json"
         ]
         
         cleaned_count = 0
@@ -386,29 +283,19 @@ class ProgressTracker:
                 print(f"⚠️  Error cleaning up {file_path}: {e}")
         
         print(f"🧹 Cleaned up {cleaned_count} temporary files")
-    
-    def force_save(self):
-        """Force an immediate save of current progress (useful for debugging)."""
-        print("🔄 Forcing immediate progress save...")
-        success = self.save_progress()
-        if success:
-            print("✅ Force save completed successfully")
-        else:
-            print("❌ Force save failed")
-        return success
 
 
-class RobustCompanyClassificationCLI:
-    """Enhanced CLI with fixed progress tracking and comprehensive error handling."""
+class SimplePerplexityCompanyClassificationCLI:
+    """Simple CLI that replaces Google search with Perplexity search."""
     
     def __init__(self, config_path: Optional[str] = None, batch_size: int = 10, 
                  enabled_servers: Set[str] = None, output_base: str = "results"):
         self.config_path = config_path or "cli_servers_config.json"
         self.batch_size = batch_size
-        self.enabled_servers = enabled_servers or {"google", "company_tagging"}
+        self.enabled_servers = enabled_servers or {"perplexity", "company_tagging"}
         self.output_base = output_base
         
-        # Initialize progress tracker with fixed implementation
+        # Initialize progress tracker
         self.progress = ProgressTracker(output_base)
         
         # MCP components
@@ -416,33 +303,19 @@ class RobustCompanyClassificationCLI:
         self.agent = None
         self.tools = []
         self.llm = None
-        self.available_tools = {
-            "google": [],
-            "perplexity": [],
-            "company_tagging": []
-        }
         
         # Processing state
         self.companies = []
         self.retry_delay = 5
         self.max_retries = 3
-        
+    
     def sanitize_json_string(self, text: str) -> str:
         """Sanitize a string to prevent JSON parsing errors."""
         if not isinstance(text, str):
             return str(text)
         
-        # Remove or escape problematic characters
-        text = text.replace('\x00', '')
-        text = text.replace('\x1c', '')
-        text = text.replace('\x1d', '')
-        text = text.replace('\x1e', '')
-        text = text.replace('\x1f', '')
-        text = text.replace('\x17', '')
-        
-        # Remove other control characters except common ones
+        # Remove problematic characters
         text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', text)
-        
         return text
     
     def clean_response_content(self, response_content: str) -> str:
@@ -470,10 +343,8 @@ class RobustCompanyClassificationCLI:
             elif in_table and '|' in line:
                 table_lines.append(line)
             elif in_table and not line and len(table_lines) > 0:
-                # Empty line might continue the table
                 continue
             elif in_table and line and '|' not in line:
-                # Non-table line ends the table
                 break
         
         if table_lines:
@@ -493,12 +364,10 @@ class RobustCompanyClassificationCLI:
         else:
             missing_vars.append("AZURE_API_KEY + AZURE_ENDPOINT + AZURE_DEPLOYMENT + AZURE_API_VERSION or OPENAI_API_KEY")
         
-        # Check Google Search credentials if enabled
-        if "google" in self.enabled_servers:
-            if not os.getenv("GOOGLE_API_KEY"):
-                missing_vars.append("GOOGLE_API_KEY")
-            if not os.getenv("GOOGLE_SEARCH_ENGINE_ID"):
-                missing_vars.append("GOOGLE_SEARCH_ENGINE_ID")
+        # Check Perplexity credentials if enabled
+        if "perplexity" in self.enabled_servers:
+            if not os.getenv("PERPLEXITY_API_KEY"):
+                missing_vars.append("PERPLEXITY_API_KEY")
         
         if missing_vars:
             print(f"❌ Missing required environment variables: {', '.join(missing_vars)}")
@@ -526,9 +395,9 @@ class RobustCompanyClassificationCLI:
         if "Company Tagging" in all_servers:
             filtered_servers["Company Tagging"] = all_servers["Company Tagging"]
         
-        # Add Google Search if enabled
-        if "google" in self.enabled_servers and "Google Search" in all_servers:
-            filtered_servers["Google Search"] = all_servers["Google Search"]
+        # Add Perplexity Search if enabled (INSTEAD of Google Search)
+        if "perplexity" in self.enabled_servers and "Perplexity Search" in all_servers:
+            filtered_servers["Perplexity Search"] = all_servers["Perplexity Search"]
         
         return filtered_servers
     
@@ -565,40 +434,18 @@ class RobustCompanyClassificationCLI:
             self.client = await setup_mcp_client(prepared_servers)
             self.tools = await get_tools_from_client(self.client)
             
-            # Categorize tools
-            self.available_tools = self.categorize_tools(self.tools)
-            
             # Create agent
             self.agent = create_react_agent(self.llm, self.tools)
             
             print(f"✅ Initialized with {len(self.tools)} available tools")
             
+            # Log tool information
+            tool_names = [tool.name for tool in self.tools]
+            print(f"🔧 Available tools: {', '.join(tool_names)}")
+            
         except Exception as e:
             print(f"❌ MCP Connection Error: {str(e)}")
             raise ValueError(f"Failed to setup MCP connections: {e}")
-    
-    def categorize_tools(self, tools: List) -> Dict[str, List]:
-        """Categorize tools by server type."""
-        categorized = {
-            "google": [],
-            "perplexity": [],
-            "company_tagging": []
-        }
-        
-        for tool in tools:
-            tool_name = tool.name.lower()
-            tool_desc = tool.description.lower() if hasattr(tool, 'description') and tool.description else ""
-            
-            if any(keyword in tool_name for keyword in [
-                'search_show_categories', 'company_tagging', 'tag_companies'
-            ]):
-                categorized["company_tagging"].append(tool)
-            elif any(keyword in tool_name for keyword in [
-                'google-search', 'read-webpage', 'google_search'
-            ]):
-                categorized["google"].append(tool)
-        
-        return categorized
     
     def read_csv_file(self, csv_path: str) -> List[Dict]:
         """Read and parse the CSV file."""
@@ -654,9 +501,10 @@ class RobustCompanyClassificationCLI:
         return '\n\n'.join(formatted_lines)
     
     def create_research_prompt(self, companies_batch: List[Dict]) -> str:
-        """Create research prompt for the batch."""
+        """Create research prompt for the batch - SAME AS GOOGLE VERSION but with Perplexity."""
         company_data = self.format_companies_for_analysis(companies_batch)
         
+        # SAME EXACT PROMPT as Google version, just replacing "google-search" with "perplexity_search_web"
         return f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
 
 COMPANY DATA TO ANALYZE:
@@ -669,7 +517,7 @@ MANDATORY RESEARCH PROCESS:
 
 2. **For EACH Company - Research Phase:**
    - Choose research name priority: Domain > Trading Name > Account Name
-   - Use google-search tool: If domain exists, use "site:[domain] products services", otherwise use "[company name] products services technology"
+   - Use perplexity_search_web tool: "[company name] products services technology offerings"
    - Identify what the company actually sells/offers
 
 3. **Analysis Phase:**
@@ -726,7 +574,7 @@ Begin the systematic analysis now."""
     
     async def process_batch_with_retry(self, batch_companies: List[Dict], 
                                      batch_num: int, total_batches: int) -> List[List[str]]:
-        """Process a batch with retry logic."""
+        """Process a batch with retry logic - SAME AS GOOGLE VERSION."""
         for attempt in range(self.max_retries):
             try:
                 print(f"🔄 Processing batch {batch_num}/{total_batches} (attempt {attempt + 1}/{self.max_retries})")
@@ -790,7 +638,7 @@ Begin the systematic analysis now."""
         return []
     
     async def classify_companies_batched(self, companies: List[Dict]) -> Tuple[str, List[List[str]]]:
-        """Classify companies using batched processing with proper header management."""
+        """Classify companies using batched processing - SAME AS GOOGLE VERSION."""
         
         # Split companies into batches
         batches = [companies[i:i + self.batch_size] for i in range(0, len(companies), self.batch_size)]
@@ -849,10 +697,10 @@ Begin the systematic analysis now."""
         # Final save
         self.progress.save_progress()
         
-        # Generate final results with proper header
+        # Generate final results
         final_results = self.progress.get_final_results()
         
-        # Generate markdown content with single header
+        # Generate markdown content
         if final_results and len(final_results) > 0:
             header = final_results[0]
             data_rows = final_results[1:] if len(final_results) > 1 else []
@@ -927,21 +775,19 @@ Begin the systematic analysis now."""
 
 
 async def main():
-    """Main CLI function with enhanced progress tracking."""
+    """Main CLI function - SAME AS GOOGLE VERSION."""
     parser = argparse.ArgumentParser(
-        description="COMPLETE FIXED Company Classification CLI Tool",
+        description="Simple Perplexity Company Classification CLI Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
     parser.add_argument("--input", "-i", required=True, help="Path to input CSV file")
     parser.add_argument("--output", "-o", required=True, help="Base path for output files")
-    parser.add_argument("--servers", "-s", type=str, default="google", 
-                       help="MCP servers to use (default: google)")
+    parser.add_argument("--servers", "-s", type=str, default="perplexity", 
+                       help="MCP servers to use: 'perplexity' (default: perplexity)")
     parser.add_argument("--batch-size", "-b", type=int, default=3, 
                        help="Batch size (default: 3)")
     parser.add_argument("--config", "-c", help="Path to server configuration file")
-    parser.add_argument("--resume", action="store_true", 
-                       help="Resume from previous run (default behavior)")
     parser.add_argument("--clean-start", action="store_true", 
                        help="Start fresh, ignoring previous progress")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
@@ -949,14 +795,11 @@ async def main():
     args = parser.parse_args()
     
     try:
-        # Parse server selection
-        if args.servers == "google":
-            enabled_servers = {"google", "company_tagging"}
-        else:
-            enabled_servers = {"google", "company_tagging"}
+        # Parse server selection - SIMPLE: just use perplexity
+        enabled_servers = {"perplexity", "company_tagging"}
         
-        # Initialize CLI tool with fixed ProgressTracker
-        cli = RobustCompanyClassificationCLI(
+        # Initialize CLI tool
+        cli = SimplePerplexityCompanyClassificationCLI(
             config_path=args.config,
             batch_size=args.batch_size,
             enabled_servers=enabled_servers,
@@ -968,7 +811,7 @@ async def main():
             print("🧹 Starting fresh (ignoring previous progress)")
             cli.progress.cleanup_temp_files()
         
-        print("🚀 COMPLETE FIXED Company Classification CLI Tool")
+        print("🚀 Simple Perplexity Company Classification CLI Tool")
         print("=" * 80)
         
         # Setup connections
@@ -995,19 +838,14 @@ async def main():
         print(f"   Completed batches: {stats['completed_batches']}")
         print(f"   Failed batches: {stats['failed_batches']}")
         print(f"   Success rate: {stats['success_rate']:.1f}%")
-        print(f"   Total errors: {stats['error_count']}")
         print(f"   Total data rows: {stats['total_data_rows']}")
-        print(f"   Header present: {stats['has_header']}")
-        print(f"   Processing time: {stats['elapsed_time']/3600:.1f} hours")
         
         # Clean up temp files on successful completion
         if stats['completed_batches'] == stats['total_batches']:
             cli.progress.cleanup_temp_files()
-            print("✅ Processing completed successfully! Temporary files cleaned up.")
-            print("🎉 Results saved with single header and no duplicates!")
+            print("✅ Processing completed successfully!")
         else:
-            print(f"⚠️  Processing incomplete. Use --resume to continue from batch {stats['completed_batches'] + 1}")
-            print(f"   Progress saved in: {cli.progress.progress_file}")
+            print(f"⚠️  Processing incomplete. Run again to continue.")
         
         return 0
         
