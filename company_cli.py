@@ -426,7 +426,10 @@ class RobustCompanyClassificationCLI:
         self.companies = []
         self.retry_delay = 5
         self.max_retries = 3
-        
+
+        # FIX: Custom graph recursion limit for Perplexity
+        self.custom_recursion_limit = 50
+    
     def sanitize_json_string(self, text: str) -> str:
         """Sanitize a string to prevent JSON parsing errors."""
         if not isinstance(text, str):
@@ -500,6 +503,11 @@ class RobustCompanyClassificationCLI:
             if not os.getenv("GOOGLE_SEARCH_ENGINE_ID"):
                 missing_vars.append("GOOGLE_SEARCH_ENGINE_ID")
         
+        # FIX: Check Perplexity credentials if enabled
+        if "perplexity" in self.enabled_servers:
+            if not os.getenv("PERPLEXITY_API_KEY"):
+                missing_vars.append("PERPLEXITY_API_KEY")
+        
         if missing_vars:
             print(f"❌ Missing required environment variables: {', '.join(missing_vars)}")
             return False
@@ -529,6 +537,10 @@ class RobustCompanyClassificationCLI:
         # Add Google Search if enabled
         if "google" in self.enabled_servers and "Google Search" in all_servers:
             filtered_servers["Google Search"] = all_servers["Google Search"]
+        
+        # FIX: Add Perplexity Search if enabled
+        if "perplexity" in self.enabled_servers and "Perplexity Search" in all_servers:
+            filtered_servers["Perplexity Search"] = all_servers["Perplexity Search"]
         
         return filtered_servers
     
@@ -568,8 +580,29 @@ class RobustCompanyClassificationCLI:
             # Categorize tools
             self.available_tools = self.categorize_tools(self.tools)
             
-            # Create agent
-            self.agent = create_react_agent(self.llm, self.tools)
+            # FIX: Create agent with custom config for Perplexity
+            if "perplexity" in self.enabled_servers:
+                # FIX: Use standard create_react_agent with config
+                from langgraph.graph import END
+                
+                # Create agent with higher recursion limit for Perplexity
+                # Check if LangGraph version supports the config parameter
+                try:
+                    # Try using config parameter if available
+                    self.agent = create_react_agent(
+                        self.llm, 
+                        self.tools,
+                        config={"recursion_limit": self.custom_recursion_limit}
+                    )
+                    print(f"✅ Initialized agent with increased recursion limit ({self.custom_recursion_limit}) for Perplexity")
+                except TypeError:
+                    # Fallback to standard agent creation if config not supported
+                    self.agent = create_react_agent(self.llm, self.tools)
+                    print(f"✅ Initialized standard agent for Perplexity (warning: default recursion limit will be used)")
+            else:
+                # Standard agent for Google
+                self.agent = create_react_agent(self.llm, self.tools)
+                print(f"✅ Initialized standard agent for Google")
             
             print(f"✅ Initialized with {len(self.tools)} available tools")
             
@@ -597,6 +630,11 @@ class RobustCompanyClassificationCLI:
                 'google-search', 'read-webpage', 'google_search'
             ]):
                 categorized["google"].append(tool)
+            # FIX: Add categorization for Perplexity tools
+            elif any(keyword in tool_name for keyword in [
+                'perplexity', 'perplexity_search_web', 'perplexity_advanced_search'
+            ]):
+                categorized["perplexity"].append(tool)
         
         return categorized
     
@@ -655,6 +693,31 @@ class RobustCompanyClassificationCLI:
         """Create research prompt for the batch."""
         company_data = self.format_companies_for_analysis(companies_batch)
         
+        # FIX: Create different prompts for Perplexity vs Google to avoid recursion
+        if "perplexity" in self.enabled_servers and "google" not in self.enabled_servers:
+            # FIX: Simplified prompt for Perplexity to avoid recursion
+            return f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories.
+
+COMPANY DATA TO ANALYZE:
+{company_data}
+
+MANDATORY RESEARCH PROCESS:
+
+1. First, use search_show_categories tool to get all available categories.
+
+2. For each company:
+   - Use perplexity_search_web to search for company info
+   - Match company offerings to taxonomy pairs from step 1
+   - Select up to 4 pairs per company
+
+3. Output Format:
+   - Generate ONLY a markdown table (no header)
+   - Each row: | Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | Tech Industry 3 | Tech Product 3 | Tech Industry 4 | Tech Product 4 |
+   - Do NOT include any explanation or commentary
+
+Follow the process in a step-by-step manner, making ONE tool call at a time, and keeping the taxonomy search separate from company research."""
+
+        # Standard prompt for Google and other combinations
         return f"""You are a professional data analyst tasked with tagging exhibitor companies with accurate industry and product categories from our established taxonomy.
 
 COMPANY DATA TO ANALYZE:
@@ -732,11 +795,42 @@ Begin the systematic analysis now."""
                 batch_prompt = self.create_research_prompt(batch_companies)
                 conversation_memory = [HumanMessage(content=batch_prompt)]
                 
-                # Run the agent with timeout
-                response = await asyncio.wait_for(
-                    self.agent.ainvoke({"messages": conversation_memory}),
-                    timeout=300  # 5 minute timeout per batch
-                )
+                # FIX: Different approaches for Perplexity vs Google
+                if "perplexity" in self.enabled_servers and "google" not in self.enabled_servers:
+                    # FIX: Use a more cautious approach for Perplexity with longer timeout
+                    print("   ℹ️ Using Perplexity-optimized approach")
+                    try:
+                        # Run the agent with longer timeout for Perplexity
+                        response = await asyncio.wait_for(
+                            self.agent.ainvoke({"messages": conversation_memory}),
+                            timeout=600  # 10 minute timeout for Perplexity
+                        )
+                    except asyncio.TimeoutError:
+                        print(f"   ⏰ Perplexity processing timed out after 10 minutes")
+                        if attempt < self.max_retries - 1:
+                            print(f"   🔄 Retrying with simplified approach...")
+                            
+                            # FIX: If timeout, try with an even simpler prompt
+                            simplified_prompt = f"""Analyze these companies and tag them with industry categories from the taxonomy:
+{self.format_companies_for_analysis(batch_companies)}
+
+1. First get the taxonomy with search_show_categories
+2. Then research each company separately 
+3. Output ONLY a markdown table with company data and matched categories"""
+                            
+                            conversation_memory = [HumanMessage(content=simplified_prompt)]
+                            response = await asyncio.wait_for(
+                                self.agent.ainvoke({"messages": conversation_memory}),
+                                timeout=600  # 10 minute timeout for simplified approach
+                            )
+                        else:
+                            raise
+                else:
+                    # Standard approach for Google
+                    response = await asyncio.wait_for(
+                        self.agent.ainvoke({"messages": conversation_memory}),
+                        timeout=300  # 5 minute timeout per batch
+                    )
                 
                 # Extract and clean the response
                 assistant_response = None
@@ -771,13 +865,61 @@ Begin the systematic analysis now."""
                 else:
                     self.progress.mark_batch_failed(batch_num, error_msg)
                     return []
-                    
+            
+            # FIX: Add specific handling for Perplexity recursion error
             except Exception as e:
                 error_msg = f"Batch {batch_num} error: {str(e)}"
                 traceback_str = traceback.format_exc()
                 print(f"   ❌ {error_msg}")
                 
-                if attempt < self.max_retries - 1:
+                # FIX: Check for recursion error 
+                if "perplexity" in self.enabled_servers and "recursion limit" in str(e).lower():
+                    print(f"   🔄 Recursion limit error detected! Trying with a much simpler approach...")
+                    
+                    if attempt < self.max_retries - 1:
+                        # Try with an ultra-simplified approach for recursion errors
+                        try:
+                            # Create a super simplified prompt to reduce recursion depth
+                            ultra_simple_prompt = f"""Tag these companies with product categories:
+{self.format_companies_for_analysis(batch_companies)}
+
+1. First run search_show_categories
+2. Then tag each company with categories
+3. Output as markdown table only"""
+                            
+                            conversation_memory = [HumanMessage(content=ultra_simple_prompt)]
+                            
+                            # Use longer timeout for the simpler approach
+                            response = await asyncio.wait_for(
+                                self.agent.ainvoke({"messages": conversation_memory}),
+                                timeout=600  # 10 minute timeout
+                            )
+                            
+                            # Process response
+                            assistant_response = None
+                            if "messages" in response:
+                                for msg in response["messages"]:
+                                    if isinstance(msg, AIMessage) and hasattr(msg, "content") and msg.content:
+                                        assistant_response = self.clean_response_content(str(msg.content))
+                                        break
+                            
+                            if assistant_response and "|" in assistant_response:
+                                parsed_rows = self.parse_markdown_table(assistant_response)
+                                if parsed_rows:
+                                    print(f"   ✅ Batch {batch_num} completed with simplified approach: {len(parsed_rows)} rows")
+                                    return parsed_rows
+                            
+                            # If we reach here, the simplified approach also failed
+                            print(f"   ❌ Even simplified approach failed for batch {batch_num}")
+                            
+                        except Exception as inner_e:
+                            print(f"   ❌ Simplified approach also failed: {str(inner_e)}")
+                        
+                        print(f"   🔄 Retrying with standard approach in {self.retry_delay} seconds...")
+                        await asyncio.sleep(self.retry_delay)
+                        continue
+                    
+                elif attempt < self.max_retries - 1:
                     print(f"   🔄 Retrying in {self.retry_delay} seconds...")
                     await asyncio.sleep(self.retry_delay)
                     continue
@@ -934,7 +1076,7 @@ async def main():
     parser.add_argument("--input", "-i", required=True, help="Path to input CSV file")
     parser.add_argument("--output", "-o", required=True, help="Base path for output files")
     parser.add_argument("--servers", "-s", type=str, default="google", 
-                       help="MCP servers to use (default: google)")
+                       help="MCP servers to use: 'google', 'perplexity', or 'both' (default: google)")
     parser.add_argument("--batch-size", "-b", type=int, default=3, 
                        help="Batch size (default: 3)")
     parser.add_argument("--config", "-c", help="Path to server configuration file")
@@ -943,15 +1085,23 @@ async def main():
     parser.add_argument("--clean-start", action="store_true", 
                        help="Start fresh, ignoring previous progress")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
+    # FIX: Add new argument for recursion limit
+    parser.add_argument("--recursion-limit", type=int, default=50,
+                       help="Custom recursion limit for Perplexity (default: 50)")
     
     args = parser.parse_args()
     
     try:
         # Parse server selection
-        if args.servers == "google":
+        if args.servers.lower() == "google":
             enabled_servers = {"google", "company_tagging"}
+        elif args.servers.lower() == "perplexity":
+            enabled_servers = {"perplexity", "company_tagging"}
+        elif args.servers.lower() == "both":
+            enabled_servers = {"google", "perplexity", "company_tagging"}
         else:
             enabled_servers = {"google", "company_tagging"}
+            print(f"⚠️ Unknown server option '{args.servers}', defaulting to 'google'")
         
         # Initialize CLI tool with fixed ProgressTracker
         cli = RobustCompanyClassificationCLI(
@@ -960,6 +1110,11 @@ async def main():
             enabled_servers=enabled_servers,
             output_base=args.output
         )
+        
+        # FIX: Set custom recursion limit
+        if "perplexity" in enabled_servers:
+            cli.custom_recursion_limit = args.recursion_limit
+            print(f"🔧 Setting custom recursion limit for Perplexity: {cli.custom_recursion_limit}")
         
         # Clean start if requested
         if args.clean_start:

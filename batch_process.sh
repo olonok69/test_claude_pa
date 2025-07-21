@@ -150,8 +150,25 @@ echo ""
 echo "🔄 Starting company classification..."
 OUTPUT_BASE="$OUTPUT_DIR/results_$(date +%Y%m%d_%H%M%S)_${SERVERS}"
 
-# Build the command
-CMD="python3 company_cli.py --input \"$INPUT_CSV\" --output \"$OUTPUT_BASE\" --batch-size $BATCH_SIZE --servers $SERVERS"
+# Determine appropriate batch size and recursion limit based on server choice
+if [ "$SERVERS" = "perplexity" ]; then
+    # FIX: For Perplexity, use smaller batch size and larger recursion limit
+    if [ "$BATCH_SIZE" -gt 3 ]; then
+        SUGGESTED_BATCH_SIZE=3
+        echo "⚠️  Perplexity works better with smaller batch sizes. Reducing from $BATCH_SIZE to $SUGGESTED_BATCH_SIZE."
+        BATCH_SIZE="$SUGGESTED_BATCH_SIZE"
+    fi
+    
+    # FIX: Use higher recursion limit for Perplexity
+    RECURSION_LIMIT=75
+    echo "🔧 Setting higher recursion limit ($RECURSION_LIMIT) for Perplexity"
+    
+    # Build the command with Perplexity optimizations
+    CMD="python3 company_cli.py --input \"$INPUT_CSV\" --output \"$OUTPUT_BASE\" --batch-size $BATCH_SIZE --servers $SERVERS --recursion-limit $RECURSION_LIMIT"
+else
+    # Standard command for Google or both
+    CMD="python3 company_cli.py --input \"$INPUT_CSV\" --output \"$OUTPUT_BASE\" --batch-size $BATCH_SIZE --servers $SERVERS"
+fi
 
 # Add verbose flag if DEBUG environment variable is set
 if [ -n "$DEBUG" ]; then
@@ -235,6 +252,16 @@ else
             echo "   - OPENAI_API_KEY or Azure OpenAI credentials"
             ;;
     esac
+    
+    # FIX: Add Perplexity-specific troubleshooting info
+    if [ "$SERVERS" = "perplexity" ] || [ "$SERVERS" = "both" ]; then
+        echo ""
+        echo "🔍 Perplexity-specific troubleshooting:"
+        echo "   1. If you see recursion limit errors, try increasing the limit:"
+        echo "      $0 $INPUT_CSV $OUTPUT_DIR $BATCH_SIZE $SERVERS --recursion-limit 100"
+        echo "   2. Try reducing batch size to 2 or 1 for Perplexity processing"
+        echo "   3. Check Perplexity API key and rate limits"
+    fi
     
     exit 1
 fi
