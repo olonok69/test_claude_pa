@@ -1,34 +1,40 @@
-FROM python:3.11-slim
+# Use multi-stage build
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
-# Install system dependencies if needed
-RUN apt-get update && apt-get install -y \
-    curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Copy package files
+COPY package.json ./
 
-# Upgrade pip
-RUN pip install --upgrade pip
+# Install all dependencies including dev dependencies for building
+RUN npm install
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy source files
+COPY . .
 
-# Copy the source code
+# Build the application
+RUN npm run build
 
-COPY perplexity_sse_server.py /app/
+# Production stage
+FROM node:22-slim
 
+WORKDIR /app
 
-# Environment variables
+# Copy package files
+COPY package.json ./
 
-ENV PYTHONPATH=/app/src
+# Install only production dependencies
+RUN npm install --omit=dev
 
+# Copy built files from builder stage
+COPY --from=builder /app/dist ./dist
+
+# Set environment variables
+ENV PORT=8001
+ENV SSE_LOCAL=true
+
+# Expose the port
 EXPOSE 8001
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8001/health || exit 1
-
-# Command to run the server
-CMD ["python", "perplexity_sse_server.py"]
+# Run the SSE server instead of the main index
+CMD ["node", "dist/sse-server.js"]

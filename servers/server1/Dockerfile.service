@@ -1,0 +1,25 @@
+FROM node:22-slim
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy TypeScript config and source files
+COPY tsconfig.json ./
+COPY src ./src
+
+# Build the application
+RUN npm run build
+
+# Set environment variables
+ENV PORT=8001
+
+# Expose the port
+EXPOSE 8001
+
+# Run the SSE server
+CMD ["node", "dist/sse-server.js"]
