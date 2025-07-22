@@ -1,43 +1,34 @@
-# Perplexity MCP Server with Company Tagging & CSV Categories
+# Perplexity MCP Server with Caching
 
-A comprehensive Model Context Protocol (MCP) server that provides AI-powered web search capabilities using the Perplexity API, plus specialized company tagging functionality for trade show exhibitor categorization. This version uses Server-Sent Events (SSE) for real-time communication, making it compatible with web-based MCP clients and browsers.
+A high-performance Model Context Protocol (MCP) server that provides AI-powered web search capabilities using the Perplexity API. This server uses Server-Sent Events (SSE) for real-time communication and includes intelligent caching to optimize API usage and response times.
 
 ## 🚀 Features
 
-### **AI-Powered Web Search**
-- **Intelligent Search**: Leverage Perplexity's AI-powered search across the web
-- **Recency Filtering**: Filter results by time period (day, week, month, year)
-- **Multiple Models**: Support for all Perplexity AI models
-- **Citation Support**: Automatic source citations for all results
-- **Advanced Parameters**: Fine-tune search with custom parameters
+### **Core Capabilities**
+- **AI-Powered Web Search**: Leverage Perplexity's advanced AI models for intelligent web search
+- **Recency Filtering**: Filter search results by time period (day, week, month, year)
+- **Multiple Model Support**: Compatible with all Perplexity AI models
+- **Advanced Search Parameters**: Fine-tune searches with custom model, temperature, and token settings
+- **Automatic Citations**: All search results include source citations
 
-### **Company Tagging & Categorization** ⭐ NEW
-- **Automated Company Research**: Research companies using web sources and LinkedIn
-- **Taxonomy Matching**: Match companies to precise industry/product categories
-- **Trade Show Context**: Focus on relevant shows (CAI, DOL, CCSE, BDAIW, DCW)
-- **Structured Output**: Generate tables with up to 4 industry/product pairs per company
-- **Data Analyst Workflow**: Professional data analysis approach with accuracy focus
-
-### **CSV Categories Data Access**
-- **Show Categories**: Access categorized data organized by shows
-- **Industry Organization**: Browse categories by industry and product classifications
-- **Search Functionality**: Search across all category data with flexible filtering
-- **Dynamic Resources**: Real-time access to CSV data through MCP resources
-- **Tagging Context**: Formatted categories specifically for company tagging
+### **Performance Optimizations**
+- **Intelligent Caching**: 30-minute cache for API responses to reduce costs and latency
+- **Cache Management**: Tools to inspect and clear cache as needed
+- **Health Check Caching**: 5-minute cache for health status to minimize overhead
+- **No External API Calls on Health Checks**: Health endpoint validates configuration without making API calls
 
 ### **Technical Features**
 - **SSE Protocol**: Real-time communication using Server-Sent Events
-- **Health Monitoring**: Built-in health check endpoints with comprehensive status
-- **Async Operations**: High-performance async/await architecture
-- **Error Handling**: Comprehensive error management and logging
+- **Async Architecture**: High-performance async/await implementation
+- **Comprehensive Logging**: Detailed logging for debugging and monitoring
 - **Environment Configuration**: Flexible configuration via environment variables
+- **Fixed Port**: Server runs on port 8003
 
 ## 📋 Prerequisites
 
 - Python 3.11+
 - Perplexity API key (get one at [perplexity.ai](https://perplexity.ai))
 - Docker (optional, for containerized deployment)
-- CSV file with categories data (included: `src/perplexity_mcp/categories/classes.csv`)
 
 ## 🛠️ Installation & Setup
 
@@ -46,8 +37,10 @@ A comprehensive Model Context Protocol (MCP) server that provides AI-powered web
 Create a `.env` file in the server directory:
 
 ```env
-# Perplexity API Configuration
+# Required
 PERPLEXITY_API_KEY=your_perplexity_api_key_here
+
+# Optional (defaults to 'sonar')
 PERPLEXITY_MODEL=sonar
 ```
 
@@ -61,6 +54,8 @@ pip install -r requirements.txt
 python perplexity_sse_server.py
 ```
 
+The server will start on `http://0.0.0.0:8003`
+
 ### 3. Docker Deployment
 
 ```bash
@@ -68,7 +63,7 @@ python perplexity_sse_server.py
 docker build -t perplexity-mcp-sse .
 
 # Run the container
-docker run -p 8001:8001 \
+docker run -p 8003:8003 \
   -e PERPLEXITY_API_KEY=your_api_key_here \
   -e PERPLEXITY_MODEL=sonar \
   perplexity-mcp-sse
@@ -76,517 +71,332 @@ docker run -p 8001:8001 \
 
 ## 🔧 Available Tools (4 Tools)
 
-### **Web Search Tools**
-
-#### **perplexity_search_web**
-Standard web search with recency filtering.
+### **1. perplexity_search_web**
+Standard web search with recency filtering and automatic caching.
 
 **Parameters:**
 - `query` (string, required): The search query
 - `recency` (string, optional): Time filter - "day", "week", "month", "year" (default: "month")
 
-#### **perplexity_advanced_search**
-Advanced search with custom parameters for fine-tuned control.
+**Response includes:**
+- Search results with AI-generated content
+- Source citations
+- Token usage statistics
+- Cache status indicator
+
+**Example:**
+```python
+result = await perplexity_search_web(
+    query="latest developments in AI",
+    recency="week"
+)
+```
+
+### **2. perplexity_advanced_search**
+Advanced search with full parameter control and caching support.
 
 **Parameters:**
 - `query` (string, required): The search query
 - `recency` (string, optional): Time filter (default: "month")
 - `model` (string, optional): Override the default model
-- `max_tokens` (int, optional): Maximum response tokens (default: 512, max: 2048)
-- `temperature` (float, optional): Response randomness 0.0-1.0 (default: 0.2)
-
-### **Category Management Tools**
-
-#### **search_show_categories**
-Search and filter show categories from the CSV data.
-
-**Parameters:**
-- `show_name` (string, optional): Filter by specific show (CAI, DOL, CCSE, BDAIW, DCW)
-- `industry_filter` (string, optional): Filter by industry name (partial match)
-- `product_filter` (string, optional): Filter by product name (partial match)
-
-### **Company Tagging Tool** ⭐ NEW
-
-#### **tag_company**
-Advanced company research and taxonomy tagging for trade show exhibitors.
-
-**Parameters:**
-- `company_name` (string, required): The main company name
-- `trading_name` (string, optional): Alternative trading name
-- `target_shows` (string, optional): Comma-separated show codes (e.g., "CAI,DOL,BDAIW")
-- `company_description` (string, optional): Brief description of the company
+- `max_tokens` (int, optional): Maximum response tokens (1-2048, default: 512)
+- `temperature` (float, optional): Response randomness (0.0-1.0, default: 0.2)
 
 **Example:**
 ```python
-await tag_company(
-    company_name="Microsoft Corporation",
-    trading_name="Microsoft",
-    target_shows="CAI,BDAIW",
-    company_description="Technology company specializing in cloud and AI solutions"
+result = await perplexity_advanced_search(
+    query="quantum computing breakthroughs",
+    recency="month",
+    model="sonar-pro",
+    max_tokens=1000,
+    temperature=0.5
 )
 ```
 
-**Output Format:**
-The tool generates a comprehensive analysis including:
-- Research findings from web sources and LinkedIn
-- Taxonomy analysis and matching
-- Structured table with up to 4 industry/product pairs
-- Complete audit trail of the tagging process
+### **3. clear_api_cache**
+Clear all cached API responses to force fresh data retrieval.
 
-## 📋 Available Prompts (1 Prompt)
+**No parameters required**
 
-### **company_tagging_analyst** ⭐ NEW
-Professional data analyst prompt for company categorization.
+**Returns:**
+- Number of entries cleared
+- Cache statistics before clearing
 
-**Parameters:**
-- `company_name` (string): The main company name
-- `trading_name` (string): Alternative trading name (optional)
-- `target_shows` (string): Shows the company is interested in
-- `company_description` (string): Brief description (optional)
+### **4. get_cache_stats**
+Get current cache performance statistics.
 
-**Purpose:**
-This prompt provides the AI with a complete data analyst persona and workflow for accurately tagging companies with industry and product categories from the taxonomy.
+**No parameters required**
 
-**Key Features:**
-- Professional data analyst role definition
-- Complete taxonomy context
-- Step-by-step analysis process
-- Accuracy and consistency focus
-- Structured output format requirements
+**Returns:**
+- Total cached entries
+- Valid (non-expired) entries
+- Expired entries
+- Cache TTL configuration
 
-## 🗂️ Available Resources (7 Resources)
+## 📊 Available Models
 
-### **Basic Category Resources**
+The server supports all Perplexity AI models:
 
-#### **categories://all**
-Complete CSV data with all show categories in JSON format.
+- **sonar-deep-research**: 128k context - Enhanced research capabilities
+- **sonar-reasoning-pro**: 128k context - Advanced reasoning with professional focus
+- **sonar-reasoning**: 128k context - Enhanced reasoning capabilities
+- **sonar-pro**: 200k context - Professional grade model
+- **sonar**: 128k context - Default model (recommended for general use)
+- **r1-1776**: 128k context - Alternative architecture
 
-#### **categories://shows**
-Categories organized by show with statistics and industry breakdowns.
-
-#### **categories://shows/{show_name}**
-Categories for a specific show (CAI, DOL, CCSE, BDAIW, DCW).
-
-#### **categories://industries**
-Categories organized by industry with product associations.
-
-#### **categories://industries/{industry_name}**
-Categories for a specific industry (case-insensitive, partial match).
-
-#### **categories://search/{query}**
-Search across all category data with flexible query matching.
-
-### **Company Tagging Resource** ⭐ NEW
-
-#### **categories://for-tagging**
-Categories formatted specifically for company tagging analysis.
-
-**Special Features:**
-- Formatted for prompt consumption
-- Organized by show with full names
-- Exact spelling and formatting preservation
-- Usage instructions included
-
-**Output Format:**
-```
-TAXONOMY CATEGORIES - Industry and Product Pairs by Show:
-
-**CAI (Cloud and AI Infrastructure):**
-- IT Infrastructure & Hardware | Semiconductor Technologies
-- Cloud and AI Infrastructure Services | Hyperscale Cloud Solutions
-...
-
-**DOL (DevOps Live):**
-- Application Delivery & Runtime | Application Delivery
-- CI/CD & Automation | CI/CD Pipelines
-...
-
-NOTE: Use industry and product pairs EXACTLY as shown above.
-```
-
-## 🎯 Company Tagging Workflow
-
-### **Complete Analysis Process**
-
-The `tag_company` tool follows a comprehensive research and analysis workflow:
-
-1. **Input Validation**
-   - Validates company name (required)
-   - Normalizes trading name and show targets
-   - Determines research name priority (Trading Name > Company Name)
-
-2. **Web Research Phase**
-   - Initial company research using Perplexity AI
-   - Additional context from LinkedIn and company websites
-   - Focus on products/services relevant to target shows
-
-3. **Taxonomy Matching Phase**
-   - Analysis of research findings
-   - Matching to exact taxonomy categories
-   - Selection of up to 4 most relevant industry/product pairs
-
-4. **Structured Output Generation**
-   - Professional analysis summary
-   - Research audit trail
-   - Formatted table with categorization results
-
-### **Usage Examples**
-
-#### **Basic Company Tagging**
-```python
-# Tag a technology company
-result = await tag_company(
-    company_name="NVIDIA Corporation",
-    target_shows="CAI,BDAIW"
-)
-```
-
-#### **Company with Trading Name**
-```python
-# Use trading name for research
-result = await tag_company(
-    company_name="International Business Machines Corporation",
-    trading_name="IBM",
-    target_shows="CAI,DOL,BDAIW",
-    company_description="Enterprise technology and consulting company"
-)
-```
-
-#### **Multi-Show Analysis**
-```python
-# Analyze for multiple relevant shows
-result = await tag_company(
-    company_name="Amazon Web Services",
-    trading_name="AWS",
-    target_shows="CAI,DOL,CCSE,DCW"
-)
-```
-
-### **Expected Output Structure**
-
-The tool generates a comprehensive report including:
-
-```
-COMPANY TAGGING ANALYSIS FOR: [Company Name]
-============================================================
-
-RESEARCH NAME USED: [Name used for web research]
-TARGET SHOWS: [Show codes provided]
-
-INITIAL RESEARCH:
-[Perplexity search results about company products/services]
-
-ADDITIONAL RESEARCH:
-[LinkedIn and website specific research findings]
-
-TAXONOMY ANALYSIS AND TAGGING:
-[Analysis explaining categorization decisions]
-
-TAXONOMY MATCHES:
-| Tech Industry 1 | Tech Product 1 | Tech Industry 2 | Tech Product 2 | ... |
-|-----------------|----------------|-----------------|----------------|-----|
-| [Exact Industry] | [Exact Product] | [Exact Industry] | [Exact Product] | ... |
-
-TABLE FORMAT:
-| Company Name | Trading Name | Tech Industry 1 | Tech Product 1 | ... |
-|--------------|--------------|-----------------|----------------|-----|
-| [Company]    | [Trading]    | [Industry]      | [Product]      | ... |
-
-CATEGORIES REFERENCE:
-[Complete taxonomy for verification]
-```
-
-## 🎯 Trade Show Context
-
-### **Supported Shows**
-- **CAI**: Cloud and AI Infrastructure
-- **DOL**: DevOps Live
-- **CCSE**: Cloud and Cyber Security Expo
-- **BDAIW**: Big Data and AI World
-- **DCW**: Data Centre World
-
-### **Show-Specific Categories**
-
-Each show has specific industry and product categories relevant to its theme:
-
-**CAI (Cloud and AI Infrastructure):**
-- Focus: Cloud infrastructure, AI platforms, semiconductor technologies
-- Key Industries: IT Infrastructure & Hardware, Cloud and AI Infrastructure Services
-- Example Products: Hyperscale Cloud Solutions, AI Applications
-
-**DOL (DevOps Live):**
-- Focus: Development operations, CI/CD, automation
-- Key Industries: Application Delivery & Runtime, CI/CD & Automation
-- Example Products: DevOps Tools, Configuration Management
-
-**CCSE (Cloud and Cyber Security Expo):**
-- Focus: Security solutions, compliance, threat detection
-- Key Industries: Application Security, Governance Risk and Compliance
-- Example Products: Cloud Security Solutions, Threat Intelligence & Analytics
-
-**BDAIW (Big Data & AI World):**
-- Focus: Data analytics, machine learning, AI platforms
-- Key Industries: AI & ML Platforms, Data Management
-- Example Products: Cloud AI Platform, Analytics Platforms
-
-**DCW (Data Centre World):**
-- Focus: Data center infrastructure, power, cooling
-- Key Industries: Power & Energy, Cooling & Environment
-- Example Products: Energy Storage, Cooling systems
+Set your preferred model using the `PERPLEXITY_MODEL` environment variable.
 
 ## 🔌 API Endpoints
 
-### Health Check
+### **Health Check**
 ```
 GET /health
 ```
 
-**Enhanced Response with Company Tagging:**
+**Response:**
 ```json
 {
   "status": "healthy",
-  "version": "0.1.7",
-  "model": "sonar",
-  "api_key_configured": true,
-  "test_query_successful": true,
-  "csv_data": {
-    "available": true,
-    "total_records": 45,
-    "shows": ["CAI", "DOL", "CCSE", "BDAIW", "DCW"]
+  "message": "Server operational - API key configured",
+  "version": "0.1.8",
+  "timestamp": "2025-01-22T12:00:00.000Z",
+  "server_info": {
+    "model": "sonar",
+    "api_key_configured": true,
+    "api_test_disabled": "Health checks do not test external APIs to avoid unnecessary calls",
+    "uptime_seconds": 3600
+  },
+  "cache_stats": {
+    "total_entries": 10,
+    "valid_entries": 8,
+    "expired_entries": 2,
+    "ttl_seconds": 1800
   },
   "available_models": [...],
-  "available_resources": [
-    "categories://all",
-    "categories://shows",
-    "categories://shows/{show_name}",
-    "categories://industries", 
-    "categories://industries/{industry_name}",
-    "categories://search/{query}",
-    "categories://for-tagging"
-  ],
-  "available_prompts": [
-    "company_tagging_analyst"
-  ],
   "available_tools": [
     "perplexity_search_web",
     "perplexity_advanced_search",
-    "search_show_categories", 
-    "tag_company"
-  ]
+    "clear_api_cache",
+    "get_cache_stats"
+  ],
+  "optimization_features": {
+    "api_caching": true,
+    "cache_ttl_seconds": 1800,
+    "health_check_caching": true,
+    "external_api_calls_avoided": "Health checks do not call external APIs"
+  }
 }
 ```
 
-## 🎯 Advanced Usage Examples
+### **SSE Endpoint**
+```
+GET /sse
+```
+Used for MCP client connections via Server-Sent Events.
 
-### **Company Research Workflow**
+### **Message Endpoint**
+```
+POST /messages/
+```
+Used for MCP message handling.
+
+## 💾 Caching System
+
+### **API Response Cache**
+- **TTL**: 30 minutes (1800 seconds)
+- **Key Generation**: Based on query + all parameters
+- **Automatic Expiration**: Expired entries removed on access
+- **Cache Hit Indicator**: Responses indicate if they were served from cache
+
+### **Cache Benefits**
+- **Cost Reduction**: Fewer API calls to Perplexity
+- **Improved Latency**: Instant responses for cached queries
+- **Rate Limit Protection**: Reduces risk of hitting API limits
+- **Consistent Results**: Same query returns same results within TTL
+
+### **Cache Management**
 ```python
-# Step 1: Research company categories context
-categories = await search_show_categories(show_name="CAI")
+# Check cache statistics
+stats = await get_cache_stats()
 
-# Step 2: Tag the company with full analysis
-result = await tag_company(
-    company_name="Salesforce",
-    target_shows="CAI,BDAIW",
-    company_description="CRM and cloud computing company"
-)
-
-# Step 3: Verify categories used
-verification = client.read_resource("categories://for-tagging")
+# Clear cache when needed
+await clear_api_cache()
 ```
 
-### **Batch Company Processing**
-```python
-companies = [
-    {"name": "Microsoft", "trading": "Microsoft", "shows": "CAI,BDAIW"},
-    {"name": "Google LLC", "trading": "Google", "shows": "CAI,BDAIW,DOL"},
-    {"name": "Oracle Corporation", "trading": "Oracle", "shows": "CAI,DCW"}
-]
+## 🎯 Usage Examples
 
-for company in companies:
-    result = await tag_company(
-        company_name=company["name"],
-        trading_name=company["trading"],
-        target_shows=company["shows"]
-    )
-    # Process results...
+### **Basic Web Search**
+```python
+# Simple search with default settings
+result = await perplexity_search_web("what is quantum computing")
+
+# Search with recency filter
+recent_news = await perplexity_search_web(
+    query="AI regulations news",
+    recency="day"
+)
 ```
 
-### **Show-Specific Analysis**
+### **Advanced Search with Custom Parameters**
 ```python
-# Focus on specific show categories
-cai_categories = client.read_resource("categories://shows/CAI")
-
-# Tag company for CAI show specifically
-result = await tag_company(
-    company_name="Intel Corporation",
-    target_shows="CAI"
+# Use a more powerful model with more tokens
+detailed_result = await perplexity_advanced_search(
+    query="explain transformer architecture in detail",
+    model="sonar-pro",
+    max_tokens=2000,
+    temperature=0.3
 )
+```
 
-# Compare with available CAI categories
+### **Cache-Aware Workflow**
+```python
+# First call - hits API
+result1 = await perplexity_search_web("climate change impacts")
+
+# Second call within 30 minutes - served from cache (instant)
+result2 = await perplexity_search_web("climate change impacts")
+
+# Force fresh data
+await clear_api_cache()
+result3 = await perplexity_search_web("climate change impacts")
 ```
 
 ## 🔒 Security & Best Practices
 
-### **API Security**
-- Use secure API keys with proper scoping
-- Implement rate limiting for search requests
-- Enable SSL/TLS for all communications
-- Regularly rotate API keys and credentials
+### **API Key Security**
+- Store API key in environment variables, never in code
+- Use `.env` file for local development (add to .gitignore)
+- In production, use secure secret management
 
-### **Data Privacy**
-- Company research respects public information sources
-- No storage of sensitive company data
-- Audit trail for all tagging decisions
-- Transparent research methodology
+### **Rate Limiting**
+- Cache helps prevent rate limit issues
+- Monitor usage with cache statistics
+- Consider implementing request queuing for high-volume use
 
-### **Taxonomy Integrity**
-- Exact matching to prevent category drift
-- No modification of industry/product terms
-- Consistent spelling and formatting
-- Validation against source taxonomy
+### **Error Handling**
+- Server includes comprehensive error handling
+- API errors are logged and returned gracefully
+- Health checks don't consume API quota
 
 ## 🐛 Troubleshooting
 
-### **Company Tagging Issues**
+### **Common Issues**
 
-**Research Failures:**
+**API Key Not Found:**
 ```
-Error: Unable to find information about company
+Error: PERPLEXITY_API_KEY environment variable is required
 ```
-- **Solution**: Verify company name spelling and try trading name
-- **Check**: Company has web presence and is publicly searchable
-- **Alternative**: Add company description for additional context
+**Solution**: Ensure `.env` file exists with valid API key
 
-**Taxonomy Matching Errors:**
+**Invalid Model:**
 ```
-Warning: No matching categories found for company
+Warning: Model 'invalid-model' not recognized
 ```
-- **Solution**: Review target shows - company may not fit these show themes
-- **Check**: Expand target shows or verify company's actual business focus
-- **Verify**: CSV data contains relevant categories for the company type
+**Solution**: Check available models list and update PERPLEXITY_MODEL
 
-**API Rate Limits:**
+**Cache Not Working:**
 ```
-Error: Perplexity API rate limit exceeded
+Every request hits the API even for identical queries
 ```
-- **Solution**: Implement delays between requests
-- **Monitor**: API usage against quotas
-- **Consider**: Upgrading Perplexity subscription for higher limits
+**Solution**: Check cache stats with `get_cache_stats()` tool
 
-### **CSV Data Issues**
-
-**Missing Categories:**
-```
-Warning: CSV file not found or empty
-```
-- **Solution**: Verify CSV file at `src/perplexity_mcp/categories/classes.csv`
-- **Check**: File format with headers `Show,Industry,Product`
-- **Restart**: Server after CSV file changes
+### **Performance Tips**
+- Use caching effectively - identical queries within 30 minutes use cache
+- Choose appropriate model - 'sonar' is fast and cost-effective for most uses
+- Adjust max_tokens based on needs - lower values are faster and cheaper
+- Monitor cache hit rate to optimize query patterns
 
 ## 🚀 Production Deployment
 
-### **Docker Compose with Company Tagging**
+### **Docker Compose Configuration**
 ```yaml
+version: '3.8'
+
 services:
   perplexity-mcp:
     build: .
     ports:
-      - "8001:8001"
+      - "8003:8003"
     environment:
       - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
-      - PERPLEXITY_MODEL=sonar-pro
-    volumes:
-      - ./src/perplexity_mcp/categories:/app/src/perplexity_mcp/categories:ro
+      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL:-sonar}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 30s
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 60s
       timeout: 10s
+      start-period: 5s
       retries: 3
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 ```
 
-### **Company Tagging Performance**
-- **Batch Processing**: Process multiple companies with delays
-- **Caching**: Cache research results for repeated company analysis
-- **Rate Limiting**: Respect Perplexity API limits
-- **Quality Control**: Implement validation of tagging results
+### **Environment Variables**
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| PERPLEXITY_API_KEY | Yes | - | Your Perplexity API key |
+| PERPLEXITY_MODEL | No | sonar | Default model to use |
+
+### **Monitoring Recommendations**
+- Track cache hit rate via `get_cache_stats()`
+- Monitor health endpoint for uptime
+- Log API usage and costs
+- Set up alerts for API errors
 
 ## 🔄 Integration Examples
 
-### **Web-based Clients**
-```javascript
-// Tag a company with full analysis
-const tagResult = await client.callTool('tag_company', {
-    company_name: 'Adobe Inc.',
-    trading_name: 'Adobe',
-    target_shows: 'CAI,BDAIW',
-    company_description: 'Digital media and marketing software company'
-});
-
-// Access tagging-specific categories
-const taggingCategories = await client.readResource('categories://for-tagging');
-
-// Use the tagging prompt
-const promptResult = await client.getPrompt('company_tagging_analyst', {
-    company_name: 'Adobe Inc.',
-    trading_name: 'Adobe',
-    target_shows: 'CAI,BDAIW'
-});
-```
-
-### **Automated Workflows**
+### **Python Client**
 ```python
-# Research and tag workflow
-async def research_and_tag_company(company_info):
-    # Step 1: Get relevant categories
-    categories = await search_show_categories(
-        show_name=company_info.get('primary_show')
-    )
-    
-    # Step 2: Tag the company
-    result = await tag_company(
-        company_name=company_info['name'],
-        trading_name=company_info.get('trading_name'),
-        target_shows=company_info.get('target_shows'),
-        company_description=company_info.get('description')
-    )
-    
-    return {
-        'company': company_info,
-        'categories': categories,
-        'tagging_result': result
-    }
+import httpx
+from mcp import Client
+
+# Connect to the server
+client = Client("http://localhost:8003/sse")
+
+# Perform a search
+result = await client.call_tool(
+    "perplexity_search_web",
+    {"query": "latest AI news", "recency": "day"}
+)
 ```
 
-## 📈 Performance Monitoring
+### **JavaScript/TypeScript Client**
+```javascript
+// Using MCP client library
+const client = new MCPClient('http://localhost:8003/sse');
 
-### **Company Tagging Metrics**
-- **Research Success Rate**: Percentage of successful company research
-- **Taxonomy Match Rate**: Percentage of companies successfully categorized
-- **API Usage**: Perplexity API calls per company analysis
-- **Processing Time**: Average time per company tagging
-- **Accuracy Validation**: Manual verification of tagging results
+// Search with caching
+const result = await client.callTool('perplexity_search_web', {
+    query: 'machine learning trends',
+    recency: 'week'
+});
 
-### **Quality Assurance**
-- **Manual Spot Checks**: Random verification of tagging accuracy
-- **Category Distribution**: Monitor usage of different taxonomy categories
-- **Show Relevance**: Validate categories match intended show themes
-- **Research Quality**: Assess depth and relevance of company research
+// Check cache statistics
+const stats = await client.callTool('get_cache_stats');
+```
+
+## 📈 Performance Metrics
+
+### **Typical Response Times**
+- **Cached responses**: < 10ms
+- **Fresh API calls**: 500-2000ms (depends on query complexity)
+- **Health checks**: < 5ms (cached for 5 minutes)
+
+### **Cache Efficiency**
+- **Hit Rate**: Typically 40-60% for normal usage patterns
+- **Memory Usage**: ~1MB per 100 cached responses
+- **Cost Savings**: Up to 50% reduction in API costs with effective caching
 
 ## 🤝 Contributing
 
-### **Extending Company Tagging**
-
-1. **Add New Shows**: Extend CSV with new show categories
-2. **Enhance Research**: Add new data sources for company information
-3. **Improve Accuracy**: Refine taxonomy matching algorithms
-4. **Add Validation**: Implement quality checking mechanisms
-
-### **CSV Data Management**
-- **Category Updates**: Process for updating taxonomy categories
-- **Show Management**: Adding or modifying show definitions
-- **Quality Control**: Validation of CSV data integrity
-- **Version Control**: Track changes to taxonomy over time
+Contributions are welcome! Areas for improvement:
+- Add more Perplexity API features
+- Implement cache persistence
+- Add request queuing for rate limiting
+- Enhance error handling and retry logic
 
 ## 📄 License
 
@@ -594,10 +404,9 @@ This project is licensed under the MIT License.
 
 ---
 
-**Version**: 0.1.7  
-**Last Updated**: July 2025  
-**Compatibility**: Perplexity API v1, MCP 1.0+, Python 3.11+  
-**Tools**: 4 (Web search + Categories + Company tagging)  
-**Resources**: 7 (Complete CSV access + Tagging context)  
-**Prompts**: 1 (Professional company tagging analyst)  
-**Shows Supported**: 5 (CAI, DOL, CCSE, BDAIW, DCW)
+**Version**: 0.1.8  
+**Server Port**: 8003  
+**Cache TTL**: 30 minutes  
+**Health Check Cache**: 5 minutes  
+**Supported Models**: 6 (all Perplexity models)  
+**Tools**: 4 (2 search + 2 cache management)
