@@ -476,14 +476,15 @@ def create_ai_research_tab(
         db_helper: Database helper instance
         current_data: Current data from database
     """
+    # Get configuration first
     config = get_config(commodity, data_type)
+
+    # Initialize research manager
+    research_manager = AIResearchManager(commodity, data_type, db_helper)
 
     st.header(
         f"🤖 AI Research - {config['commodity']['display_name']} {config['data_type']['display_name']}"
     )
-
-    # Initialize research manager
-    research_manager = AIResearchManager(commodity, data_type, db_helper)
 
     # Display current data
     st.subheader("📊 Current Database Data")
@@ -550,7 +551,6 @@ def create_ai_research_tab(
 
         # Add test connection button
         if st.button("🔧 Test Connection", use_container_width=True):
-            research_manager = AIResearchManager(commodity, data_type, db_helper)
 
             # Test 1: Connection test
             test_success, test_message = research_manager.test_perplexity_connection()
@@ -596,8 +596,8 @@ def create_ai_research_tab(
 
         st.write("**MCP Servers:**")
         servers = st.session_state.get("servers", {})
-        for name, config in servers.items():
-            st.write(f"- {name}: {config.get('url', 'No URL')}")
+        for name, server_config in servers.items():
+            st.write(f"- {name}: {server_config.get('url', 'No URL')}")
 
     # Research button and progress
     research_enabled = agent_available and len(perplexity_tools) > 0
