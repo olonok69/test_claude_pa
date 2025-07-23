@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-Simple Test Runner for Registration Processors
+Simple Test Runner for Scan Processors
 
-This script runs both processors and does a quick comparison of key outputs.
-FIXED VERSION: Uses pipeline functions to ensure vet-specific functions are applied.
+This script runs both scan processors and does a quick comparison of key outputs.
 """
 
 import os
@@ -17,18 +16,17 @@ import shutil
 sys.path.insert(0, os.getcwd())
 
 try:
-    from old_registration_processor import RegistrationProcessor as OldRegistrationProcessor
-    from pipeline import run_registration_processing  # Import pipeline function
+    from old_scan_processor import ScanProcessor as OldScanProcessor
+    from scan_processor import ScanProcessor as NewScanProcessor
     from utils.config_utils import load_config
     from utils.logging_utils import setup_logging
 except ImportError as e:
     print(f"❌ Import Error: {e}")
     print("\nMake sure you have:")
-    print("1. old_registration_processor.py")
-    print("2. registration_processor.py")
-    print("3. pipeline.py")
-    print("4. config/config.yaml")
-    print("5. config/config_vet.yaml")
+    print("1. old_scan_processor.py")
+    print("2. scan_processor.py")
+    print("3. config/config.yaml")
+    print("4. config/config_vet.yaml")
     sys.exit(1)
 
 
@@ -40,9 +38,10 @@ def compare_key_outputs(old_processor, new_processor):
     
     # Define the key dataframes to compare - both processors should have the same variable names
     key_dfs = [
-        ('df_reg_demo_this', 'df_reg_demo_this'),
-        ('df_reg_demo_last_bva', 'df_reg_demo_last_bva'),
-        ('df_reg_demo_last_lva', 'df_reg_demo_last_lva')
+        ('seminars_scans_past_enhanced_bva', 'seminars_scans_past_enhanced_bva'),
+        ('seminars_scans_past_enhanced_lva', 'seminars_scans_past_enhanced_lva'),
+        ('enhanced_seminars_df_bva', 'enhanced_seminars_df_bva'),
+        ('enhanced_seminars_df_lva', 'enhanced_seminars_df_lva')
     ]
     
     for old_attr, new_attr in key_dfs:
@@ -85,7 +84,7 @@ def compare_key_outputs(old_processor, new_processor):
         # Compare data (sample check)
         try:
             # Sort both dataframes for consistent comparison
-            sort_cols = [col for col in old_df.columns if col in ['BadgeId', 'Email']]
+            sort_cols = [col for col in old_df.columns if col in ['Badge Id', 'Short Name', 'Seminar Name']]
             if sort_cols:
                 old_sorted = old_df.sort_values(sort_cols[0]).reset_index(drop=True)
                 new_sorted = new_df.sort_values(sort_cols[0]).reset_index(drop=True)
@@ -131,10 +130,6 @@ def compare_output_files(old_output, new_output):
     old_csvs = {f.name: f for f in old_output.glob("**/*.csv")}
     new_csvs = {f.name: f for f in new_output.glob("**/*.csv")}
     
-    # Get all JSON files from both directories
-    old_jsons = {f.name: f for f in old_output.glob("**/*.json")}
-    new_jsons = {f.name: f for f in new_output.glob("**/*.json")}
-    
     all_identical = True
     
     # Compare CSV files
@@ -166,109 +161,270 @@ def compare_output_files(old_output, new_output):
             print(f"❌ Error comparing {filename}: {e}")
             all_identical = False
     
-    # Compare JSON files
-    all_json_files = set(old_jsons.keys()) | set(new_jsons.keys())
-    for filename in all_json_files:
-        if filename not in old_jsons:
-            print(f"❌ Missing in old: {filename}")
-            all_identical = False
-            continue
-        if filename not in new_jsons:
-            print(f"❌ Missing in new: {filename}")
-            all_identical = False
-            continue
-        
-        try:
-            import json
-            with open(old_jsons[filename], 'r') as f:
-                old_data = json.load(f)
-            with open(new_jsons[filename], 'r') as f:
-                new_data = json.load(f)
-            
-            # Compare JSON content
-            old_str = json.dumps(old_data, sort_keys=True)
-            new_str = json.dumps(new_data, sort_keys=True)
-            
-            if old_str == new_str:
-                print(f"✅ {filename}: IDENTICAL")
-            else:
-                print(f"❌ {filename}: Content differs")
-                all_identical = False
-                
-        except Exception as e:
-            print(f"❌ Error comparing {filename}: {e}")
-            all_identical = False
-    
     return all_identical
 
 
 def run_test():
     """Run the test comparison."""
-    print("🚀 Starting Registration Processor Comparison Test")
+    print("🚀 Starting Scan Processor Comparison Test")
     print("=" * 60)
+    print("ℹ️  This test assumes you've already run:")
+    print("   python main.py --config config/config.yaml --only-steps 1")
+    print("   python main.py --config config/config_vet.yaml --only-steps 1")
+    print()
     
     # Setup logging
-    logger = setup_logging(log_file="logs/simple_test.log")
+    logger = setup_logging(log_file="logs/simple_scan_test.log")
     
-    # Create temporary directories for outputs
-    with tempfile.TemporaryDirectory() as temp_dir:
-        old_output = Path(temp_dir) / "old_output"
-        new_output = Path(temp_dir) / "new_output"
-        old_output.mkdir()
-        new_output.mkdir()
+    try:
+        # Load configurations
+        print("📁 Loading configurations...")
+        old_config = load_config("config/config.yaml")
+        new_config = load_config("config/config_vet.yaml")
         
-        try:
-            # Load configurations
-            print("📁 Loading configurations...")
-            old_config = load_config("config/config.yaml")
-            new_config = load_config("config/config_vet.yaml")
-            
-            # Update output directories
-            old_config["output_dir"] = str(old_output)
-            new_config["output_dir"] = str(new_output)
-            
-            # Run old processor (direct instantiation since it doesn't need vet-specific functions)
-            print("\n🔄 Running OLD processor...")
-            old_processor = OldRegistrationProcessor(old_config)
-            old_processor.process()
-            print("✅ Old processor completed")
-            
-            # Run new processor (using pipeline to ensure vet-specific functions are applied)
-            print("\n🔄 Running NEW processor via pipeline...")
-            new_processor = run_registration_processing(new_config)
-            print("✅ New processor completed")
-            
-            # Check if vet-specific functions were applied
-            if hasattr(new_processor, '_vet_specific_active') and new_processor._vet_specific_active:
-                print("✅ Vet-specific functions were applied to new processor")
-            else:
-                print("⚠️  Vet-specific functions were NOT applied to new processor")
-            
-            # Compare dataframes
-            dataframes_identical = compare_key_outputs(old_processor, new_processor)
-            
-            # Compare output files
-            files_identical = compare_output_files(old_output, new_output)
-            
-            # Final result
-            print("\n" + "=" * 60)
-            if dataframes_identical and files_identical:
-                print("🎉 SUCCESS: All outputs are IDENTICAL!")
-                print("✅ The new processor produces the same results as the old one.")
-                return True
-            else:
-                print("❌ FAILURE: Outputs are DIFFERENT!")
-                print("⚠️  The new processor produces different results.")
-                if not dataframes_identical:
-                    print("   - Key dataframes differ")
-                if not files_identical:
-                    print("   - Output files differ")
-                return False
-                
-        except Exception as e:
-            print(f"\n❌ ERROR: {e}")
-            logger.error(f"Test failed: {e}", exc_info=True)
+        # Get the production output directories where step 1 files exist
+        production_old_output = old_config.get("output_dir", "output")
+        production_new_output = new_config.get("output_dir", "data/bva")
+        
+        print(f"📂 Production old output directory: {production_old_output}")
+        print(f"📂 Production new output directory: {production_new_output}")
+        
+        # Check if required files exist
+        required_files_old = [
+            f"{production_old_output}/output/df_reg_demo_last_bva.csv",
+            f"{production_old_output}/output/df_reg_demo_last_lva.csv",
+            f"{production_old_output}/output/Registration_data_with_demographicdata_bva_last.csv",
+            f"{production_old_output}/output/Registration_data_with_demographicdata_lva_last.csv"
+        ]
+        
+        required_files_new = [
+            f"{production_new_output}/output/df_reg_demo_last_bva.csv",
+            f"{production_new_output}/output/df_reg_demo_last_lva.csv",
+            f"{production_new_output}/output/Registration_data_with_demographicdata_bva_last.csv",
+            f"{production_new_output}/output/Registration_data_with_demographicdata_lva_last.csv"
+        ]
+        
+        # Check if files exist
+        missing_files = []
+        for file_path in required_files_old + required_files_new:
+            if not Path(file_path).exists():
+                missing_files.append(file_path)
+        
+        if missing_files:
+            print("❌ Missing required files from registration processor:")
+            for file_path in missing_files:
+                print(f"   - {file_path}")
+            print("\n💡 Please run the registration processor first:")
+            print("   python main.py --config config/config.yaml --only-steps 1")
+            print("   python main.py --config config/config_vet.yaml --only-steps 1")
             return False
+        
+        print("✅ All required registration files found!")
+        
+        # Create comparison directories within the production directories
+        old_comparison_dir = Path(production_old_output) / "scan_comparison" / "old_output"
+        new_comparison_dir = Path(production_new_output) / "scan_comparison" / "new_output"
+        old_comparison_dir.mkdir(parents=True, exist_ok=True)
+        new_comparison_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Configure processors to read from production location but write to comparison dirs
+        old_config_copy = old_config.copy()
+        new_config_copy = new_config.copy()
+        
+        # The scan processor will read registration files from the original output_dir
+        # but write its own outputs to the comparison directories
+        old_config_copy["scan_output_dir"] = str(old_comparison_dir)
+        new_config_copy["scan_output_dir"] = str(new_comparison_dir)
+        
+        # Run processors with modified configs
+        success = run_processors_and_compare(old_config_copy, new_config_copy, 
+                                           old_comparison_dir, new_comparison_dir,
+                                           production_old_output, production_new_output)
+        return success
+        
+    except Exception as e:
+        print(f"\n❌ ERROR: {e}")
+        logger.error(f"Test failed: {e}", exc_info=True)
+        return False
+
+def run_processors_and_compare(old_config, new_config, old_output, new_output, 
+                              prod_old_dir, prod_new_dir):
+    """Run both scan processors and compare their outputs."""
+    try:
+        # Create custom scan processors that know where to find registration files
+        print("\n🔄 Running OLD scan processor...")
+        old_processor = OldScanProcessorWithCustomPaths(old_config, prod_old_dir)
+        old_processor.process()
+        print("✅ Old processor completed")
+        
+        print("\n🔄 Running NEW scan processor...")
+        new_processor = NewScanProcessorWithCustomPaths(new_config, prod_new_dir)
+        new_processor.process()
+        print("✅ New processor completed")
+        
+        # Compare dataframes
+        dataframes_identical = compare_key_outputs(old_processor, new_processor)
+        
+        # Compare output files
+        files_identical = compare_output_files(old_output, new_output)
+        
+        # Final result
+        print("\n" + "=" * 60)
+        if dataframes_identical and files_identical:
+            print("🎉 SUCCESS: All outputs are IDENTICAL!")
+            print("✅ The new scan processor produces the same results as the old one.")
+            return True
+        else:
+            print("❌ FAILURE: Outputs are DIFFERENT!")
+            print("⚠️  The new scan processor produces different results.")
+            if not dataframes_identical:
+                print("   - Key dataframes differ")
+            if not files_identical:
+                print("   - Output files differ")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error running processors: {e}")
+        raise
+
+# Custom processor classes that know where to find registration files
+class OldScanProcessorWithCustomPaths(OldScanProcessor):
+    def __init__(self, config, registration_output_dir):
+        super().__init__(config)
+        self.registration_output_dir = registration_output_dir
+    
+    def load_registration_data(self):
+        """Load processed registration data from the production location."""
+        try:
+            # Load registration data with demographics from production location
+            reg_data_last_bva_path = os.path.join(
+                self.registration_output_dir, "output", "df_reg_demo_last_bva.csv"
+            )
+            reg_data_last_lva_path = os.path.join(
+                self.registration_output_dir, "output", "df_reg_demo_last_lva.csv"
+            )
+
+            detailed_reg_data_last_bva_path = os.path.join(
+                self.registration_output_dir,
+                "output",
+                "Registration_data_with_demographicdata_bva_last.csv",
+            )
+            detailed_reg_data_last_lva_path = os.path.join(
+                self.registration_output_dir,
+                "output",
+                "Registration_data_with_demographicdata_lva_last.csv",
+            )
+
+            # Read registration data
+            self.reg_data_last_bva = pd.read_csv(reg_data_last_bva_path)
+            self.reg_data_last_lva = pd.read_csv(reg_data_last_lva_path)
+
+            self.df_reg_24_wdemo_data_bva = pd.read_csv(detailed_reg_data_last_bva_path)
+            self.df_reg_24_wdemo_data_lva = pd.read_csv(detailed_reg_data_last_lva_path)
+
+            self.logger.info(
+                f"Loaded registration data: {len(self.reg_data_last_bva)} BVA records, "
+                f"{len(self.reg_data_last_lva)} LVA records"
+            )
+
+            self.logger.info(
+                f"Loaded detailed registration data: {len(self.df_reg_24_wdemo_data_bva)} BVA records, "
+                f"{len(self.df_reg_24_wdemo_data_lva)} LVA records"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error loading registration data: {e}", exc_info=True)
+            raise
+
+class NewScanProcessorWithCustomPaths(NewScanProcessor):
+    def __init__(self, config, registration_output_dir):
+        super().__init__(config)
+        self.registration_output_dir = registration_output_dir
+    
+    def load_registration_data(self):
+        """Load processed registration data from the production location."""
+        try:
+            # Get output file names from config with fallback to default names
+            combined_output_files = self.config.get("output_files", {}).get("combined_demographic_registration", {})
+            
+            # Load registration data with demographics from production location
+            reg_data_last_main_path = os.path.join(
+                self.registration_output_dir, "output", 
+                combined_output_files.get("last_year_main", "df_reg_demo_last_bva.csv")
+            )
+            reg_data_last_secondary_path = os.path.join(
+                self.registration_output_dir, "output", 
+                combined_output_files.get("last_year_secondary", "df_reg_demo_last_lva.csv")
+            )
+
+            # Get registration with demographic file names
+            reg_with_demo_files = self.config.get("output_files", {}).get("registration_with_demographic", {})
+            
+            detailed_reg_data_last_main_path = os.path.join(
+                self.registration_output_dir,
+                "output",
+                reg_with_demo_files.get("last_year_main", "Registration_data_with_demographicdata_bva_last.csv"),
+            )
+            detailed_reg_data_last_secondary_path = os.path.join(
+                self.registration_output_dir,
+                "output",
+                reg_with_demo_files.get("last_year_secondary", "Registration_data_with_demographicdata_lva_last.csv"),
+            )
+
+            # Read registration data
+            self.reg_data_last_main = pd.read_csv(reg_data_last_main_path)
+            self.reg_data_last_secondary = pd.read_csv(reg_data_last_secondary_path)
+
+            self.df_reg_24_wdemo_data_main = pd.read_csv(detailed_reg_data_last_main_path)
+            self.df_reg_24_wdemo_data_secondary = pd.read_csv(detailed_reg_data_last_secondary_path)
+            
+            # Keep old names for backward compatibility
+            self.reg_data_last_bva = self.reg_data_last_main
+            self.reg_data_last_lva = self.reg_data_last_secondary
+            self.df_reg_24_wdemo_data_bva = self.df_reg_24_wdemo_data_main
+            self.df_reg_24_wdemo_data_lva = self.df_reg_24_wdemo_data_secondary
+
+            self.logger.info(
+                f"Loaded registration data: {len(self.reg_data_last_main)} {self.main_event_name} records, "
+                f"{len(self.reg_data_last_secondary)} {self.secondary_event_name} records"
+            )
+
+            self.logger.info(
+                f"Loaded detailed registration data: {len(self.df_reg_24_wdemo_data_main)} {self.main_event_name} records, "
+                f"{len(self.df_reg_24_wdemo_data_secondary)} {self.secondary_event_name} records"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error loading registration data: {e}", exc_info=True)
+            raise
+
+
+if __name__ == "__main__":
+    success = run_test()
+    sys.exit(0 if success else 1)
+            
+        
+    # Compare dataframes
+    dataframes_identical = compare_key_outputs(old_processor, new_processor)
+    
+    # Compare output files
+    files_identical = compare_output_files(old_output, new_output)
+    
+    # Final result
+    print("\n" + "=" * 60)
+    if dataframes_identical and files_identical:
+        print("🎉 SUCCESS: All outputs are IDENTICAL!")
+        print("✅ The new scan processor produces the same results as the old one.")
+        
+    else:
+        print("❌ FAILURE: Outputs are DIFFERENT!")
+        print("⚠️  The new scan processor produces different results.")
+        if not dataframes_identical:
+            print("   - Key dataframes differ")
+        if not files_identical:
+            print("   - Output files differ")
+        
+        
 
 
 if __name__ == "__main__":
