@@ -29,16 +29,36 @@ def generate_and_save_summary(processors, skip_neo4j=False):
                 "this_year": len(reg_processor.df_reg_demo_this),
                 "last_year_bva": len(reg_processor.df_reg_demo_last_bva),
                 "last_year_lva": len(reg_processor.df_reg_demo_last_lva),
-            },
-            "job_roles": reg_processor.df_reg_demo_this["job_role"]
-            .value_counts()
-            .to_dict(),
-            "specializations": reg_processor.df_reg_demo_this[
-                "what_type_does_your_practice_specialise_in"
-            ]
-            .value_counts()
-            .to_dict(),
+            }
         }
+        
+        # Only add job_roles for veterinary events (vet-specific)
+        if "job_role" in reg_processor.df_reg_demo_this.columns:
+            reg_summary["job_roles"] = reg_processor.df_reg_demo_this["job_role"].value_counts().to_dict()
+            logger.info("Added job role summary (veterinary event)")
+        else:
+            logger.info("No job_role column found - skipping job role summary (generic event)")
+        
+        # Try to find specialization columns (different for vet vs generic events)
+        specialization_columns = [
+            "what_type_does_your_practice_specialise_in",  # BVA/vet-specific
+            "what_best_describes_what_you_do",  # ECOMM-specific
+            "specialization_current",  # Generic fallback
+            "main_specialization"  # Generic fallback
+        ]
+        
+        specialization_found = False
+        for col in specialization_columns:
+            if col in reg_processor.df_reg_demo_this.columns:
+                reg_summary["specializations"] = reg_processor.df_reg_demo_this[col].value_counts().to_dict()
+                logger.info(f"Using specialization column: {col}")
+                specialization_found = True
+                break
+        
+        if not specialization_found:
+            logger.info("No specialization column found - skipping specialization summary")
+            reg_summary["specializations"] = {}
+        
         summary["registration"] = reg_summary
 
     # Create summary statistics for scan data if available

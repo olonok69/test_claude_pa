@@ -11,9 +11,12 @@ from session_embedding_processor import SessionEmbeddingProcessor
 from session_recommendation_processor import SessionRecommendationProcessor
 
 
+# Replace the run_registration_processing function in pipeline.py:
+
 def run_registration_processing(config):
     """
     Run the registration data processing step.
+    Enhanced version with better veterinary-specific function handling.
 
     Args:
         config: Configuration dictionary
@@ -27,22 +30,49 @@ def run_registration_processing(config):
     event_config = config.get("event", {})
     main_event_name = event_config.get("main_event_name", "").lower()
     
+    logger.info(f"Initializing registration processor for event: {main_event_name}")
     reg_processor = RegistrationProcessor(config)
     
-    # Apply event-specific enhancements
+    # Apply event-specific enhancements based on event type
     if main_event_name in ["bva", "veterinary", "vet"]:
+        logger.info("Detected veterinary event - applying veterinary-specific processing functions")
         try:
             from utils import vet_specific_functions
+            
+            # Apply veterinary-specific methods
             vet_specific_functions.add_vet_specific_methods(reg_processor)
-            logger.info("Applied veterinary-specific processing functions")
+            
+            # Verify that the functions were applied correctly
+            if vet_specific_functions.verify_vet_functions_applied(reg_processor):
+                logger.info("✅ Veterinary-specific processing functions successfully applied and verified")
+                reg_processor.logger.info("Veterinary-specific functions are active for this processing session")
+            else:
+                logger.error("❌ Veterinary-specific function verification failed")
+                raise RuntimeError("Failed to properly apply veterinary-specific functions")
+            
         except ImportError as e:
             logger.warning(f"Could not load vet-specific functions: {e}")
+            logger.warning("Proceeding with generic processing logic")
         except Exception as e:
-            logger.warning(f"Error applying vet-specific functions: {e}")
+            logger.error(f"Error applying vet-specific functions: {e}", exc_info=True)
+            logger.warning("Proceeding with generic processing logic")
     else:
-        logger.info(f"No event-specific functions applied for event: {main_event_name}")
+        logger.info(f"Using generic processing functions for event type: {main_event_name}")
+        reg_processor.logger.info("Generic event processing functions are active for this processing session")
+        
+        # Ensure vet-specific flag is not set for non-vet events
+        if hasattr(reg_processor, '_vet_specific_active'):
+            delattr(reg_processor, '_vet_specific_active')
     
+    # Log the final state
+    is_vet_specific = hasattr(reg_processor, '_vet_specific_active') and reg_processor._vet_specific_active
+    logger.info(f"Registration processor initialized with {'veterinary-specific' if is_vet_specific else 'generic'} functions")
+    
+    # Process the data
+    logger.info("Starting registration data processing")
     reg_processor.process()
+    logger.info("Registration data processing completed")
+    
     return reg_processor
 
 

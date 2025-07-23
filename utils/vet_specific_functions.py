@@ -1,26 +1,15 @@
 """
-Veterinary-specific processing functions - Version 5.
+Veterinary-specific processing functions - Simplified Version
 This module contains functions that are specific to veterinary events.
-Ensures robust method binding and exact compatibility with original processor.
 """
 
 import logging
 
 def apply_vet_specific_practice_filling(self, df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva, practices):
-    """
-    Apply veterinary-specific practice type filling logic.
+    """Apply veterinary-specific practice type filling logic."""
+    self.logger.info("Applying veterinary-specific practice type filling logic")
     
-    Args:
-        self: The RegistrationProcessor instance
-        df_reg_demo_this: Current year combined dataframe
-        df_reg_demo_last_bva: Last year main event dataframe
-        df_reg_demo_last_lva: Last year secondary event dataframe
-        practices: Practices reference dataframe
-    
-    Returns:
-        Tuple of (df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva)
-    """
-    # Veterinary-specific column names (hardcoded for exact compatibility)
+    # Veterinary-specific column names (exactly as in old processor)
     this_year_col = "what_type_does_your_practice_specialise_in"
     past_year_col = "what_areas_do_you_specialise_in"
 
@@ -39,24 +28,15 @@ def apply_vet_specific_practice_filling(self, df_reg_demo_this, df_reg_demo_last
 
 
 def apply_vet_specific_job_roles(self, df):
-    """
-    Apply veterinary-specific job role processing logic.
-    This is EXACTLY the same logic as the original processor - copied line by line.
-    
-    Args:
-        self: The RegistrationProcessor instance
-        df: DataFrame containing job role information
-    
-    Returns:
-        DataFrame with processed job roles
-    """
+    """Apply veterinary-specific job role processing logic - EXACTLY as original."""
     import re
     from difflib import SequenceMatcher
     
-    # Make a copy to avoid modifying the original dataframe
+    self.logger.info("Applying veterinary-specific job role processing logic")
+    
     df_copy = df.copy()
 
-    # Define potential roles - EXACTLY as in original processor
+    # VET-SPECIFIC potential roles (exactly as in old processor)
     potential_roles = [
         "Student",
         "Other (please specify)",
@@ -74,14 +54,13 @@ def apply_vet_specific_job_roles(self, df):
         "Locum RVN",
     ]
 
-    # Only process rows where job_role is "NA"
     mask = df_copy["job_role"] == "NA"
 
-    # Apply each rule in sequence - EXACTLY as in original processor
+    # Apply VET-SPECIFIC rules (exactly as in old processor)
     for idx in df_copy[mask].index:
         job_title = str(df_copy.loc[idx, "JobTitle"]).lower()
 
-        # Rule 1-6: Check for specific strings in JobTitle - EXACTLY as original
+        # VET-SPECIFIC keyword matching
         if "surgeon" in job_title:
             df_copy.loc[idx, "job_role"] = "Vet/Vet Surgeon"
         elif "nurse" in job_title:
@@ -95,141 +74,90 @@ def apply_vet_specific_job_roles(self, df):
         elif "assistant" in job_title:
             df_copy.loc[idx, "job_role"] = "Assistant Vet"
         else:
-            # Rule 7: Use text similarity - EXACTLY as original
-
-            # Clean the job title: remove common words that might interfere with matching
+            # Fuzzy matching with vet-specific roles
             cleaned_title = re.sub(r"\b(and|the|of|in|at|for)\b", "", job_title)
-
-            # Find the role with highest similarity score
             best_match = None
             best_score = 0
 
             for role in potential_roles:
-                # Calculate similarity between job title and each potential role
                 role_lower = role.lower()
-
-                # Check for key terms in the role
                 role_terms = role_lower.split("/")
                 role_terms.extend(role_lower.split())
 
-                # Calculate max similarity with any term in the role
                 max_term_score = 0
                 for term in role_terms:
-                    if len(term) > 2:  # Only consider meaningful terms
+                    if len(term) > 2:
                         if term in cleaned_title:
-                            term_score = 0.9  # High score for direct matches
+                            term_score = 0.9
                         else:
-                            # Use sequence matcher for fuzzy matching
-                            term_score = SequenceMatcher(
-                                None, cleaned_title, term
-                            ).ratio()
+                            term_score = SequenceMatcher(None, cleaned_title, term).ratio()
                         max_term_score = max(max_term_score, term_score)
 
                 if max_term_score > best_score:
                     best_score = max_term_score
                     best_match = role
 
-            # If similarity is above threshold, use the best match
-            if best_score > 0.3:  # Adjustable threshold - EXACTLY as original
+            if best_score > 0.3:
                 df_copy.loc[idx, "job_role"] = best_match
             else:
-                # Default to "Other" if no good match
                 df_copy.loc[idx, "job_role"] = "Other (please specify)"
 
-    # Final rule: Replace any occurrence of "Other" with "Other (please specify)" - EXACTLY as original
-    other_mask = df_copy["job_role"].str.contains(
-        "Other", case=False, na=False
-    ) & ~df_copy["job_role"].eq("Other (please specify)")
+    # Final vet-specific rule
+    other_mask = df_copy["job_role"].str.contains("Other", case=False, na=False) & ~df_copy["job_role"].eq("Other (please specify)")
     df_copy.loc[other_mask, "job_role"] = "Other (please specify)"
 
-    self.logger.info(f"Processed job roles for {mask.sum()} records using vet-specific logic")
+    self.logger.info(f"Processed {mask.sum()} job roles using veterinary-specific logic")
     return df_copy
 
 
 def add_vet_specific_methods(processor):
-    """
-    Add veterinary-specific methods to the processor instance.
-    Version 5: More robust method binding with extensive logging.
-    
-    Args:
-        processor: The RegistrationProcessor instance to enhance
-    """
+    """Add veterinary-specific methods to the processor instance."""
     import types
     
-    # Add extensive logging to understand what's happening
     logger = logging.getLogger(__name__)
-    logger.info("=== STARTING VET-SPECIFIC FUNCTION APPLICATION ===")
-    logger.info(f"Processor type: {type(processor)}")
-    logger.info(f"Processor has process_job_roles: {hasattr(processor, 'process_job_roles')}")
+    logger.info("=== APPLYING VET-SPECIFIC FUNCTIONS ===")
     
     try:
-        # Store the original methods
-        if hasattr(processor, 'process_job_roles'):
-            processor._original_process_job_roles = processor.process_job_roles
-            logger.info("Stored original process_job_roles method")
+        # Store original methods
+        processor._original_process_job_roles = processor.process_job_roles
+        processor._original_fill_event_specific_practice_types = processor.fill_event_specific_practice_types
         
-        if hasattr(processor, 'fill_event_specific_practice_types'):
-            processor._original_fill_event_specific_practice_types = processor.fill_event_specific_practice_types
-            logger.info("Stored original fill_event_specific_practice_types method")
-        
-        # Add the vet-specific practice filling method
+        # Add vet-specific methods
         processor.apply_vet_specific_practice_filling = types.MethodType(
             apply_vet_specific_practice_filling, processor
         )
-        logger.info("Added apply_vet_specific_practice_filling method")
         
-        # Override the job role processing method with the exact vet-specific logic
+        # Override job role processing with vet-specific logic
         processor.process_job_roles = types.MethodType(
             apply_vet_specific_job_roles, processor
         )
-        logger.info("Overrode process_job_roles method with vet-specific logic")
         
-        # Override the practice filling method to use vet-specific logic
-        def vet_fill_event_specific_practice_types(self, df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva, practices):
+        # Override practice filling
+        def vet_fill_practice_types(self, df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva, practices):
             return self.apply_vet_specific_practice_filling(df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva, practices)
         
         processor.fill_event_specific_practice_types = types.MethodType(
-            vet_fill_event_specific_practice_types, processor
+            vet_fill_practice_types, processor
         )
-        logger.info("Overrode fill_event_specific_practice_types method")
         
-        # Add a flag to indicate vet-specific functions are active
+        # Set flags
         processor._vet_specific_active = True
+        processor._event_type = "veterinary"
         
-        # Log success with a message that will be visible in the test output
-        success_msg = "*** VET-SPECIFIC FUNCTIONS SUCCESSFULLY APPLIED ***"
-        logger.info(success_msg)
-        processor.logger.info(success_msg)
-        
-        logger.info("=== VET-SPECIFIC FUNCTION APPLICATION COMPLETED ===")
+        logger.info("*** VET-SPECIFIC FUNCTIONS SUCCESSFULLY APPLIED ***")
+        processor.logger.info("*** VET-SPECIFIC FUNCTIONS ACTIVE ***")
         
     except Exception as e:
-        error_msg = f"*** ERROR APPLYING VET-SPECIFIC FUNCTIONS: {e} ***"
-        logger.error(error_msg, exc_info=True)
-        processor.logger.error(error_msg)
+        logger.error(f"Error applying vet-specific functions: {e}")
         raise
 
 
 def verify_vet_functions_applied(processor):
-    """
-    Verify that vet-specific functions have been applied correctly.
-    
-    Args:
-        processor: The RegistrationProcessor instance to check
-        
-    Returns:
-        bool: True if vet-specific functions are active
-    """
-    logger = logging.getLogger(__name__)
-    
+    """Verify that vet-specific functions have been applied correctly."""
     checks = [
-        hasattr(processor, '_vet_specific_active'),
+        hasattr(processor, '_vet_specific_active') and processor._vet_specific_active,
         hasattr(processor, 'apply_vet_specific_practice_filling'),
         hasattr(processor, '_original_process_job_roles'),
+        hasattr(processor, '_event_type') and processor._event_type == "veterinary"
     ]
-    
-    all_passed = all(checks)
-    logger.info(f"Vet-specific function verification: {all_passed}")
-    logger.info(f"Individual checks: {checks}")
-    
-    return all_passed
+    return all(checks)

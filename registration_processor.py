@@ -1031,9 +1031,18 @@ class RegistrationProcessor:
             DataFrame with placeholder columns added
         """
         df_copy = df.copy()
+        
+        # Only create job_role column for veterinary events
+        if hasattr(self, '_vet_specific_active') and self._vet_specific_active:
+            if "job_role" not in df_copy.columns:
+                df_copy["job_role"] = "NA"
+        
+        # Add demographic columns
         for col in list_to_keep:
             qq = col.lower().replace(" ", "_")
-            df_copy[qq] = "NA"
+            if qq not in df_copy.columns:
+                df_copy[qq] = "NA"
+        
         return df_copy
 
     def create_democols_in_registration_data(self, df, demo_data, list_keep):
@@ -1066,93 +1075,30 @@ class RegistrationProcessor:
     def process_job_roles(self, df):
         """
         Process and standardize job roles using rules and fuzzy matching.
+        This is ONLY for veterinary events. Generic events skip this step entirely.
 
         Args:
             df: DataFrame containing job role information
 
         Returns:
-            DataFrame with processed job roles
+            DataFrame (unchanged for generic events)
         """
+        # Check if this is a veterinary event with vet-specific functions
+        if not (hasattr(self, '_vet_specific_active') and self._vet_specific_active):
+            # For generic events (like ECOMM), skip job role processing entirely
+            self.logger.info("Skipping job role processing for generic event (not a veterinary event)")
+            return df
+        
+        # If we get here, this is a vet event and should have been overridden by vet-specific functions
+        self.logger.warning("process_job_roles called for vet event but vet-specific functions not properly applied")
+        return df
 
-        # Make a copy to avoid modifying the original dataframe
-        df_copy = df.copy()
-
-        # Get job role processing configuration
-        job_role_config = self.config.get("job_role_processing", {})
-        potential_roles = job_role_config.get("potential_roles", [])
-        job_role_rules = job_role_config.get("rules", {})
-
-        # Only process rows where job_role is "NA"
-        mask = df_copy["job_role"] == "NA"
-
-        # Apply each rule in sequence
-        for idx in df_copy[mask].index:
-            job_title = str(df_copy.loc[idx, "JobTitle"]).lower()
-
-            # Apply rules from config
-            role_assigned = False
-            for keyword, role in job_role_rules.items():
-                if keyword.lower() in job_title:
-                    df_copy.loc[idx, "job_role"] = role
-                    role_assigned = True
-                    break
-
-            if not role_assigned:
-                # Use text similarity to find the best matching role
-                # Clean the job title: remove common words that might interfere with matching
-                cleaned_title = re.sub(r"\b(and|the|of|in|at|for)\b", "", job_title)
-
-                # Find the role with highest similarity score
-                best_match = None
-                best_score = 0
-
-                for role in potential_roles:
-                    # Calculate similarity between job title and each potential role
-                    role_lower = role.lower()
-
-                    # Check for key terms in the role
-                    role_terms = role_lower.split("/")
-                    role_terms.extend(role_lower.split())
-
-                    # Calculate max similarity with any term in the role
-                    max_term_score = 0
-                    for term in role_terms:
-                        if len(term) > 2:  # Only consider meaningful terms
-                            if term in cleaned_title:
-                                term_score = 0.9  # High score for direct matches
-                            else:
-                                # Use sequence matcher for fuzzy matching
-                                term_score = SequenceMatcher(
-                                    None, cleaned_title, term
-                                ).ratio()
-                            max_term_score = max(max_term_score, term_score)
-
-                    if max_term_score > best_score:
-                        best_score = max_term_score
-                        best_match = role
-
-                # If similarity is above threshold, use the best match
-                threshold = job_role_config.get("similarity_threshold", 0.3)
-                if best_score > threshold:
-                    df_copy.loc[idx, "job_role"] = best_match
-                else:
-                    # Default to "Other" if no good match
-                    default_role = job_role_config.get("default_role", "Other (please specify)")
-                    df_copy.loc[idx, "job_role"] = default_role
-
-        # Final rule: Replace any occurrence of "Other" with configured default
-        default_role = job_role_config.get("default_role", "Other (please specify)")
-        other_mask = df_copy["job_role"].str.contains(
-            "Other", case=False, na=False
-        ) & ~df_copy["job_role"].eq(default_role)
-        df_copy.loc[other_mask, "job_role"] = default_role
-
-        self.logger.info(f"Processed job roles for {mask.sum()} records")
-        return df_copy
+    # Replace the fill_missing_practice_types method in registration_processor.py:
 
     def fill_missing_practice_types(self, df, practices, column):
         """
         Fill missing practice types using fuzzy matching with company names.
+        This is ONLY for veterinary events. Generic events skip this entirely.
 
         Args:
             df: DataFrame with potentially missing practice types
@@ -1160,51 +1106,17 @@ class RegistrationProcessor:
             column: Name of the column containing practice types
 
         Returns:
-            DataFrame with filled practice types
+            DataFrame (unchanged for generic events)
         """
-
-        # Create a copy of the input dataframe to avoid modifying the original
-        df_copy = df.copy()
-
-        # Get practice matching configuration
-        practice_config = self.config.get("practice_matching", {})
-        company_column = practice_config.get("company_column", "Company Name")
-        practice_type_column = practice_config.get("practice_type_column", "Main Type of Veterinary Practice")
-        match_threshold = practice_config.get("match_threshold", 95)
-
-        # Identify rows where practice types are "NA"
-        missing_idx = df_copy[column] == "NA"
-        companies_to_match = df_copy.loc[missing_idx, "Company"].tolist()
-
-        # Create a dictionary of company names from practices dataframe
-        practice_types_dict = dict(
-            zip(
-                practices[company_column], practices[practice_type_column]
-            )
-        )
-
-        # List of all company names in practices dataframe for fuzzy matching
-        all_practice_companies = practices[company_column].tolist()
-
-        match_count = 0
-        # For each company with "NA" practice type, find the best match
-        for idx, company in zip(df_copy.loc[missing_idx].index, companies_to_match):
-            # Skip if company name is missing or empty
-            if pd.isna(company) or company == "":
-                continue
-
-            # Find the best match using fuzzy matching
-            best_match, score = process.extractOne(company, all_practice_companies)
-
-            # Only update if match score is good enough
-            if score >= match_threshold:
-                df_copy.loc[idx, column] = practice_types_dict[best_match]
-                match_count += 1
-
-        self.logger.info(
-            f"Filled {match_count} missing practice types using fuzzy matching"
-        )
-        return df_copy
+        # Check if this is a veterinary event with vet-specific functions
+        if not (hasattr(self, '_vet_specific_active') and self._vet_specific_active):
+            # For generic events (like ECOMM), skip practice type filling entirely
+            self.logger.info("Skipping practice type filling for generic event (not a veterinary event)")
+            return df
+        
+        # If we get here, this is a vet event and should have been overridden by vet-specific functions
+        self.logger.warning("fill_missing_practice_types called for vet event but vet-specific functions not properly applied")
+        return df
 
     def combine_demographic_with_registration(self):
         """Process and combine demographic data with registration data."""
@@ -1344,20 +1256,30 @@ class RegistrationProcessor:
                 f"{secondary_col} column missing from final dataframe"
             )
 
-        # Load practice data for filling missing practice types using event-specific logic
-        practices_file = self.config.get("input_files", {}).get("practices", "")
-        if practices_file:
-            try:
-                practices = pd.read_csv(practices_file)
-                
-                # Call event-specific practice filling function
-                df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva = self.fill_event_specific_practice_types(
-                    df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva, practices
-                )
+        # Only process practices for veterinary events
+        if hasattr(self, '_vet_specific_active') and self._vet_specific_active:
+            # Load practice data for filling missing practice types using vet-specific logic
+            practices_file = self.config.get("input_files", {}).get("practices", "")
+            if practices_file and os.path.exists(practices_file):
+                try:
+                    practices = pd.read_csv(practices_file)
+                    
+                    # Call vet-specific practice filling function
+                    df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva = self.fill_event_specific_practice_types(
+                        df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva, practices
+                    )
 
-                self.logger.info("Filled missing practice types using practices data")
-            except Exception as e:
-                self.logger.error(f"Error loading or processing practices data: {e}")
+                    self.logger.info("Filled missing practice types using vet-specific practices data")
+                except Exception as e:
+                    self.logger.error(f"Error loading or processing practices data: {e}")
+            else:
+                if practices_file:
+                    self.logger.warning(f"Practices file '{practices_file}' not found. Skipping practice type filling.")
+                else:
+                    self.logger.info("No practices file configured for vet event. Skipping practice type filling.")
+        else:
+            # For generic events (like ECOMM), skip practice processing entirely
+            self.logger.info("Skipping all practice type processing for generic event (not a veterinary event)")
 
         # Get output file names from config
         combined_output_files = self.output_files.get("combined_demographic_registration", {})
@@ -1398,7 +1320,9 @@ class RegistrationProcessor:
     def fill_event_specific_practice_types(self, df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva, practices):
         """
         Fill missing practice types using event-specific logic.
-        This method can be overridden by event-specific modules.
+        This method can be overridden by event-specific modules (e.g., veterinary events).
+        
+        The GENERIC version uses configuration to determine column names and behavior.
 
         Args:
             df_reg_demo_this: Current year combined dataframe
@@ -1409,18 +1333,16 @@ class RegistrationProcessor:
         Returns:
             Tuple of (df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva)
         """
-        # Check if we have event-specific logic
-        if hasattr(self, 'apply_vet_specific_practice_filling'):
-            return self.apply_vet_specific_practice_filling(
-                df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva, practices
-            )
+        self.logger.info(f"Filling practice types using {'vet-specific' if hasattr(self, '_vet_specific_active') else 'generic'} event logic")
         
-        # Default generic behavior using practice_type_columns from config
+        # Use practice_type_columns from config for generic behavior
         practice_columns = self.config.get("practice_type_columns", {})
         this_year_col = practice_columns.get("current", "specialization_current")
         past_year_col = practice_columns.get("past", "specialization_past")
 
-        # Fill missing practice types
+        self.logger.info(f"Using practice type columns - current: {this_year_col}, past: {past_year_col}")
+
+        # Fill missing practice types using generic logic
         df_reg_demo_this = self.fill_missing_practice_types(
             df_reg_demo_this, practices, column=this_year_col
         )
@@ -1432,6 +1354,7 @@ class RegistrationProcessor:
         )
         
         return df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva
+
 
     def process(self) -> None:
         """Execute the full data processing workflow."""
