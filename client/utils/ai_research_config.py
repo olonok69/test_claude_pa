@@ -263,7 +263,7 @@ def generate_prompt_template(commodity: str, data_type: str) -> str:
 
 **SEARCH PARAMETERS:**
 - Query: "{commodity_name.lower()} {data_name.lower()} 2024/2025 2025/2026 forecast projection USDA IGC statistics"
-- Recency Filter: "month" (to get the most recent data)
+- Recency Filter: "year" 
 - Focus Sources: Official agricultural statistics and government reports
 
 **TARGET COUNTRIES/REGIONS:**

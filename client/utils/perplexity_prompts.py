@@ -1,4 +1,4 @@
-# client/utils/perplexity_prompts.py
+# client/utils/perplexity_prompts.py - Fixed version with year recency
 
 """
 Optimized prompts specifically designed for Perplexity Advanced Search tool
@@ -13,7 +13,7 @@ def create_simple_test_prompt() -> str:
     """Create a simple test prompt to verify Perplexity connection"""
     return """Please use the perplexity_advanced_search tool to test the connection.
 
-Search for "wheat production statistics 2024" with recency filter "month".
+Search for "wheat production statistics 2024" with recency filter "year".
 
 This is a simple test to verify that the Perplexity Advanced Search tool is working correctly. Please execute this search and return a brief confirmation that the tool is functioning."""
 
@@ -44,7 +44,7 @@ def create_perplexity_search_prompt(commodity: str, data_type: str) -> str:
 
     prompt = f"""I need you to use the perplexity_advanced_search tool to find the latest official data for {commodity_name} {data_name} {unit}.
 
-Please search for "{search_query}" with recency filter "month".
+Please search for "{search_query}" with recency filter "year".
 
 I need data for the marketing years 2024/2025 and 2025/2026 (projections) for these specific countries/regions: {countries_list}
 
@@ -108,7 +108,7 @@ def create_follow_up_search_prompt(
 **Countries needing data:** {missing_list}
 
 **Search Query:** "{search_query}"
-**Recency Filter:** "month"
+**Recency Filter:** "year"
 
 **ALTERNATIVE SEARCH STRATEGIES:**
 Try these specific approaches for each country:
@@ -164,7 +164,7 @@ def create_verification_search_prompt(
     prompt = f"""Please use perplexity_advanced_search to verify and cross-check the following {commodity_name} {data_name} data:
 
 **Search Query:** "{commodity_name.lower()} {data_name.lower()} verification USDA IGC cross-check 2024/2025 2025/2026"
-**Recency Filter:** "month"
+**Recency Filter:** "year"
 
 **DATA TO VERIFY:**
 """
@@ -240,9 +240,9 @@ PERPLEXITY_BEST_PRACTICES = {
         "Add geographic modifiers when needed",
     ],
     "recency_filters": {
-        "month": "Most recent data (recommended for agricultural forecasts)",
-        "week": "Very recent updates (use for breaking news)",
-        "year": "Broader historical context",
+        "year": "Most recent data within the past year (recommended for agricultural forecasts)",
+        "month": "Very recent updates (use for breaking news)",
+        "week": "Latest updates (use for urgent information)",
     },
     "parsing_tips": [
         "Look for structured tables in sources",

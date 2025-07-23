@@ -1,14 +1,18 @@
-# client/utils/ai_research_components.py
+# client/utils/ai_research_components.py - Enhanced version
 
 import streamlit as st
 import pandas as pd
 import json
+import os
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import asyncio
 from services.mcp_service import run_agent
 from services.chat_service import get_clean_conversation_memory
+from services.ai_service import create_llm_model
 from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langgraph.prebuilt import create_react_agent
 
 # Import configuration and optimized prompts
 from utils.ai_research_config import (
@@ -38,6 +42,10 @@ class AIResearchManager:
         # Get configuration from config file
         self.config = get_config(commodity, data_type)
 
+        # Initialize dedicated research client if needed
+        self._research_agent = None
+        self._research_client = None
+
     def get_current_countries(self) -> List[str]:
         """Get list of countries from current database"""
         try:
@@ -51,103 +59,114 @@ class AIResearchManager:
             return get_countries_for_commodity(self.commodity)
 
     def generate_research_prompt(self) -> str:
-        """Generate research prompt based on commodity and data type"""
+        """Generate research prompt based on commodity and data type using config"""
         return generate_prompt_template(self.commodity, self.data_type)
 
-    async def test_perplexity_search(self) -> Tuple[bool, str]:
-        """Test Perplexity search with a simple query - following 9_mcp_app.py pattern"""
+    async def _setup_dedicated_research_client(self):
+        """Setup a dedicated MCP client for research if main agent not available"""
         try:
-            from utils.perplexity_prompts import create_simple_test_prompt
+            # Perplexity server configuration
+            perplexity_config = {
+                "Perplexity Search": {
+                    "transport": "sse",
+                    "url": os.getenv(
+                        "PERPLEXITY_SERVER_URL", "http://mcpserver3:8003/sse"
+                    ),
+                    "timeout": 600,
+                    "headers": None,
+                    "sse_read_timeout": 900,
+                }
+            }
 
-            if not st.session_state.get("agent"):
-                return False, "AI agent not available"
+            # Create LLM
+            llm = create_llm_model("Anthropic", temperature=0.7, max_tokens=4096)
 
-            # Create simple test prompt
-            test_prompt = create_simple_test_prompt()
+            # Setup MCP client
+            self._research_client = MultiServerMCPClient(perplexity_config)
+            await self._research_client.__aenter__()
 
-            # Create conversation memory following the working pattern
-            conversation_memory = get_clean_conversation_memory()
-            conversation_memory.append(HumanMessage(content=test_prompt))
+            # Get tools
+            tools = self._research_client.get_tools()
 
-            # Run the agent with test prompt
-            response = await run_agent(st.session_state.agent, conversation_memory)
+            # Create agent
+            self._research_agent = create_react_agent(llm, tools)
 
-            # Process response following the same pattern as 9_mcp_app.py
-            if "messages" in response:
-                if len(response["messages"]) == 1 and isinstance(
-                    response["messages"][0], dict
-                ):
-                    # Error response
-                    error_content = response["messages"][0].get("content", "")
-                    return False, f"Error response: {error_content}"
-                else:
-                    # Success - we got a proper response
-                    new_messages = response["messages"][len(conversation_memory) :]
-
-                    # Look for tool executions
-                    tool_executed = False
-                    for msg in new_messages:
-                        if hasattr(msg, "tool_calls") and msg.tool_calls:
-                            for tool_call in msg.tool_calls:
-                                if "perplexity" in tool_call.get("name", "").lower():
-                                    tool_executed = True
-                                    break
-
-                    if tool_executed:
-                        return (
-                            True,
-                            "Perplexity search test successful - tool was executed",
-                        )
-                    else:
-                        return False, "No Perplexity tool was executed in the test"
-            else:
-                return False, f"Unexpected response format: {str(response)[:200]}..."
+            return True, f"Created dedicated research client with {len(tools)} tools"
 
         except Exception as e:
-            return False, f"Test failed: {str(e)}"
+            return False, f"Failed to create dedicated research client: {str(e)}"
 
-    def test_perplexity_connection(self) -> Tuple[bool, str]:
-        """Test if Perplexity connection is working"""
-        try:
-            # Check if agent exists
-            if not st.session_state.get("agent"):
-                return False, "No AI agent available"
+    async def _cleanup_research_client(self):
+        """Cleanup dedicated research client"""
+        if self._research_client:
+            try:
+                await self._research_client.__aexit__(None, None, None)
+                self._research_client = None
+                self._research_agent = None
+            except Exception as e:
+                st.warning(f"Error cleaning up research client: {e}")
 
-            # Check if tools are available
-            available_tools = st.session_state.get("tools", [])
-            if not available_tools:
-                return False, "No tools available"
-
-            # Check for Perplexity tools
+    def _get_research_agent(self):
+        """Get the best available research agent"""
+        # First try to use the main MCP agent from session state
+        main_agent = st.session_state.get("agent")
+        if main_agent:
+            # Check if perplexity tools are available
+            main_tools = st.session_state.get("tools", [])
             perplexity_tools = [
-                tool for tool in available_tools if "perplexity" in tool.name.lower()
+                tool for tool in main_tools if "perplexity" in tool.name.lower()
             ]
-
-            if not perplexity_tools:
-                return False, "No Perplexity tools found"
-
-            # Check if perplexity_advanced_search is available
-            advanced_search_tool = None
-            for tool in perplexity_tools:
-                if "advanced_search" in tool.name.lower():
-                    advanced_search_tool = tool
-                    break
-
-            if not advanced_search_tool:
+            if perplexity_tools:
                 return (
-                    False,
-                    f"perplexity_advanced_search tool not found. Available: {[t.name for t in perplexity_tools]}",
+                    main_agent,
+                    "main",
+                    f"Using main agent with {len(perplexity_tools)} Perplexity tools",
                 )
 
-            return (
-                True,
-                f"Connection OK. Found {len(perplexity_tools)} Perplexity tools including perplexity_advanced_search",
-            )
+        # Fall back to dedicated research agent
+        if self._research_agent:
+            return self._research_agent, "dedicated", "Using dedicated research agent"
+
+        return None, None, "No agent available"
+
+    async def test_perplexity_connection(self) -> Tuple[bool, str]:
+        """Test if Perplexity connection is working"""
+        try:
+            agent, agent_type, status_msg = self._get_research_agent()
+
+            if not agent:
+                # Try to setup dedicated client
+                setup_success, setup_msg = await self._setup_dedicated_research_client()
+                if setup_success:
+                    agent, agent_type, status_msg = self._get_research_agent()
+                else:
+                    return False, f"No agent available: {setup_msg}"
+
+            # Test with simple search
+            test_prompt = """Please use the perplexity_advanced_search tool to test the connection.
+
+Search for "wheat production statistics 2024" with recency filter "year".
+
+This is a simple test to verify that the Perplexity Advanced Search tool is working correctly."""
+
+            conversation_memory = [HumanMessage(content=test_prompt)]
+            response = await run_agent(agent, conversation_memory)
+
+            # Check if tool was executed
+            if "messages" in response:
+                for msg in response["messages"]:
+                    if hasattr(msg, "tool_calls") and msg.tool_calls:
+                        for tool_call in msg.tool_calls:
+                            if "perplexity" in tool_call.get("name", "").lower():
+                                return (
+                                    True,
+                                    f"Connection successful ({agent_type} agent)",
+                                )
+
+            return False, "Perplexity tool was not executed"
 
         except Exception as e:
-            return False, f"Error testing connection: {str(e)}"
-        """Generate optimized prompt specifically for Perplexity Advanced Search"""
-        return create_perplexity_search_prompt(self.commodity, self.data_type)
+            return False, f"Connection test failed: {str(e)}"
 
     async def research_data(
         self, progress_callback=None
@@ -160,41 +179,69 @@ class AIResearchManager:
             message: str
             parsed_data: Optional[Dict] - parsed research results
         """
-        if not st.session_state.get("agent"):
-            return (
-                False,
-                "AI agent not available. Please connect to MCP servers first.",
-                None,
-            )
-
         try:
             if progress_callback:
-                progress_callback(0.1, "Generating research prompt...")
+                progress_callback(0.1, "Initializing research agent...")
+
+            # Get or create research agent
+            agent, agent_type, status_msg = self._get_research_agent()
+
+            if not agent:
+                if progress_callback:
+                    progress_callback(0.2, "Setting up dedicated research client...")
+
+                setup_success, setup_msg = await self._setup_dedicated_research_client()
+                if not setup_success:
+                    return False, setup_msg, None
+
+                agent, agent_type, status_msg = self._get_research_agent()
+
+            if progress_callback:
+                progress_callback(0.3, f"Generating research prompt... ({status_msg})")
 
             prompt = self.generate_research_prompt()
 
             if progress_callback:
-                progress_callback(0.2, "Sending research request to AI agent...")
+                progress_callback(0.4, "Sending research request to AI agent...")
 
-            # Get conversation memory
-            conversation_memory = get_clean_conversation_memory()
-            conversation_memory.append(HumanMessage(content=prompt))
+            # Create conversation memory
+            conversation_memory = [HumanMessage(content=prompt)]
 
             if progress_callback:
-                progress_callback(0.3, "AI agent researching data...")
+                progress_callback(0.5, "AI agent researching data...")
 
             # Run the agent
-            response = await run_agent(st.session_state.agent, conversation_memory)
+            response = await run_agent(agent, conversation_memory)
 
             if progress_callback:
                 progress_callback(0.8, "Processing AI response...")
 
             # Extract response text
             response_text = ""
+            tool_executed = False
+
             if "messages" in response:
-                for msg in response["messages"]:
-                    if hasattr(msg, "content") and msg.content:
+                # Skip the original conversation memory
+                new_messages = response["messages"][len(conversation_memory) :]
+
+                for msg in new_messages:
+                    if isinstance(msg, ToolMessage):
+                        # Tool was executed
+                        tool_executed = True
+                        if progress_callback:
+                            progress_callback(0.7, "Processing tool results...")
+                    elif (
+                        isinstance(msg, AIMessage)
+                        and hasattr(msg, "content")
+                        and msg.content
+                    ):
                         response_text += str(msg.content) + "\n"
+
+            if not tool_executed:
+                return False, "No research tools were executed", None
+
+            if not response_text.strip():
+                return False, "No response text received from AI", None
 
             if progress_callback:
                 progress_callback(0.9, "Parsing research results...")
@@ -202,36 +249,30 @@ class AIResearchManager:
             # Try to parse the response into structured data
             parsed_data = self._parse_research_response(response_text)
 
-            # Store results properly in session state (following 9_mcp_app.py pattern)
+            if progress_callback:
+                progress_callback(1.0, "Research completed!")
+
+            # Store results in session state
             if "research_results" not in st.session_state:
                 st.session_state.research_results = {}
 
             research_key = f"{self.commodity}_{self.data_type}_research"
-
-            # Store the research request in session state (like chat messages)
-            user_message = {"role": "user", "content": prompt}
-
-            # Store the assistant response
-            if assistant_response:
-                assistant_message = {"role": "assistant", "content": assistant_response}
-
-                # Store in session state for persistence
-                st.session_state.research_results[research_key] = {
-                    "success": True,
-                    "response_text": response_text,
-                    "parsed_data": parsed_data,
-                    "timestamp": datetime.now().isoformat(),
-                    "user_message": user_message,
-                    "assistant_message": assistant_message,
-                }
-
-            if progress_callback:
-                progress_callback(1.0, "Research completed!")
+            st.session_state.research_results[research_key] = {
+                "success": True,
+                "response_text": response_text,
+                "parsed_data": parsed_data,
+                "timestamp": datetime.now().isoformat(),
+                "agent_type": agent_type,
+            }
 
             return True, response_text, parsed_data
 
         except Exception as e:
             return False, f"Error during research: {str(e)}", None
+        finally:
+            # Cleanup dedicated client if we created one
+            if agent_type == "dedicated":
+                await self._cleanup_research_client()
 
     def _parse_research_response(self, response_text: str) -> Optional[Dict]:
         """
@@ -255,7 +296,6 @@ class AIResearchManager:
             # Enhanced parsing logic for Perplexity results
             lines = response_text.split("\n")
             current_country = None
-            current_section = None
 
             for line in lines:
                 line = line.strip()
@@ -276,6 +316,8 @@ class AIResearchManager:
                                 "yield",
                                 "acre",
                                 "demand",
+                                "mt",
+                                "million",
                             ]
                         ):
                             current_country = country
@@ -302,10 +344,13 @@ class AIResearchManager:
                                 value = float(value_str)
 
                                 # Determine which year this refers to
-                                if (
-                                    "2024/25" in line
-                                    or "2024-25" in line
-                                    or "2024/2025" in line
+                                if any(
+                                    year_pattern in line
+                                    for year_pattern in [
+                                        "2024/25",
+                                        "2024-25",
+                                        "2024/2025",
+                                    ]
                                 ):
                                     if (
                                         parsed_data[current_country]["2024/2025"]
@@ -314,10 +359,13 @@ class AIResearchManager:
                                         parsed_data[current_country][
                                             "2024/2025"
                                         ] = value
-                                elif (
-                                    "2025/26" in line
-                                    or "2025-26" in line
-                                    or "2025/2026" in line
+                                elif any(
+                                    year_pattern in line
+                                    for year_pattern in [
+                                        "2025/26",
+                                        "2025-26",
+                                        "2025/2026",
+                                    ]
                                 ):
                                     if (
                                         parsed_data[current_country]["2025/2026"]
@@ -364,9 +412,7 @@ class AIResearchManager:
                         current_country
                         and parsed_data[current_country]["source"] is None
                     ):
-                        parsed_data[current_country]["source"] = line[
-                            :100
-                        ]  # First 100 chars
+                        parsed_data[current_country]["source"] = line[:100]
 
             # Clean up data - remove countries with no data
             cleaned_data = {}
@@ -406,7 +452,6 @@ class AIResearchManager:
             if research_data.get(country, {}).get("2025/2026") and isinstance(
                 research_data[country]["2025/2026"], (int, float)
             ):
-
                 current_val = current_data[country].get("2025/2026", 0)
                 research_val = research_data[country]["2025/2026"]
                 difference = research_val - current_val
@@ -430,14 +475,12 @@ class AIResearchManager:
             message: str
         """
         try:
-            update_method = getattr(
-                self.db_helper, self.data_configs[self.data_type]["update_method"]
-            )
+            update_method_name = self.config["data_type"]["db_methods"]["update_data"]
+            update_method = getattr(self.db_helper, update_method_name)
 
             # Get current data to calculate changes
-            data_method = getattr(
-                self.db_helper, self.data_configs[self.data_type]["db_method"]
-            )
+            data_method_name = self.config["data_type"]["db_methods"]["get_data"]
+            data_method = getattr(self.db_helper, data_method_name)
             current_data = data_method()
 
             updated_count = 0
@@ -522,69 +565,91 @@ def create_ai_research_tab(
         **AI Tool:** Perplexity Advanced Search with recency filtering for latest data
         
         **Search Strategy:** Optimized queries targeting official agricultural reports and forecasts
+        
+        **Connection:** Uses main MCP agent if available, otherwise creates dedicated Perplexity client
         """
         )
 
     with col2:
-        # Check if Perplexity tools are available
-        agent_available = bool(st.session_state.get("agent"))
+        # Check connection status
+        main_agent = st.session_state.get("agent")
+        main_tools = st.session_state.get("tools", [])
         perplexity_tools = [
-            tool
-            for tool in st.session_state.get("tools", [])
-            if "perplexity" in tool.name.lower()
+            tool for tool in main_tools if "perplexity" in tool.name.lower()
         ]
 
-        if agent_available and perplexity_tools:
-            st.success("🟢 Perplexity Ready")
+        if main_agent and perplexity_tools:
+            st.success("🟢 Main MCP Agent Ready")
             st.info(f"🔮 {len(perplexity_tools)} Perplexity tools available")
-
-            # Show available tool names
-            tool_names = [tool.name for tool in perplexity_tools]
-            st.caption(f"Tools: {', '.join(tool_names)}")
-
-        elif agent_available:
-            st.warning("🟡 Agent Ready, Missing Perplexity")
-            st.warning("Please connect to Perplexity MCP server")
+        elif main_agent:
+            st.warning("🟡 Main Agent Ready, Missing Perplexity")
+            st.info("Will create dedicated Perplexity client")
         else:
-            st.error("🔴 AI Agent Not Available")
-            st.warning("Please connect to MCP servers in the MCP Tools page first.")
+            st.warning("🟡 No Main Agent")
+            st.info("Will create dedicated Perplexity client")
 
-        # Add test connection button
-        if st.button("🔧 Test Connection", use_container_width=True):
+        # Add test connection button with proper session state handling
+        if st.button(
+            "🔧 Test Connection", use_container_width=True, key="test_connection_button"
+        ):
+            # Store that we're testing connection
+            st.session_state[f"testing_connection_{commodity}_{data_type}"] = True
 
-            # Test 1: Connection test
-            test_success, test_message = research_manager.test_perplexity_connection()
-
-            if test_success:
-                st.success(f"✅ Connection: {test_message}")
-
-                # Test 2: Actual search test
-                st.info("🔄 Testing Perplexity search...")
-                import asyncio
-
+            with st.spinner("Testing connection..."):
                 try:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
 
-                    search_success, search_message = loop.run_until_complete(
-                        research_manager.test_perplexity_search()
+                    test_success, test_message = loop.run_until_complete(
+                        research_manager.test_perplexity_connection()
                     )
 
-                    if search_success:
-                        st.success(f"✅ Search: {search_message}")
-                    else:
-                        st.error(f"❌ Search: {search_message}")
+                    # Store test results in session state
+                    st.session_state[f"test_result_{commodity}_{data_type}"] = {
+                        "success": test_success,
+                        "message": test_message,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+
+                    # Clear the testing flag
+                    st.session_state[f"testing_connection_{commodity}_{data_type}"] = (
+                        False
+                    )
 
                 except Exception as e:
-                    st.error(f"❌ Search test failed: {str(e)}")
+                    st.session_state[f"test_result_{commodity}_{data_type}"] = {
+                        "success": False,
+                        "message": f"Test failed: {str(e)}",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    st.session_state[f"testing_connection_{commodity}_{data_type}"] = (
+                        False
+                    )
+
+        # Display test results if available
+        test_result_key = f"test_result_{commodity}_{data_type}"
+        if test_result_key in st.session_state:
+            test_result = st.session_state[test_result_key]
+            timestamp = datetime.fromisoformat(test_result["timestamp"])
+
+            if test_result["success"]:
+                st.success(f"✅ {test_result['message']}")
+                st.caption(f"Last tested: {timestamp.strftime('%H:%M:%S')}")
             else:
-                st.error(f"❌ Connection: {test_message}")
+                st.error(f"❌ {test_result['message']}")
+                st.caption(f"Last tested: {timestamp.strftime('%H:%M:%S')}")
+
+        # Clear test results button
+        if test_result_key in st.session_state:
+            if st.button("🗑️ Clear Test Results", key="clear_test_results"):
+                del st.session_state[test_result_key]
+                st.rerun()
 
     # Debug information
     with st.expander("🐛 Debug Information", expanded=False):
         st.write("**Session State Debug:**")
-        st.write(f"- Agent available: {bool(st.session_state.get('agent'))}")
-        st.write(f"- Total tools: {len(st.session_state.get('tools', []))}")
+        st.write(f"- Main agent available: {bool(main_agent)}")
+        st.write(f"- Total tools: {len(main_tools)}")
         st.write(f"- Perplexity tools: {len(perplexity_tools)}")
 
         if perplexity_tools:
@@ -594,21 +659,72 @@ def create_ai_research_tab(
                     f"- {tool.name}: {getattr(tool, 'description', 'No description')}"
                 )
 
-        st.write("**MCP Servers:**")
-        servers = st.session_state.get("servers", {})
-        for name, server_config in servers.items():
-            st.write(f"- {name}: {server_config.get('url', 'No URL')}")
+        st.write("**Environment Variables:**")
+        st.write(
+            f"- ANTHROPIC_API_KEY: {'Set' if os.getenv('ANTHROPIC_API_KEY') else 'Not set'}"
+        )
+        st.write(
+            f"- PERPLEXITY_SERVER_URL: {os.getenv('PERPLEXITY_SERVER_URL', 'Default')}"
+        )
 
-    # Research button and progress
-    research_enabled = agent_available and len(perplexity_tools) > 0
+        st.write("**Research Manager Config:**")
+        st.write(f"- Commodity: {research_manager.commodity}")
+        st.write(f"- Data Type: {research_manager.data_type}")
+        st.write(f"- Countries: {len(research_manager.get_current_countries())}")
 
-    if st.button(
-        f"🔮 Start Perplexity Research for {config['commodity']['display_name']} {config['data_type']['display_name']}",
-        type="primary",
-        disabled=not research_enabled,
-        use_container_width=True,
-        help="Uses Perplexity Advanced Search to find latest agricultural data",
-    ):
+    # Research button and progress with confirmation
+    research_button_key = f"research_button_{commodity}_{data_type}"
+
+    # Check if research is already in progress
+    research_in_progress = st.session_state.get(
+        f"research_in_progress_{commodity}_{data_type}", False
+    )
+
+    if not research_in_progress:
+        if st.button(
+            f"🔮 Start Perplexity Research for {config['commodity']['display_name']} {config['data_type']['display_name']}",
+            type="primary",
+            use_container_width=True,
+            help="Uses Perplexity Advanced Search to find latest agricultural data",
+            key=research_button_key,
+        ):
+            # Confirm the research action
+            st.session_state[f"confirm_research_{commodity}_{data_type}"] = True
+            st.rerun()
+
+    # Show confirmation dialog
+    if st.session_state.get(f"confirm_research_{commodity}_{data_type}", False):
+        st.warning("⚠️ **Confirm Research Action**")
+        st.info(
+            f"""
+        You are about to start AI-powered research for {config['commodity']['display_name']} {config['data_type']['display_name']} data.
+        
+        This will:
+        - Use Perplexity Advanced Search to find latest agricultural statistics
+        - Search for 2024/2025 and 2025/2026 data from official sources (USDA, IGC, etc.)
+        - Parse and present results for potential database updates
+        
+        **Note:** This may take 30-60 seconds to complete.
+        """
+        )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button(
+                "✅ Proceed with Research", type="primary", use_container_width=True
+            ):
+                # Clear confirmation and start research
+                st.session_state[f"confirm_research_{commodity}_{data_type}"] = False
+                st.session_state[f"research_in_progress_{commodity}_{data_type}"] = True
+                st.rerun()
+
+        with col2:
+            if st.button("❌ Cancel", use_container_width=True):
+                st.session_state[f"confirm_research_{commodity}_{data_type}"] = False
+                st.rerun()
+
+    # Execute research if confirmed and in progress
+    if research_in_progress:
         # Initialize session state for research results
         if "research_results" not in st.session_state:
             st.session_state.research_results = {}
@@ -625,8 +741,6 @@ def create_ai_research_tab(
 
         # Run research
         try:
-            import asyncio
-
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
@@ -634,16 +748,11 @@ def create_ai_research_tab(
                 research_manager.research_data(update_progress)
             )
 
-            # Store results in session state
-            st.session_state.research_results[research_key] = {
-                "success": success,
-                "response_text": response_text,
-                "parsed_data": parsed_data,
-                "timestamp": datetime.now().isoformat(),
-            }
-
             progress_bar.empty()
             status_text.empty()
+
+            # Clear research in progress flag
+            st.session_state[f"research_in_progress_{commodity}_{data_type}"] = False
 
             if success:
                 st.success("✅ Research completed successfully!")
@@ -654,7 +763,15 @@ def create_ai_research_tab(
         except Exception as e:
             progress_bar.empty()
             status_text.empty()
+            st.session_state[f"research_in_progress_{commodity}_{data_type}"] = False
             st.error(f"❌ Research failed: {str(e)}")
+
+    else:
+        # Show a note about the research process when not in progress
+        if not st.session_state.get(f"confirm_research_{commodity}_{data_type}", False):
+            st.info(
+                "💡 **Ready to Research**: Click the button above to start AI-powered data research using Perplexity Advanced Search."
+            )
 
     # Display research results if available
     research_key = f"{commodity}_{data_type}_research"
@@ -665,10 +782,11 @@ def create_ai_research_tab(
             st.markdown("---")
             st.subheader("📋 Research Results")
 
-            # Show timestamp
+            # Show timestamp and agent type
             timestamp = datetime.fromisoformat(results["timestamp"])
+            agent_type = results.get("agent_type", "unknown")
             st.caption(
-                f"Research completed at: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+                f"Research completed at: {timestamp.strftime('%Y-%m-%d %H:%M:%S')} using {agent_type} agent"
             )
 
             # Show raw AI response in expandable section
