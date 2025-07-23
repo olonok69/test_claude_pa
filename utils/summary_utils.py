@@ -257,6 +257,15 @@ def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
     """
     logger = logging.getLogger(__name__)
 
+    # Get event names from processor config if available
+    main_event_name = "BVA"  # Default fallback
+    secondary_event_name = "LVA"  # Default fallback
+    
+    if reg_processor and hasattr(reg_processor, 'config'):
+        event_config = reg_processor.config.get("event", {})
+        main_event_name = event_config.get("main_event_name", "BVA")
+        secondary_event_name = event_config.get("secondary_event_name", "LVA")
+
     # Print registration summary
     if "registration" in summary:
         reg_summary = summary["registration"]
@@ -264,10 +273,10 @@ def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
             f"Total registration records this year: {reg_summary['total_records']['this_year']}"
         )
         logger.info(
-            f"Total registration records last year BVA: {reg_summary['total_records']['last_year_bva']}"
+            f"Total registration records last year {main_event_name}: {reg_summary['total_records']['last_year_bva']}"
         )
         logger.info(
-            f"Total registration records last year LVA: {reg_summary['total_records']['last_year_lva']}"
+            f"Total registration records last year {secondary_event_name}: {reg_summary['total_records']['last_year_lva']}"
         )
 
         print("\nSummary Statistics:")
@@ -275,40 +284,40 @@ def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
             f"Total registration records this year: {reg_summary['total_records']['this_year']}"
         )
         print(
-            f"Total registration records last year BVA: {reg_summary['total_records']['last_year_bva']}"
+            f"Total registration records last year {main_event_name}: {reg_summary['total_records']['last_year_bva']}"
         )
         print(
-            f"Total registration records last year LVA: {reg_summary['total_records']['last_year_lva']}"
+            f"Total registration records last year {secondary_event_name}: {reg_summary['total_records']['last_year_lva']}"
         )
 
     # Print scan summary
     if "scan" in summary:
         scan_summary = summary["scan"]
         logger.info(
-            f"Total seminar scans last year BVA: {scan_summary['total_scans']['last_year_bva']}"
+            f"Total seminar scans last year {main_event_name}: {scan_summary['total_scans']['last_year_bva']}"
         )
         logger.info(
-            f"Total seminar scans last year LVA: {scan_summary['total_scans']['last_year_lva']}"
+            f"Total seminar scans last year {secondary_event_name}: {scan_summary['total_scans']['last_year_lva']}"
         )
         logger.info(
-            f"Unique seminar attendees last year BVA: {scan_summary['unique_attendees']['last_year_bva']}"
+            f"Unique seminar attendees last year {main_event_name}: {scan_summary['unique_attendees']['last_year_bva']}"
         )
         logger.info(
-            f"Unique seminar attendees last year LVA: {scan_summary['unique_attendees']['last_year_lva']}"
+            f"Unique seminar attendees last year {secondary_event_name}: {scan_summary['unique_attendees']['last_year_lva']}"
         )
 
         print("\nScan Summary:")
         print(
-            f"Total seminar scans last year BVA: {scan_summary['total_scans']['last_year_bva']}"
+            f"Total seminar scans last year {main_event_name}: {scan_summary['total_scans']['last_year_bva']}"
         )
         print(
-            f"Total seminar scans last year LVA: {scan_summary['total_scans']['last_year_lva']}"
+            f"Total seminar scans last year {secondary_event_name}: {scan_summary['total_scans']['last_year_lva']}"
         )
         print(
-            f"Unique seminar attendees last year BVA: {scan_summary['unique_attendees']['last_year_bva']}"
+            f"Unique seminar attendees last year {main_event_name}: {scan_summary['unique_attendees']['last_year_bva']}"
         )
         print(
-            f"Unique seminar attendees last year LVA: {scan_summary['unique_attendees']['last_year_lva']}"
+            f"Unique seminar attendees last year {secondary_event_name}: {scan_summary['unique_attendees']['last_year_lva']}"
         )
 
     # Print session summary
@@ -318,10 +327,10 @@ def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
             f"Total sessions this year: {session_summary['total_sessions']['this_year']}"
         )
         logger.info(
-            f"Total sessions last year BVA: {session_summary['total_sessions']['last_year_bva']}"
+            f"Total sessions last year {main_event_name}: {session_summary['total_sessions']['last_year_bva']}"
         )
         logger.info(
-            f"Total sessions last year LVA: {session_summary['total_sessions']['last_year_lva']}"
+            f"Total sessions last year {secondary_event_name}: {session_summary['total_sessions']['last_year_lva']}"
         )
         logger.info(
             f"Total unique stream categories: {session_summary['unique_streams']}"
@@ -332,10 +341,10 @@ def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
             f"Total sessions this year: {session_summary['total_sessions']['this_year']}"
         )
         print(
-            f"Total sessions last year BVA: {session_summary['total_sessions']['last_year_bva']}"
+            f"Total sessions last year {main_event_name}: {session_summary['total_sessions']['last_year_bva']}"
         )
         print(
-            f"Total sessions last year LVA: {session_summary['total_sessions']['last_year_lva']}"
+            f"Total sessions last year {secondary_event_name}: {session_summary['total_sessions']['last_year_lva']}"
         )
         print(f"Total unique stream categories: {session_summary['unique_streams']}")
         print("\nTop 5 Stream Categories:")
@@ -377,31 +386,51 @@ def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
 
     # Print Neo4j statistics
     if not skip_neo4j:
-        print_neo4j_statistics(summary)
+        print_neo4j_statistics(summary, main_event_name, secondary_event_name)
 
-    # Print data distributions
+    # Print data distributions - FIXED: Check if columns exist before accessing
     if reg_processor and hasattr(reg_processor, "df_reg_demo_this"):
-        print("\nJob Role Distribution This Year:")
-        print(reg_processor.df_reg_demo_this["job_role"].value_counts())
+        # Only print job role distribution if the column exists (veterinary events)
+        if "job_role" in reg_processor.df_reg_demo_this.columns:
+            print("\nJob Role Distribution This Year:")
+            print(reg_processor.df_reg_demo_this["job_role"].value_counts())
+        else:
+            print("\nJob Role Distribution This Year:")
+            print("Not available (generic event - no job role processing)")
 
-        print("\nPractice Specialization Distribution This Year:")
-        print(
-            reg_processor.df_reg_demo_this[
-                "what_type_does_your_practice_specialise_in"
-            ].value_counts()
-        )
+        # Print specialization distribution - try multiple possible column names
+        specialization_columns = [
+            "what_type_does_your_practice_specialise_in",  # BVA/vet-specific
+            "what_best_describes_what_you_do",  # ECOMM-specific
+            "specialization_current",  # Generic fallback
+            "main_specialization"  # Generic fallback
+        ]
+        
+        specialization_printed = False
+        for col in specialization_columns:
+            if col in reg_processor.df_reg_demo_this.columns:
+                print(f"\nPractice Specialization Distribution This Year:")
+                print(reg_processor.df_reg_demo_this[col].value_counts())
+                specialization_printed = True
+                break
+        
+        if not specialization_printed:
+            print(f"\nPractice Specialization Distribution This Year:")
+            print("Not available (no specialization column found)")
 
     # Print Neo4j usage information if Neo4j processing wasn't skipped
     if not skip_neo4j:
         print_neo4j_usage_info()
 
 
-def print_neo4j_statistics(summary):
+def print_neo4j_statistics(summary, main_event_name="BVA", secondary_event_name="LVA"):
     """
     Print Neo4j statistics to console.
 
     Args:
         summary: Dictionary containing summary statistics
+        main_event_name: Name of the main event (default: BVA)
+        secondary_event_name: Name of the secondary event (default: LVA)
     """
     logger = logging.getLogger(__name__)
 
@@ -427,10 +456,10 @@ def print_neo4j_statistics(summary):
             f"  Visitors this year: {neo4j_visitor_summary['nodes_created']['visitor_this_year']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_this_year']} skipped"
         )
         print(
-            f"  Visitors last year BVA: {neo4j_visitor_summary['nodes_created']['visitor_last_year_bva']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_last_year_bva']} skipped"
+            f"  Visitors last year {main_event_name}: {neo4j_visitor_summary['nodes_created']['visitor_last_year_bva']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_last_year_bva']} skipped"
         )
         print(
-            f"  Visitors last year LVA: {neo4j_visitor_summary['nodes_created']['visitor_last_year_lva']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_last_year_lva']} skipped"
+            f"  Visitors last year {secondary_event_name}: {neo4j_visitor_summary['nodes_created']['visitor_last_year_lva']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_last_year_lva']} skipped"
         )
 
     # Print Neo4j session statistics
@@ -467,10 +496,10 @@ def print_neo4j_statistics(summary):
             f"  Sessions this year: {neo4j_session_summary['nodes_created']['sessions_this_year']} created, {neo4j_session_summary['nodes_skipped']['sessions_this_year']} skipped"
         )
         print(
-            f"  Sessions past year BVA: {neo4j_session_summary['nodes_created']['sessions_past_year_bva']} created, {neo4j_session_summary['nodes_skipped']['sessions_past_year_bva']} skipped"
+            f"  Sessions past year {main_event_name}: {neo4j_session_summary['nodes_created']['sessions_past_year_bva']} created, {neo4j_session_summary['nodes_skipped']['sessions_past_year_bva']} skipped"
         )
         print(
-            f"  Sessions past year LVA: {neo4j_session_summary['nodes_created']['sessions_past_year_lva']} created, {neo4j_session_summary['nodes_skipped']['sessions_past_year_lva']} skipped"
+            f"  Sessions past year {secondary_event_name}: {neo4j_session_summary['nodes_created']['sessions_past_year_lva']} created, {neo4j_session_summary['nodes_skipped']['sessions_past_year_lva']} skipped"
         )
         print(
             f"  Stream nodes: {neo4j_session_summary['nodes_created']['streams']} created, {neo4j_session_summary['nodes_skipped']['streams']} skipped"
@@ -517,10 +546,10 @@ def print_neo4j_statistics(summary):
             f"    This year: {neo4j_specialization_stream_summary['visitor_nodes_processed']['visitor_this_year']}"
         )
         print(
-            f"    Last year BVA: {neo4j_specialization_stream_summary['visitor_nodes_processed']['visitor_last_year_bva']}"
+            f"    Last year {main_event_name}: {neo4j_specialization_stream_summary['visitor_nodes_processed']['visitor_last_year_bva']}"
         )
         print(
-            f"    Last year LVA: {neo4j_specialization_stream_summary['visitor_nodes_processed']['visitor_last_year_lva']}"
+            f"    Last year {secondary_event_name}: {neo4j_specialization_stream_summary['visitor_nodes_processed']['visitor_last_year_lva']}"
         )
         print(
             f"  Specializations processed: {neo4j_specialization_stream_summary['specializations_processed']}"
@@ -541,16 +570,16 @@ def print_neo4j_statistics(summary):
         )
         print("\nDetailed Visitor Relationship Statistics:")
         print(
-            f"  Same_Visitor relationships for BVA: {neo4j_visitor_relationship_summary['relationships_created']['same_visitor_bva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['same_visitor_bva']} skipped"
+            f"  Same_Visitor relationships for {main_event_name}: {neo4j_visitor_relationship_summary['relationships_created']['same_visitor_bva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['same_visitor_bva']} skipped"
         )
         print(
-            f"  Same_Visitor relationships for LVA: {neo4j_visitor_relationship_summary['relationships_created']['same_visitor_lva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['same_visitor_lva']} skipped"
+            f"  Same_Visitor relationships for {secondary_event_name}: {neo4j_visitor_relationship_summary['relationships_created']['same_visitor_lva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['same_visitor_lva']} skipped"
         )
         print(
-            f"  attended_session relationships for BVA: {neo4j_visitor_relationship_summary['relationships_created']['attended_session_bva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['attended_session_bva']} skipped"
+            f"  attended_session relationships for {main_event_name}: {neo4j_visitor_relationship_summary['relationships_created']['attended_session_bva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['attended_session_bva']} skipped"
         )
         print(
-            f"  attended_session relationships for LVA: {neo4j_visitor_relationship_summary['relationships_created']['attended_session_lva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['attended_session_lva']} skipped"
+            f"  attended_session relationships for {secondary_event_name}: {neo4j_visitor_relationship_summary['relationships_created']['attended_session_lva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['attended_session_lva']} skipped"
         )
 
     # Print session embedding statistics
