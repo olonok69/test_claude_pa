@@ -1,4 +1,4 @@
-# client/pages/1_wheat_production.py (Updated with AI Research Tab)
+# client/pages/1_wheat_production.py - Fixed version with working AI Research
 
 import streamlit as st
 import pandas as pd
@@ -19,8 +19,9 @@ from wheat_helpers.common_functions import (
     style_change_column,
 )
 
-# Import the new AI research components
+# Import the enhanced AI research components
 from utils.ai_research_components import create_ai_research_tab, add_ai_research_to_page
+from utils.async_helpers import run_research_safely, initialize_event_loop
 
 
 def style_percentage_column(val):
@@ -43,6 +44,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Initialize event loop for async operations
+initialize_event_loop()
 
 # Hide the navigation on this page
 st.markdown(
@@ -436,7 +440,7 @@ tab_names = [
     "💾 Data Export",
 ]
 
-# Add AI Research tab using the new component
+# Add AI Research tab using the enhanced component
 tab_names = add_ai_research_to_page(
     "wheat", "production", get_database(), st.session_state.wheat_data, tab_names
 )
@@ -881,7 +885,7 @@ with tabs[3]:  # Data Export tab
             except json.JSONDecodeError:
                 st.error("Invalid JSON file format")
 
-# Add the new AI Research tab
+# Add the enhanced AI Research tab
 with tabs[4]:  # AI Research tab
     create_ai_research_tab(
         commodity="wheat",

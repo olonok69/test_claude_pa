@@ -59,7 +59,7 @@ class AIResearchManager:
             return get_countries_for_commodity(self.commodity)
 
     def generate_research_prompt(self) -> str:
-        """Generate research prompt based on commodity and data type using config"""
+        """Generate research prompt based on commodity and data type"""
         return generate_prompt_template(self.commodity, self.data_type)
 
     async def _setup_dedicated_research_client(self):
@@ -145,7 +145,7 @@ class AIResearchManager:
             # Test with simple search
             test_prompt = """Please use the perplexity_advanced_search tool to test the connection.
 
-Search for "wheat production statistics 2024" with recency filter "year".
+Search for "wheat production statistics 2024" with recency filter "month".
 
 This is a simple test to verify that the Perplexity Advanced Search tool is working correctly."""
 
@@ -588,13 +588,8 @@ def create_ai_research_tab(
             st.warning("🟡 No Main Agent")
             st.info("Will create dedicated Perplexity client")
 
-        # Add test connection button with proper session state handling
-        if st.button(
-            "🔧 Test Connection", use_container_width=True, key="test_connection_button"
-        ):
-            # Store that we're testing connection
-            st.session_state[f"testing_connection_{commodity}_{data_type}"] = True
-
+        # Add test connection button
+        if st.button("🔧 Test Connection", use_container_width=True):
             with st.spinner("Testing connection..."):
                 try:
                     loop = asyncio.new_event_loop()
@@ -604,46 +599,13 @@ def create_ai_research_tab(
                         research_manager.test_perplexity_connection()
                     )
 
-                    # Store test results in session state
-                    st.session_state[f"test_result_{commodity}_{data_type}"] = {
-                        "success": test_success,
-                        "message": test_message,
-                        "timestamp": datetime.now().isoformat(),
-                    }
-
-                    # Clear the testing flag
-                    st.session_state[f"testing_connection_{commodity}_{data_type}"] = (
-                        False
-                    )
+                    if test_success:
+                        st.success(f"✅ {test_message}")
+                    else:
+                        st.error(f"❌ {test_message}")
 
                 except Exception as e:
-                    st.session_state[f"test_result_{commodity}_{data_type}"] = {
-                        "success": False,
-                        "message": f"Test failed: {str(e)}",
-                        "timestamp": datetime.now().isoformat(),
-                    }
-                    st.session_state[f"testing_connection_{commodity}_{data_type}"] = (
-                        False
-                    )
-
-        # Display test results if available
-        test_result_key = f"test_result_{commodity}_{data_type}"
-        if test_result_key in st.session_state:
-            test_result = st.session_state[test_result_key]
-            timestamp = datetime.fromisoformat(test_result["timestamp"])
-
-            if test_result["success"]:
-                st.success(f"✅ {test_result['message']}")
-                st.caption(f"Last tested: {timestamp.strftime('%H:%M:%S')}")
-            else:
-                st.error(f"❌ {test_result['message']}")
-                st.caption(f"Last tested: {timestamp.strftime('%H:%M:%S')}")
-
-        # Clear test results button
-        if test_result_key in st.session_state:
-            if st.button("🗑️ Clear Test Results", key="clear_test_results"):
-                del st.session_state[test_result_key]
-                st.rerun()
+                    st.error(f"❌ Test failed: {str(e)}")
 
     # Debug information
     with st.expander("🐛 Debug Information", expanded=False):
@@ -672,59 +634,13 @@ def create_ai_research_tab(
         st.write(f"- Data Type: {research_manager.data_type}")
         st.write(f"- Countries: {len(research_manager.get_current_countries())}")
 
-    # Research button and progress with confirmation
-    research_button_key = f"research_button_{commodity}_{data_type}"
-
-    # Check if research is already in progress
-    research_in_progress = st.session_state.get(
-        f"research_in_progress_{commodity}_{data_type}", False
-    )
-
-    if not research_in_progress:
-        if st.button(
-            f"🔮 Start Perplexity Research for {config['commodity']['display_name']} {config['data_type']['display_name']}",
-            type="primary",
-            use_container_width=True,
-            help="Uses Perplexity Advanced Search to find latest agricultural data",
-            key=research_button_key,
-        ):
-            # Confirm the research action
-            st.session_state[f"confirm_research_{commodity}_{data_type}"] = True
-            st.rerun()
-
-    # Show confirmation dialog
-    if st.session_state.get(f"confirm_research_{commodity}_{data_type}", False):
-        st.warning("⚠️ **Confirm Research Action**")
-        st.info(
-            f"""
-        You are about to start AI-powered research for {config['commodity']['display_name']} {config['data_type']['display_name']} data.
-        
-        This will:
-        - Use Perplexity Advanced Search to find latest agricultural statistics
-        - Search for 2024/2025 and 2025/2026 data from official sources (USDA, IGC, etc.)
-        - Parse and present results for potential database updates
-        
-        **Note:** This may take 30-60 seconds to complete.
-        """
-        )
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button(
-                "✅ Proceed with Research", type="primary", use_container_width=True
-            ):
-                # Clear confirmation and start research
-                st.session_state[f"confirm_research_{commodity}_{data_type}"] = False
-                st.session_state[f"research_in_progress_{commodity}_{data_type}"] = True
-                st.rerun()
-
-        with col2:
-            if st.button("❌ Cancel", use_container_width=True):
-                st.session_state[f"confirm_research_{commodity}_{data_type}"] = False
-                st.rerun()
-
-    # Execute research if confirmed and in progress
-    if research_in_progress:
+    # Research button and progress
+    if st.button(
+        f"🔮 Start Perplexity Research for {config['commodity']['display_name']} {config['data_type']['display_name']}",
+        type="primary",
+        use_container_width=True,
+        help="Uses Perplexity Advanced Search to find latest agricultural data",
+    ):
         # Initialize session state for research results
         if "research_results" not in st.session_state:
             st.session_state.research_results = {}
@@ -751,9 +667,6 @@ def create_ai_research_tab(
             progress_bar.empty()
             status_text.empty()
 
-            # Clear research in progress flag
-            st.session_state[f"research_in_progress_{commodity}_{data_type}"] = False
-
             if success:
                 st.success("✅ Research completed successfully!")
                 st.rerun()
@@ -763,15 +676,7 @@ def create_ai_research_tab(
         except Exception as e:
             progress_bar.empty()
             status_text.empty()
-            st.session_state[f"research_in_progress_{commodity}_{data_type}"] = False
             st.error(f"❌ Research failed: {str(e)}")
-
-    else:
-        # Show a note about the research process when not in progress
-        if not st.session_state.get(f"confirm_research_{commodity}_{data_type}", False):
-            st.info(
-                "💡 **Ready to Research**: Click the button above to start AI-powered data research using Perplexity Advanced Search."
-            )
 
     # Display research results if available
     research_key = f"{commodity}_{data_type}_research"
