@@ -7,8 +7,8 @@ env = os.getenv
 
 # Model mapping - OpenAI and Anthropic only
 MODEL_OPTIONS = {
-    "OpenAI": "gpt-4o",
     "Anthropic": "claude-sonnet-4-20250514",
+    "OpenAI": "gpt-4o",
 }
 
 # Streamlit defaults
