@@ -1,5 +1,3 @@
-# client/pages/2_wheat_exports.py - Updated with AI Research Tab
-
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -11,20 +9,17 @@ import json
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from wheat_helpers.database_helper import WheatProductionDB
-from wheat_helpers.common_functions import (
+from corn_helpers.database_helper import CornProductionDB
+from corn_helpers.common_functions import (
     format_change,
     create_status_indicators,
     create_change_visualization,
     style_change_column,
 )
 
-# Import the new AI research component
-from utils.enhanced_ai_research_tab import create_wheat_ai_research_tab
-
 # Page configuration
 st.set_page_config(
-    page_title="Wheat Exports Dashboard",
+    page_title="Corn Exports Dashboard",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -60,7 +55,7 @@ if not st.session_state.get("authentication_status"):
         st.switch_page("app.py")
     st.stop()
 
-# Define allowed countries for exports
+# Define allowed countries for corn exports (based on create_corn_database.py)
 ALLOWED_EXPORT_COUNTRIES = [
     "WORLD",
     "China",
@@ -103,26 +98,26 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Quick Navigation
-    st.markdown("### 🌾 Quick Navigation")
+    # Quick Navigation - Corn
+    st.markdown("### 🌽 Corn - Quick Navigation")
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🌾 Production", use_container_width=True):
-            st.switch_page("pages/1_wheat_production.py")
-        if st.button("🏢 Stocks", use_container_width=True):
-            st.switch_page("pages/4_wheat_stocks.py")
-        if st.button("🌾 Acreage", use_container_width=True):
-            st.switch_page("pages/6_wheat_acreage.py")
-        if st.button("🌍 World Demand", use_container_width=True):
-            st.switch_page("pages/8_wheat_world_demand.py")
-    with col2:
+        if st.button("🌽 Production", use_container_width=True):
+            st.switch_page("pages/10_corn_production.py")
         if st.button("📥 Imports", use_container_width=True):
-            st.switch_page("pages/3_wheat_imports.py")
+            st.switch_page("pages/12_corn_imports.py")
+        if st.button("🏢 Stocks", use_container_width=True):
+            st.switch_page("pages/13_corn_stocks.py")
         if st.button("📊 S/U Ratio", use_container_width=True):
-            st.switch_page("pages/5_stock_to_use_ratio.py")
+            st.switch_page("pages/14_corn_stock_to_use_ratio.py")
+    with col2:
+        if st.button("🌽 Acreage", use_container_width=True):
+            st.switch_page("pages/15_corn_acreage.py")
         if st.button("🌱 Yield", use_container_width=True):
-            st.switch_page("pages/7_wheat_yield.py")
+            st.switch_page("pages/16_corn_yield.py")
+        if st.button("🌍 World Demand", use_container_width=True):
+            st.switch_page("pages/17_corn_world_demand.py")
 
     st.markdown("---")
 
@@ -132,7 +127,7 @@ with st.sidebar:
         st.switch_page("pages/9_mcp_app.py")
 
     st.markdown("---")
-    st.markdown("### 📦 Exports Dashboard")
+    st.markdown("### 📦 Corn Exports Dashboard")
 
     # Add current date in sidebar
     st.markdown("---")
@@ -143,12 +138,12 @@ with st.sidebar:
 @st.cache_resource
 def get_database():
     """Initialize and return database instance"""
-    if not os.path.exists("wheat_production.db"):
+    if not os.path.exists("corn_production.db"):
         st.error(
-            "❌ Database not found. Please run 'python database_setup.py' first to create the database."
+            "❌ Database not found. Please run 'python create_corn_database.py' first to create the database."
         )
         return None
-    return WheatProductionDB()
+    return CornProductionDB()
 
 
 # Load export data from database with filtering
@@ -192,22 +187,205 @@ def load_export_data():
         return None, None, None
 
 
+# Function to check if year can be initialized
+def can_initialize_year():
+    """Check if year initialization is allowed based on current year"""
+    import datetime
+
+    current_date = datetime.datetime.now()
+    current_year = current_date.year
+    current_month = current_date.month
+
+    # Get metadata to check last initialization
+    db = get_database()
+    if not db:
+        return False, "Database not available"
+
+    metadata = db.get_metadata()
+    last_init = metadata.get("export_last_year_initialization")
+
+    # Check if already initialized this year
+    if last_init:
+        try:
+            last_init_date = datetime.datetime.fromisoformat(last_init)
+            if last_init_date.year == current_year:
+                return (
+                    False,
+                    f"Year already initialized on {last_init_date.strftime('%d %b %Y')}",
+                )
+        except:
+            pass
+
+    # Get current configuration
+    display_years = metadata.get("export_display_years", "").split(",")
+    if not display_years:
+        return False, "No year configuration found"
+
+    # Get the projection year (last year in display)
+    projection_year = display_years[-1] if display_years else ""
+    if "/" not in projection_year:
+        return False, "Invalid year format"
+
+    # Extract the second part of the projection year
+    _, proj_end_year = projection_year.split("/")
+    proj_end_year_full = "20" + proj_end_year
+
+    # Allow initialization if we're in the same year as the projection end year
+    # and it's after June (mid-year)
+    if current_year == int(proj_end_year_full) and current_month >= 6:
+        return True, "Ready to initialize new year"
+
+    return False, f"Not yet time to initialize (current projection: {projection_year})"
+
+
+# Function to initialize new year
+def initialize_new_year():
+    """Initialize a new year by shifting the year window"""
+    db = get_database()
+    if not db:
+        return False, "Database not available"
+
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+
+        # Get current configuration from metadata
+        metadata = db.get_metadata()
+        current_display_years = metadata.get(
+            "export_display_years", "2022/2023,2023/2024,2024/2025,2025/2026"
+        ).split(",")
+
+        # Check what years actually exist in the database
+        cursor.execute("SELECT DISTINCT year FROM corn_exports ORDER BY year")
+        all_years = [row[0] for row in cursor.fetchall()]
+
+        print(f"Current display years: {current_display_years}")
+        print(f"All years in database: {all_years}")
+
+        # Calculate new years
+        # Extract numeric parts to increment
+        last_year = current_display_years[-1]
+        start_yr, end_yr = last_year.split("/")
+        new_year = f"20{int(end_yr):02d}/20{int(end_yr)+1:02d}"
+
+        # Shift display years forward
+        new_display_years = current_display_years[1:] + [new_year]
+
+        # Define new status mapping
+        new_year_status = {
+            new_display_years[0]: "actual",
+            new_display_years[1]: "actual",
+            new_display_years[2]: "estimate",
+            new_display_years[3]: "projection",
+        }
+
+        # Check if new year data needs to be created
+        if new_year not in all_years:
+            print(f"Creating {new_year} data...")
+
+            # Get the previous year data to copy
+            prev_year = new_display_years[2]  # Current estimate year
+
+            # Insert data for new year by copying from previous year
+            cursor.execute(
+                """
+                INSERT INTO corn_exports (country, year, export_value, percentage_world, change_value, status)
+                SELECT country, ?, export_value, percentage_world, 0, 'projection'
+                FROM corn_exports
+                WHERE year = ? AND country IN ({})
+            """.format(
+                    ",".join(["?"] * len(ALLOWED_EXPORT_COUNTRIES))
+                ),
+                [new_year, prev_year] + ALLOWED_EXPORT_COUNTRIES,
+            )
+
+        # Update statuses for all years
+        for year, status in new_year_status.items():
+            cursor.execute(
+                """
+                UPDATE corn_exports 
+                SET status = ?, updated_at = ?
+                WHERE year = ?
+            """,
+                (status, datetime.now().isoformat(), year),
+            )
+            print(f"Updated {year} status to {status}")
+
+        # Update metadata with new configuration
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO metadata (key, value, updated_at)
+            VALUES (?, ?, ?)
+        """,
+            (
+                "export_display_years",
+                ",".join(new_display_years),
+                datetime.now().isoformat(),
+            ),
+        )
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO metadata (key, value, updated_at)
+            VALUES (?, ?, ?)
+        """,
+            (
+                "export_year_status",
+                json.dumps(new_year_status),
+                datetime.now().isoformat(),
+            ),
+        )
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO metadata (key, value, updated_at)
+            VALUES (?, ?, ?)
+        """,
+            (
+                "export_last_year_initialization",
+                datetime.now().isoformat(),
+                datetime.now().isoformat(),
+            ),
+        )
+
+        conn.commit()
+        conn.close()
+
+        print(f"Successfully updated to display years: {new_display_years}")
+
+        # Clear all caches to force reload
+        st.cache_data.clear()
+        st.cache_resource.clear()
+
+        return True, f"Successfully initialized year {new_year}"
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        st.error(f"❌ Error initializing new year: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False, str(e)
+
+
 # Initialize session state
 def initialize_session_state():
     """Initialize session state with database data"""
-    if "export_data_loaded" not in st.session_state:
+    if "corn_export_data_loaded" not in st.session_state:
         export_data, metadata, current_config = load_export_data()
 
         if export_data and metadata:
-            st.session_state.export_data = export_data
-            st.session_state.export_metadata = metadata
-            st.session_state.export_current_config = current_config
-            st.session_state.export_data_loaded = True
+            st.session_state.corn_export_data = export_data
+            st.session_state.corn_export_metadata = metadata
+            st.session_state.corn_export_current_config = current_config
+            st.session_state.corn_export_data_loaded = True
         else:
             # Fallback to empty data
-            st.session_state.export_data = {}
-            st.session_state.export_metadata = {}
-            st.session_state.export_current_config = {
+            st.session_state.corn_export_data = {}
+            st.session_state.corn_export_metadata = {}
+            st.session_state.corn_export_current_config = {
                 "display_years": ["2022/2023", "2023/2024", "2024/2025", "2025/2026"],
                 "year_status": {
                     "2022/2023": "actual",
@@ -216,44 +394,60 @@ def initialize_session_state():
                     "2025/2026": "projection",
                 },
             }
-            st.session_state.export_data_loaded = False
+            st.session_state.corn_export_data_loaded = False
 
 
 # Initialize session state
 initialize_session_state()
 
 # Title and header
-st.title("📦 Wheat Exports Dashboard")
-st.markdown("### Major Wheat Exporters Data Management")
+st.title("📦 Corn Exports Dashboard")
+st.markdown("### Major Corn Exporters Data Management")
 
 # Database status indicator
-if st.session_state.export_data_loaded:
+if st.session_state.corn_export_data_loaded:
     st.sidebar.success("🗄️ Connected to Database")
 else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
-# Main content area - Updated to include AI Research tab
-tab_names = [
-    "📈 Data Overview",
-    "✏️ Edit Projections",
-    "📊 Visualizations",
-    "🤖 AI Research",
-    "💾 Data Export",
-]
+# Main content area
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "💾 Data Export"]
+)
 
-# Create tabs
-tabs = st.tabs(tab_names)
+with tab1:
+    st.header("Global Corn Exports")
 
-with tabs[0]:  # Data Overview tab
-    st.header("Global Wheat Exports")
+    # Year initialization section
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        st.info("📅 Current Year Configuration")
+    with col2:
+        can_init, message = can_initialize_year()
+        if st.button(
+            "🔄 Initialize New Year",
+            type="primary" if can_init else "secondary",
+            help=message,
+            disabled=not can_init,
+        ):
+            success, init_message = initialize_new_year()
+            if success:
+                st.success(f"✅ {init_message}")
+                st.rerun()
+            else:
+                st.error(f"❌ {init_message}")
+    with col3:
+        if st.button("🔄 Refresh Data"):
+            st.cache_data.clear()
+            st.rerun()
 
     # Display dynamic status indicators based on current configuration
-    if "export_current_config" in st.session_state:
+    if "corn_export_current_config" in st.session_state:
         st.markdown("### Status Information")
         status_cols = st.columns(4)
 
-        display_years = st.session_state.export_current_config["display_years"]
-        year_status = st.session_state.export_current_config["year_status"]
+        display_years = st.session_state.corn_export_current_config["display_years"]
+        year_status = st.session_state.corn_export_current_config["year_status"]
 
         for i, year in enumerate(display_years):
             if i < len(status_cols):
@@ -272,24 +466,24 @@ with tabs[0]:  # Data Overview tab
     st.markdown("### Export Data (Million Metric Tons)")
 
     # Get display years from configuration
-    display_years = st.session_state.export_current_config.get(
+    display_years = st.session_state.corn_export_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
     # Create the data table with proper formatting and change calculations
     table_data = []
 
-    # Get WORLD total for the first year to calculate percentages
+    # First, get WORLD for the first year to calculate percentages
     total_exports_first_year = None
     if (
-        "WORLD" in st.session_state.export_data
-        and display_years[0] in st.session_state.export_data["WORLD"]
+        "WORLD" in st.session_state.corn_export_data
+        and display_years[0] in st.session_state.corn_export_data["WORLD"]
     ):
-        total_exports_first_year = st.session_state.export_data["WORLD"][
+        total_exports_first_year = st.session_state.corn_export_data["WORLD"][
             display_years[0]
         ]
 
-    for country, data in st.session_state.export_data.items():
+    for country, data in st.session_state.corn_export_data.items():
         if country not in ALLOWED_EXPORT_COUNTRIES:
             continue
 
@@ -360,21 +554,21 @@ with tabs[0]:  # Data Overview tab
 
     with col1:
         if (
-            "WORLD" in st.session_state.export_data
-            and latest_year in st.session_state.export_data["WORLD"]
+            "WORLD" in st.session_state.corn_export_data
+            and latest_year in st.session_state.corn_export_data["WORLD"]
         ):
-            total_latest = st.session_state.export_data["WORLD"][latest_year]
-            st.metric(f"Total Major Exports {latest_year}", f"{total_latest:.1f} Mt")
+            total_latest = st.session_state.corn_export_data["WORLD"][latest_year]
+            st.metric(f"World Exports {latest_year}", f"{total_latest:.1f} Mt")
 
     with col2:
         if (
-            "WORLD" in st.session_state.export_data
-            and latest_year in st.session_state.export_data["WORLD"]
-            and prev_year in st.session_state.export_data["WORLD"]
+            "WORLD" in st.session_state.corn_export_data
+            and latest_year in st.session_state.corn_export_data["WORLD"]
+            and prev_year in st.session_state.corn_export_data["WORLD"]
         ):
             total_change = (
-                st.session_state.export_data["WORLD"][latest_year]
-                - st.session_state.export_data["WORLD"][prev_year]
+                st.session_state.corn_export_data["WORLD"][latest_year]
+                - st.session_state.corn_export_data["WORLD"][prev_year]
             )
             st.metric("Change from Previous Year", f"{total_change:+.1f} Mt")
 
@@ -382,7 +576,7 @@ with tabs[0]:  # Data Overview tab
         # Find top exporter (excluding WORLD)
         countries_only = {
             k: v
-            for k, v in st.session_state.export_data.items()
+            for k, v in st.session_state.corn_export_data.items()
             if k != "WORLD" and k in ALLOWED_EXPORT_COUNTRIES
         }
         if countries_only and latest_year in next(iter(countries_only.values())):
@@ -396,9 +590,9 @@ with tabs[0]:  # Data Overview tab
             top_export = top_exporter[1][latest_year]
             st.metric("Top Export Volume", f"{top_export:.1f} Mt")
 
-with tabs[1]:  # Edit Projections tab
+with tab2:
     # Get the projection year (last year in display_years)
-    display_years = st.session_state.export_current_config.get(
+    display_years = st.session_state.corn_export_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
     projection_year = display_years[-1]
@@ -410,7 +604,7 @@ with tabs[1]:  # Edit Projections tab
     )
 
     # Create form for editing projections
-    with st.form("export_projection_form"):
+    with st.form("corn_export_projection_form"):
         st.markdown(f"### Update Export Projections for {projection_year}")
 
         # Create input fields for each country
@@ -419,26 +613,28 @@ with tabs[1]:  # Edit Projections tab
         # Filter countries to allowed list only (excluding WORLD)
         filtered_countries = [
             c
-            for c in st.session_state.export_data.keys()
+            for c in st.session_state.corn_export_data.keys()
             if c in ALLOWED_EXPORT_COUNTRIES and c != "WORLD"
         ]
 
         for country in filtered_countries:
-            if projection_year not in st.session_state.export_data[country]:
+            if projection_year not in st.session_state.corn_export_data[country]:
                 continue
 
-            current_value = st.session_state.export_data[country][projection_year]
+            current_value = st.session_state.corn_export_data[country][projection_year]
 
             # Calculate change from estimate year
-            estimate_value = st.session_state.export_data[country].get(estimate_year, 0)
+            estimate_value = st.session_state.corn_export_data[country].get(
+                estimate_year, 0
+            )
             current_change = current_value - estimate_value if estimate_value else 0
 
             # Show historical trend
             historical_values = []
             for year in display_years[:-1]:
-                if year in st.session_state.export_data[country]:
+                if year in st.session_state.corn_export_data[country]:
                     historical_values.append(
-                        st.session_state.export_data[country][year]
+                        st.session_state.corn_export_data[country][year]
                     )
 
             st.subheader(f"{country}")
@@ -451,7 +647,7 @@ with tabs[1]:  # Edit Projections tab
                     min_value=0.0,
                     step=0.1,
                     format="%.1f",
-                    key=f"export_{country}",
+                    key=f"corn_export_{country}",
                     help=(
                         f"Historical: {' → '.join([f'{v:.1f}' for v in historical_values])}"
                         if historical_values
@@ -477,12 +673,13 @@ with tabs[1]:  # Edit Projections tab
 
             # Update individual countries
             for country, value in updated_values.items():
-                st.session_state.export_data[country][projection_year] = value
+                st.session_state.corn_export_data[country][projection_year] = value
 
                 # Calculate change from estimate year
-                if estimate_year in st.session_state.export_data[country]:
+                if estimate_year in st.session_state.corn_export_data[country]:
                     change = (
-                        value - st.session_state.export_data[country][estimate_year]
+                        value
+                        - st.session_state.corn_export_data[country][estimate_year]
                     )
                 else:
                     change = 0
@@ -493,21 +690,25 @@ with tabs[1]:  # Edit Projections tab
 
             # Calculate and update total
             total_exports = sum(updated_values.values())
-            if estimate_year in st.session_state.export_data.get("WORLD", {}):
+            if estimate_year in st.session_state.corn_export_data.get("WORLD", {}):
                 total_change = (
-                    total_exports - st.session_state.export_data["WORLD"][estimate_year]
+                    total_exports
+                    - st.session_state.corn_export_data["WORLD"][estimate_year]
                 )
             else:
                 total_change = 0
 
-            if "WORLD" not in st.session_state.export_data:
-                st.session_state.export_data["WORLD"] = {}
+            if "WORLD" not in st.session_state.corn_export_data:
+                st.session_state.corn_export_data["WORLD"] = {}
 
-            st.session_state.export_data["WORLD"][projection_year] = total_exports
+            st.session_state.corn_export_data["WORLD"][projection_year] = total_exports
 
             if db:
                 db.update_export_value(
-                    "WORLD", projection_year, total_exports, total_change
+                    "WORLD",
+                    projection_year,
+                    total_exports,
+                    total_change,
                 )
 
             st.success("✅ Export projections updated successfully!")
@@ -515,11 +716,11 @@ with tabs[1]:  # Edit Projections tab
                 st.info("💾 Changes saved to database")
             st.rerun()
 
-with tabs[2]:  # Visualizations tab
+with tab3:
     st.header("Export Visualizations")
 
     # Get display years from configuration
-    display_years = st.session_state.export_current_config.get(
+    display_years = st.session_state.corn_export_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
     )
 
@@ -529,7 +730,7 @@ with tabs[2]:  # Visualizations tab
     # Select countries to display - filtered to allowed countries only
     available_countries = [
         c
-        for c in st.session_state.export_data.keys()
+        for c in st.session_state.corn_export_data.keys()
         if c in ALLOWED_EXPORT_COUNTRIES and c != "WORLD"
     ]
 
@@ -560,8 +761,8 @@ with tabs[2]:  # Visualizations tab
             years_with_data = []
 
             for year in display_years:
-                if year in st.session_state.export_data[country]:
-                    values.append(st.session_state.export_data[country][year])
+                if year in st.session_state.corn_export_data[country]:
+                    values.append(st.session_state.corn_export_data[country][year])
                     years_with_data.append(year)
 
             if values:
@@ -578,13 +779,15 @@ with tabs[2]:  # Visualizations tab
                 )
 
         # Add total line if requested
-        if st.checkbox("Show WORLD"):
-            if "WORLD" in st.session_state.export_data:
+        if st.checkbox("Show WORLD Total"):
+            if "WORLD" in st.session_state.corn_export_data:
                 total_values = []
                 total_years = []
                 for year in display_years:
-                    if year in st.session_state.export_data["WORLD"]:
-                        total_values.append(st.session_state.export_data["WORLD"][year])
+                    if year in st.session_state.corn_export_data["WORLD"]:
+                        total_values.append(
+                            st.session_state.corn_export_data["WORLD"][year]
+                        )
                         total_years.append(year)
 
                 if total_values:
@@ -602,7 +805,7 @@ with tabs[2]:  # Visualizations tab
                     )
 
         fig.update_layout(
-            title="Wheat Export Trends by Major Exporters",
+            title="Corn Export Trends by Major Exporters",
             xaxis_title="Year",
             yaxis_title="Exports (Million Metric Tons)",
             hovermode="x unified",
@@ -614,7 +817,7 @@ with tabs[2]:  # Visualizations tab
             # Find the index where projection starts
             for i, year in enumerate(display_years):
                 if (
-                    st.session_state.export_current_config["year_status"].get(year)
+                    st.session_state.corn_export_current_config["year_status"].get(year)
                     == "projection"
                 ):
                     fig.add_vline(
@@ -634,7 +837,7 @@ with tabs[2]:  # Visualizations tab
     # Prepare data for pie chart
     countries_only = {
         k: v
-        for k, v in st.session_state.export_data.items()
+        for k, v in st.session_state.corn_export_data.items()
         if k != "WORLD" and k in ALLOWED_EXPORT_COUNTRIES
     }
 
@@ -669,7 +872,7 @@ with tabs[2]:  # Visualizations tab
     # Change analysis - filtered to allowed countries
     filtered_data = {
         k: v
-        for k, v in st.session_state.export_data.items()
+        for k, v in st.session_state.corn_export_data.items()
         if k in ALLOWED_EXPORT_COUNTRIES
     }
 
@@ -681,16 +884,7 @@ with tabs[2]:  # Visualizations tab
 
     create_change_visualization(filtered_data, "Exports", exclude=["WORLD"])
 
-with tabs[3]:  # AI Research tab
-    # Use the enhanced AI research tab component
-    create_wheat_ai_research_tab(
-        data_type="exports",
-        current_data=st.session_state.export_data,
-        db_helper=get_database(),
-        update_method_name="update_export_value",
-    )
-
-with tabs[4]:  # Data Export tab
+with tab4:
     st.header("Export Data Management")
 
     # Export options
@@ -700,20 +894,20 @@ with tabs[4]:  # Data Export tab
         st.subheader("Export Current Data")
 
         # Filter data for export
-        export_wheat_data = {
+        export_corn_data = {
             country: data
-            for country, data in st.session_state.export_data.items()
+            for country, data in st.session_state.corn_export_data.items()
             if country in ALLOWED_EXPORT_COUNTRIES
         }
 
         # Prepare export data
         export_data = {
-            "wheat_export_data": export_wheat_data,
-            "metadata": st.session_state.export_metadata,
-            "current_config": st.session_state.export_current_config,
+            "corn_export_data": export_corn_data,
+            "metadata": st.session_state.corn_export_metadata,
+            "current_config": st.session_state.corn_export_current_config,
             "export_timestamp": datetime.now().isoformat(),
             "data_source": (
-                "database" if st.session_state.export_data_loaded else "local"
+                "database" if st.session_state.corn_export_data_loaded else "local"
             ),
             "user": st.session_state.get("username", "unknown"),
         }
@@ -722,17 +916,17 @@ with tabs[4]:  # Data Export tab
         st.download_button(
             label="📥 Download Export Data as JSON",
             data=json.dumps(export_data, indent=2),
-            file_name=f"wheat_export_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            file_name=f"corn_export_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
         )
 
         # CSV export
-        df_export = pd.DataFrame(export_wheat_data).T
+        df_export = pd.DataFrame(export_corn_data).T
         csv_data = df_export.to_csv()
         st.download_button(
             label="📥 Download Export Data as CSV",
             data=csv_data,
-            file_name=f"wheat_export_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"corn_export_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
         )
 
@@ -746,22 +940,24 @@ with tabs[4]:  # Data Export tab
                 uploaded_data = json.load(uploaded_file)
 
                 if st.button("Import Export Data"):
-                    if "wheat_export_data" in uploaded_data:
+                    if "corn_export_data" in uploaded_data:
                         # Filter imported data to allowed countries
                         filtered_data = {
                             country: data
                             for country, data in uploaded_data[
-                                "wheat_export_data"
+                                "corn_export_data"
                             ].items()
                             if country in ALLOWED_EXPORT_COUNTRIES
                         }
-                        st.session_state.export_data = filtered_data
+                        st.session_state.corn_export_data = filtered_data
 
                     if "metadata" in uploaded_data:
-                        st.session_state.export_metadata = uploaded_data["metadata"]
+                        st.session_state.corn_export_metadata = uploaded_data[
+                            "metadata"
+                        ]
 
                     if "current_config" in uploaded_data:
-                        st.session_state.export_current_config = uploaded_data[
+                        st.session_state.corn_export_current_config = uploaded_data[
                             "current_config"
                         ]
 
@@ -775,14 +971,14 @@ with tabs[4]:  # Data Export tab
 st.markdown("---")
 status_text = (
     "🗄️ Database Connected"
-    if st.session_state.export_data_loaded
+    if st.session_state.corn_export_data_loaded
     else "💾 Local Data Mode"
 )
 user_info = f"👤 {st.session_state.get('name', 'User')}"
 st.markdown(
     f"""
     <div style='text-align: center; color: #666; font-size: 0.8em;'>
-    📦 Wheat Exports Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
+    📦 Corn Exports Dashboard | {status_text} | {user_info} | PPF Europe Analysis Platform
     </div>
     """,
     unsafe_allow_html=True,
