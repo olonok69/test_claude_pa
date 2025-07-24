@@ -437,6 +437,8 @@ tab_names = [
     "🤖 AI Research",
     "💾 Data Export",
 ]
+# Create tabs with AI Research
+tab_names = ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "🤖 AI Research", "💾 Data Export"]
 tabs = st.tabs(tab_names)
 
 with tabs[0]:
@@ -876,8 +878,22 @@ with tabs[3]:  # AI Research tab
         commodity="wheat",
         data_type="imports",
         current_data=st.session_state.import_data,
-        db_helper=get_database(),
+        db_helper=get_database(
+    
+    ),
         update_method_name="update_import_value",
+    )
+
+
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="wheat",
+        data_type="imports",
+        current_data=st.session_state.import_data,
+        db_helper=get_database(
+    
+    ),
+        update_method_name="update_import_value"
     )
 
 with tabs[4]:

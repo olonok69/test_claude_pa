@@ -396,6 +396,8 @@ def initialize_new_year():
             conn.close()
         st.error(f"❌ Error initializing new year: {e}")
         import traceback
+# Import AI Research components
+from utils.enhanced_ai_research_tab import create_ai_research_tab
 
         traceback.print_exc()
         return False, str(e)
@@ -442,17 +444,11 @@ else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
 # Main content area
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "📈 Data Overview",
-        "✏️ Edit Projections",
-        "📊 Visualizations",
-        "🌍 Regional Analysis",
-        "💾 Data Export",
-    ]
-)
+# Create tabs with AI Research
+tab_names = ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "🤖 AI Research", "💾 Data Export"]
+tabs = st.tabs(tab_names)
 
-with tab1:
+with tabs[0]:
     st.header("Global Corn Yields")
 
     # Year initialization section
@@ -614,7 +610,7 @@ with tab1:
         )
         st.metric("Countries Improving", improving)
 
-with tab2:
+with tabs[1]:
     # Get the projection year (last year in display_years)
     display_years = st.session_state.corn_yield_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
@@ -780,7 +776,7 @@ with tab2:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
-with tab3:
+with tabs[2]:
     st.header("Yield Visualizations")
 
     # Get display years from configuration
@@ -930,7 +926,7 @@ with tab3:
 
     create_change_visualization(filtered_data, "Yield", exclude=["WORLD"])
 
-with tab4:
+with tabs[4]:
     st.header("Regional Yield Analysis")
 
     # Get display years from configuration
@@ -1099,7 +1095,7 @@ with tab4:
         )
         st.plotly_chart(fig_pie, use_container_width=True)
 
-with tab5:
+with tabs[4]:
     st.header("Yield Data Management")
 
     # Export options
@@ -1196,3 +1192,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="corn",
+        data_type="yield",
+        current_data=st.session_state.corn_yield_data,
+        db_helper=get_database(
+    
+    ),
+        update_method_name="update_corn_yield_value"
+    )

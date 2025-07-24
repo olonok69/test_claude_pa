@@ -380,6 +380,8 @@ def initialize_new_year():
             conn.close()
         st.error(f"❌ Error initializing new year: {e}")
         import traceback
+# Import AI Research components
+from utils.enhanced_ai_research_tab import create_ai_research_tab
 
         traceback.print_exc()
         return False, str(e)
@@ -426,17 +428,11 @@ else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
 # Main content area
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "📈 Data Overview",
-        "✏️ Edit Projections",
-        "📊 Visualizations",
-        "📐 Stock-to-Use Analysis",
-        "💾 Data Export",
-    ]
-)
+# Create tabs with AI Research
+tab_names = ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "🤖 AI Research", "💾 Data Export"]
+tabs = st.tabs(tab_names)
 
-with tab1:
+with tabs[0]:
     st.header("Global Corn Ending Stocks")
 
     # Year initialization section
@@ -626,7 +622,7 @@ with tab1:
             )
             st.metric(f"Top Stock Holder", top_holder[0])
 
-with tab2:
+with tabs[1]:
     # Get the projection year (last year in display_years)
     display_years = st.session_state.corn_stocks_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
@@ -751,7 +747,7 @@ with tab2:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
-with tab3:
+with tabs[2]:
     st.header("Stock Visualizations")
 
     # Get display years from configuration
@@ -891,7 +887,7 @@ with tab3:
 
     create_change_visualization(filtered_data, "Stocks", exclude=["WORLD"])
 
-with tab4:
+with tabs[4]:
     st.header("Stock-to-Use Ratio Analysis")
 
     st.markdown(
@@ -922,7 +918,7 @@ with tab4:
     if st.button("Go to S/U Ratio Analysis", type="primary"):
         st.switch_page("pages/14_corn_stock_to_use_ratio.py")
 
-with tab5:
+with tabs[4]:
     st.header("Stock Data Management")
 
     # Export options
@@ -1021,3 +1017,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="corn",
+        data_type="stocks",
+        current_data=st.session_state.corn_stock_data,
+        db_helper=get_database(
+    
+    ),
+        update_method_name="update_corn_stock_value"
+    )

@@ -365,6 +365,8 @@ def initialize_new_year():
             conn.close()
         st.error(f"❌ Error initializing new year: {e}")
         import traceback
+# Import AI Research components
+from utils.enhanced_ai_research_tab import create_ai_research_tab
 
         traceback.print_exc()
         return False, str(e)
@@ -426,17 +428,11 @@ else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
 # Main content area
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "📈 Data Overview",
-        "✏️ Edit Projections",
-        "📊 Visualizations",
-        "🌍 Regional Insights",
-        "💾 Data Export",
-    ]
-)
+# Create tabs with AI Research
+tab_names = ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "🤖 AI Research", "💾 Data Export"]
+tabs = st.tabs(tab_names)
 
-with tab1:
+with tabs[0]:
     st.header("Global Corn Stock-to-Use Ratios")
 
     # Year initialization section
@@ -650,7 +646,7 @@ with tab1:
                 f"{min_country[0]}: {min_country[1][latest_year]:.1f}%",
             )
 
-with tab2:
+with tabs[1]:
     # Get the projection year (last year in display_years)
     display_years = st.session_state.corn_su_ratio_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
@@ -788,7 +784,7 @@ with tab2:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
-with tab3:
+with tabs[2]:
     st.header("S/U Ratio Visualizations")
 
     # Get display years from configuration
@@ -1006,7 +1002,7 @@ with tab3:
 
         st.plotly_chart(fig_scatter, use_container_width=True)
 
-with tab4:
+with tabs[4]:
     st.header("Regional S/U Ratio Insights")
 
     # Get display years from configuration
@@ -1103,7 +1099,7 @@ with tab4:
 
         st.markdown("---")
 
-with tab5:
+with tabs[4]:
     st.header("S/U Ratio Data Management")
 
     # Export options
@@ -1204,3 +1200,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="corn",
+        data_type="su_ratio",
+        current_data=st.session_state.corn_su_ratio_data,
+        db_helper=get_database(
+    
+    ),
+        update_method_name="update_corn_su_ratio_value"
+    )

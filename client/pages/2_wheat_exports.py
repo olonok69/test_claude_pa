@@ -21,6 +21,8 @@ from wheat_helpers.common_functions import (
 
 # Import the new AI research component
 from utils.enhanced_ai_research_tab import create_wheat_ai_research_tab
+# Import AI Research components
+from utils.enhanced_ai_research_tab import create_ai_research_tab
 
 # Page configuration
 st.set_page_config(
@@ -242,6 +244,8 @@ tab_names = [
 ]
 
 # Create tabs
+# Create tabs with AI Research
+tab_names = ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "🤖 AI Research", "💾 Data Export"]
 tabs = st.tabs(tab_names)
 
 with tabs[0]:  # Data Overview tab
@@ -787,3 +791,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="wheat",
+        data_type="exports",
+        current_data=st.session_state.export_data,
+        db_helper=get_database(
+    
+    ),
+        update_method_name="update_export_value"
+    )

@@ -454,6 +454,8 @@ tab_names = [
     "🌍 Regional Analysis",
     "💾 Data Export",
 ]
+# Create tabs with AI Research
+tab_names = ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "🤖 AI Research", "💾 Data Export"]
 tabs = st.tabs(tab_names)
 with tabs[0]:
     st.header("Global Wheat Yields")
@@ -925,7 +927,9 @@ with tabs[3]:  # AI Research tab
         commodity="wheat",
         data_type="yield",
         current_data=st.session_state.yield_data,
-        db_helper=get_database(),
+        db_helper=get_database(
+    
+    ),
         update_method_name="update_yield_value",
     )
 
@@ -1171,3 +1175,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="wheat",
+        data_type="yield",
+        current_data=st.session_state.yield_data,
+        db_helper=get_database(
+    
+    ),
+        update_method_name="update_yield_value"
+    )
