@@ -18,6 +18,9 @@ from wheat_helpers.common_functions import (
     style_change_column,
 )
 
+# Import AI Research components
+from utils.enhanced_ai_research_tab import create_ai_research_tab
+
 
 def style_percentage_column(val):
     """Style function for percentage columns"""
@@ -425,18 +428,18 @@ if st.session_state.acreage_data_loaded:
 else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
-# Main content area
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "📈 Data Overview",
-        "✏️ Edit Projections",
-        "📊 Visualizations",
-        "🌱 Yield Analysis",
-        "💾 Data Export",
-    ]
-)
+# Create tabs with AI Research
+tab_names = [
+    "📈 Data Overview",
+    "✏️ Edit Projections",
+    "📊 Visualizations",
+    "🤖 AI Research",
+    "🌱 Yield Analysis",
+    "💾 Data Export",
+]
+tabs = st.tabs(tab_names)
 
-with tab1:
+with tabs[0]:
     st.header("Global Wheat Acreage (Area Harvested)")
 
     # Year initialization section
@@ -631,7 +634,7 @@ with tab1:
             )
             st.metric(f"Largest Area", f"{top_country[0]}")
 
-with tab2:
+with tabs[1]:
     # Get the projection year (last year in display_years)
     display_years = st.session_state.acreage_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
@@ -785,7 +788,7 @@ with tab2:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
-with tab3:
+with tabs[2]:
     st.header("Acreage Visualizations")
 
     # Get display years from configuration
@@ -926,7 +929,16 @@ with tab3:
 
     create_change_visualization(filtered_data, "Acreage", exclude=["WORLD"])
 
-with tab4:
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="wheat",
+        data_type="acreage",
+        current_data=st.session_state.acreage_data,
+        db_helper=get_database(),
+        update_method_name="update_acreage_value",
+    )
+
+with tabs[4]:  # Regional Analysis tab
     st.header("Yield Analysis")
 
     st.markdown(
@@ -1052,7 +1064,7 @@ with tab4:
                 f"{min_yield_country['Country']}: {min_yield_country['Yield']:.2f} t/ha",
             )
 
-with tab5:
+with tabs[5]:  # Data Export tab
     st.header("Acreage Data Management")
 
     # Export options

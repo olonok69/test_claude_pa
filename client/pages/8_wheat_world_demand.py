@@ -25,6 +25,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+# Import AI Research components
+from utils.enhanced_ai_research_tab import create_ai_research_tab
 
 # Hide the navigation on this page
 st.markdown(
@@ -279,17 +281,18 @@ else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
 # Main content area
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "📈 Data Overview",
-        "✏️ Edit Projections",
-        "📊 Visualizations",
-        "🌍 Category Analysis",
-        "💾 Data Export",
-    ]
-)
 
-with tab1:
+tab_names = [
+    "📈 Data Overview",
+    "✏️ Edit Projections",
+    "📊 Visualizations",
+    "🤖 AI Research",
+    "🌍 Category Analysis",
+    "💾 Data Export",
+]
+tabs = st.tabs(tab_names)
+
+with tabs[0]:
     st.header("Global Wheat Demand by Category")
 
     # Refresh button
@@ -435,7 +438,7 @@ with tab1:
             feed_demand = st.session_state.demand_data["Feed"][latest_year]
             st.metric("Feed Demand", f"{feed_demand:.1f} Mt")
 
-with tab2:
+with tabs[1]:
     # Get the projection year (last year in display_years)
     display_years = st.session_state.demand_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
@@ -611,7 +614,7 @@ with tab2:
             st.info("💾 Changes saved to database")
             st.rerun()
 
-with tab3:
+with tabs[2]:
     st.header("Demand Visualizations")
 
     # Get display years from configuration
@@ -770,7 +773,16 @@ with tab3:
 
         st.plotly_chart(fig_changes, use_container_width=True)
 
-with tab4:
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="wheat",
+        data_type="world_demand",
+        current_data=st.session_state.demand_data,
+        db_helper=get_database(),
+        update_method_name="update_demand_value",
+    )
+
+with tabs[4]:
     st.header("Category Analysis")
 
     # Get display years from configuration
@@ -910,7 +922,7 @@ with tab4:
                 "Feed demand fluctuates based on livestock numbers and alternative feed availability."
             )
 
-with tab5:
+with tabs[5]:
     st.header("Demand Data Management")
 
     # Export options

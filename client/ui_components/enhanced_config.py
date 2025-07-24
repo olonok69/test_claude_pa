@@ -10,7 +10,7 @@ from utils.async_helpers import reset_connection_state
 # Enhanced model configuration with main providers
 EXTENDED_MODEL_OPTIONS = {
     "OpenAI": {
-        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4.1"],
         "default_model": "gpt-4o",
         "required_env": ["OPENAI_API_KEY"],
         "optional_env": ["OPENAI_ORG_ID"],

@@ -18,6 +18,9 @@ from wheat_helpers.common_functions import (
     style_change_column,
 )
 
+# Import AI Research components
+from utils.enhanced_ai_research_tab import create_ai_research_tab
+
 # Page configuration
 st.set_page_config(
     page_title="Wheat Yield Dashboard",
@@ -441,18 +444,18 @@ if st.session_state.yield_data_loaded:
 else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
-# Main content area
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "📈 Data Overview",
-        "✏️ Edit Projections",
-        "📊 Visualizations",
-        "🌍 Regional Analysis",
-        "💾 Data Export",
-    ]
-)
 
-with tab1:
+# Create tabs with AI Research
+tab_names = [
+    "📈 Data Overview",
+    "✏️ Edit Projections",
+    "📊 Visualizations",
+    "🤖 AI Research",
+    "🌍 Regional Analysis",
+    "💾 Data Export",
+]
+tabs = st.tabs(tab_names)
+with tabs[0]:
     st.header("Global Wheat Yields")
 
     # Year initialization section
@@ -613,7 +616,7 @@ with tab1:
         )
         st.metric("Countries Improving", improving)
 
-with tab2:
+with tabs[1]:
     # Get the projection year (last year in display_years)
     display_years = st.session_state.yield_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
@@ -769,7 +772,7 @@ with tab2:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
-with tab3:
+with tabs[2]:
     st.header("Yield Visualizations")
 
     # Get display years from configuration
@@ -917,7 +920,16 @@ with tab3:
 
     create_change_visualization(filtered_data, "Yield", exclude=["WORLD"])
 
-with tab4:
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="wheat",
+        data_type="yield",
+        current_data=st.session_state.yield_data,
+        db_helper=get_database(),
+        update_method_name="update_yield_value",
+    )
+
+with tabs[4]:  # Regional Analysis tab
     st.header("Regional Yield Analysis")
 
     # Get display years from configuration
@@ -1062,7 +1074,7 @@ with tab4:
         )
         st.table(stats_df)
 
-with tab5:
+with tabs[5]:
     st.header("Yield Data Management")
 
     # Export options

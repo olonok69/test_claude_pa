@@ -18,6 +18,9 @@ from wheat_helpers.common_functions import (
     style_change_column,
 )
 
+# Import AI Research components
+from utils.enhanced_ai_research_tab import create_ai_research_tab
+
 
 def style_percentage_column(val):
     """Style function for percentage columns"""
@@ -425,18 +428,19 @@ if st.session_state.stocks_data_loaded:
 else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
-# Main content area
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "📈 Data Overview",
-        "✏️ Edit Projections",
-        "📊 Visualizations",
-        "📐 Stock-to-Use Analysis",
-        "💾 Data Export",
-    ]
-)
 
-with tab1:
+# Create tabs with AI Research
+tab_names = [
+    "📈 Data Overview",
+    "✏️ Edit Projections",
+    "📊 Visualizations",
+    "🤖 AI Research",
+    "📐 Stock-to-Use Analysis",
+    "💾 Data Export",
+]
+tabs = st.tabs(tab_names)
+
+with tabs[0]:  # Data Overview tab
     st.header("Global Wheat Ending Stocks")
 
     # Year initialization section
@@ -624,7 +628,7 @@ with tab1:
             )
             st.metric(f"Top Stock Holder", top_holder[0])
 
-with tab2:
+with tabs[1]:  # Edit Projections tab
     # Get the projection year (last year in display_years)
     display_years = st.session_state.stocks_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
@@ -745,7 +749,7 @@ with tab2:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
-with tab3:
+with tabs[2]:  # Visualizations tab
     st.header("Stock Visualizations")
 
     # Get display years from configuration
@@ -883,7 +887,16 @@ with tab3:
 
     create_change_visualization(filtered_data, "Stocks", exclude=["WORLD"])
 
-with tab4:
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="wheat",
+        data_type="stocks",
+        current_data=st.session_state.stocks_data,
+        db_helper=get_database(),
+        update_method_name="update_stocks_data",
+    )
+
+with tabs[4]:  # Stock-to-Use Analysis tab
     st.header("Stock-to-Use Ratio Analysis")
 
     st.markdown(
@@ -911,7 +924,7 @@ with tab4:
         "This feature will be available once the full supply and demand data is integrated."
     )
 
-with tab5:
+with tabs[5]:  # Data Export tab
     st.header("Stock Data Management")
 
     # Export options

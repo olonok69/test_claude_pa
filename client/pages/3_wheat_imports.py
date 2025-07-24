@@ -17,6 +17,9 @@ from wheat_helpers.common_functions import (
     style_change_column,
 )
 
+# Import AI Research components
+from utils.enhanced_ai_research_tab import create_ai_research_tab
+
 
 def style_percentage_column(val):
     """Style function for percentage columns"""
@@ -426,11 +429,17 @@ else:
     st.sidebar.warning("⚠️ Using Local Data (No Database)")
 
 # Main content area
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["📈 Data Overview", "✏️ Edit Projections", "📊 Visualizations", "💾 Data Export"]
-)
+# Create tabs with AI Research
+tab_names = [
+    "📈 Data Overview",
+    "✏️ Edit Projections",
+    "📊 Visualizations",
+    "🤖 AI Research",
+    "💾 Data Export",
+]
+tabs = st.tabs(tab_names)
 
-with tab1:
+with tabs[0]:
     st.header("Global Wheat Imports")
 
     # Year initialization section
@@ -600,7 +609,7 @@ with tab1:
             top_import = top_importer[1][latest_year]
             st.metric("Top Import Volume", f"{top_import:.1f} Mt")
 
-with tab2:
+with tabs[1]:
     # Get the projection year (last year in display_years)
     display_years = st.session_state.import_current_config.get(
         "display_years", ["2022/2023", "2023/2024", "2024/2025", "2025/2026"]
@@ -705,7 +714,7 @@ with tab2:
                 st.info("💾 Changes saved to database")
             st.rerun()
 
-with tab3:
+with tabs[2]:
     st.header("Import Visualizations")
 
     # Time series plot
@@ -862,7 +871,16 @@ with tab3:
 
     create_change_visualization(filtered_data, "Imports", exclude=["WORLD"])
 
-with tab4:
+with tabs[3]:  # AI Research tab
+    create_ai_research_tab(
+        commodity="wheat",
+        data_type="imports",
+        current_data=st.session_state.import_data,
+        db_helper=get_database(),
+        update_method_name="update_import_value",
+    )
+
+with tabs[4]:
     st.header("Data Export & Import")
 
     # Export options

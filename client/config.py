@@ -8,12 +8,12 @@ env = os.getenv
 # Model mapping - OpenAI and Anthropic only
 MODEL_OPTIONS = {
     "Anthropic": "claude-sonnet-4-20250514",
-    "OpenAI": "gpt-4o",
+    "OpenAI": "gpt-4.1",
 }
 
 # Streamlit defaults
 DEFAULT_MAX_TOKENS = 4096
-DEFAULT_TEMPERATURE = 1.0
+DEFAULT_TEMPERATURE = 0.2
 
 # UI Configuration
 TAB_CONFIG = {
