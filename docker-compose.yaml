@@ -1,0 +1,118 @@
+services:
+  # Firecrawl MCP Server (Server 1)
+  mcpserver1:
+    build:
+      context: ./servers/server1
+      dockerfile: Dockerfile
+    container_name: mcpserver1
+    environment:
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
+      - FIRECRAWL_API_URL=${FIRECRAWL_API_URL:-https://api.firecrawl.dev}
+      - SSE_LOCAL=true  # Enable SSE mode
+      - PORT=8001
+    ports:
+      - "8001:8001"
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Google Search MCP Server (Server 2)
+  mcpserver2:
+    build:
+      context: ./servers/server2
+      dockerfile: Dockerfile
+    container_name: mcpserver2
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_SEARCH_ENGINE_ID=${GOOGLE_SEARCH_ENGINE_ID}
+      - PORT=8002
+      - HOST=0.0.0.0
+    ports:
+      - "8002:8002"
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mcpserver3:
+    build: ./servers/server3
+    container_name: mcpserver3
+    ports:
+      - "8003:8003"
+    environment:
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
+      # Cache configuration (optional overrides)
+      - CACHE_TTL_SECONDS=1800  # 30 minutes
+      - HEALTH_CHECK_TTL_SECONDS=300  # 5 minutes
+
+    restart: unless-stopped
+    # Memory limits to prevent excessive cache usage
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    # IMPORTANT: Health check that does NOT call external APIs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - mcp-network
+
+  # MCP Client Application
+  mcp-client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: mcp-client
+    environment:
+      # OpenAI Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - MODEL_NAME=${MODEL_NAME:-claude-sonnet-4-20250514}
+      # SSL Configuration
+      - SSL_ENABLED=${SSL_ENABLED:-false}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      - PERPLEXITY_MODEL=${PERPLEXITY_MODEL}
+      # Cache configuration (optional overrides)
+      - CACHE_TTL_SECONDS=1800  # 30 minutes
+      - HEALTH_CHECK_TTL_SECONDS=300  # 5 minutes     
+      # MCP Server URLs (internal Docker network)
+      - FIRECRAWL_SERVER_URL=http://mcpserver1:8001/sse
+      - GOOGLE_SEARCH_SERVER_URL=http://mcpserver2:8002/sse
+      - PERPLEXITY_SERVER_URL=http://mcpserver3:8003/sse
+    ports:
+      - "8501:8501"  # HTTP
+      - "8503:8503"  # HTTPS (if SSL enabled)
+    depends_on:
+      - mcpserver1
+      - mcpserver2
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  mcp-network:
+    driver: bridge

@@ -5,7 +5,6 @@
 
 # Authentication and security files
 keys/
-*.yaml
 *.yml
 config.yaml
 config.yml
