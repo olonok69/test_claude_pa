@@ -1,247 +1,585 @@
-# AI & ML Repository - Comprehensive Guide
+# AI-Powered Search MCP Integration Platform
 
-A comprehensive collection of AI/ML projects showcasing cutting-edge implementations across computer vision, natural language processing, financial analysis, distributed systems, and modern AI integration patterns.
+A comprehensive full-stack application that provides AI-powered interactions with Firecrawl, Google Search, and Perplexity AI through Model Context Protocol (MCP) servers. This platform enables seamless web search, AI-powered analysis, content extraction, and agricultural data analytics with optional HTTPS security, user authentication, and advanced caching for optimal performance.
 
-## 📋 Table of Contents
+## 🌾 NEW: Grain Market Intelligence Update Process
 
-| Category | Project | Description | Documentation |
-|----------|---------|-------------|---------------|
-| **OpenAI Video Processing** | AI Video Translator | Complete local AI-powered video translation system from Spanish to English using OpenAI Whisper, Helsinki-NLP transformers, and Edge TTS | [📖 English](OpenAI/Video_Translation/README.md) |
-| **Medical AI** | DICOM Anonymization | DICOM medical image anonymization using Microsoft Presidio | [📖 English](DICOM_FHIR/Readme_en.md) |
-| **Google AI** | Video Summarizer | AI-powered video transcription and summarization with Gemini Pro | [📖 English](Google_AI/Video_summarizer/Readme.md) |
-| **Google AI** | Content Caching | Google AI Context Caching optimization with Gemini API | [📖 English](Google_AI/content_caching/Readme_en.md) |
-| **Distributed OCR** | NATS OCR System | Distributed OCR system with NATS messaging and RapidOCR | [📖 English](Nats/Readme_en.md) |
-| **Financial RAG** | Financial Analysis | RAG system for fundamental financial analysis with real-time data | [📖 English](RAG/Intro/Readme.md) |
-| **Trading Strategy** | Bollinger RSI Strategy | Trading strategy combining Bollinger Bands and RSI crossover | [📖 English](RAG/bollinger%20z-score%20rsi%20startegy/Readme.md) |
-| **Trading Analysis** | Bollinger Z-Score | Financial trading analysis with Bollinger Bands and Z-Score | [📖 English](RAG/bollinger%20z-score/Readme.md) |
-| **Trading Strategy** | Bollinger Fibonacci | Advanced strategy combining Bollinger Bands and Fibonacci retracements | [📖 English](RAG/bollinger-fibonacci_retracements/Readme.md) |
-| **Trading Strategy** | Connors RSI Strategy | Advanced momentum oscillator with LangGraph integration for enhanced mean reversion signals | [📖 English](RAG/connor-rsi/Readme.md) |
-| **Trading Strategy** | MACD Donchian | Combined MACD and Donchian Channels trading strategy | [📖 English](RAG/macd_downchain%20startegy/Readme.md) |
-| **Graph Database** | Neo4j RAG System | Natural language interface for Neo4j graph databases | [📖 English](RAG/speak%20with%20your%20Graph%20Database/Readme.md) |
-| **MCP Integration** | MCP Servers | Model Context Protocol servers for Claude AI integration | [📖 English](mcp/mcp_server/readme_en.md) |
-| **MCP Development** | Python MCP Client/Server | Python-based MCP financial analysis server with SSE transport | [📖 English](mcp/python_client_server/README.md) |
-| **MCP Client** | Multi-Language MCP Client | Comprehensive MCP client with financial analysis tools and multi-server support | [📖 English](mcp/mcp-client/README.md) |
-| **MCP Chatbot** | Chainlit MCP Bot | Conversational AI chatbot integrating Neo4j and HubSpot through MCP protocol | [📖 English](mcp/chainlit_bot/README.md) |
-| **MCP Platform** | Streamlit CRM & Graph Platform | Full-stack AI-powered platform integrating Neo4j, HubSpot CRM, and Yahoo Finance with enterprise authentication | [📖 English](mcp/Streamlit_chatbot/README.md) |
-| **MCP Development** | Build MCP with LLMs | Comprehensive guide to accelerate MCP server development using language models like Claude, with practical PDF document processor example | [📖 English](mcp/Build%20MCP%20with%20LLMs/README.md) |
-| **MCP Search Platform** | AI-Powered Search MCP Integration Platform | Comprehensive full-stack application providing AI-powered interactions with Google Search and Perplexity AI through MCP servers with optional HTTPS security, user authentication, and advanced caching | [📖 English](mcp/Motor_busqueda_AI_google_perplexity/Readme.md) |
-| **Claude Desktop** | Claude Desktop Setup Guide | Complete guide for Claude Desktop installation and MCP configuration | [📖 English](mcp/claude_desktop/Readme.md) |
+The platform now includes an AI-assisted workflow for comprehensive grain market analysis and reporting. This feature automates the collection and synthesis of agricultural data from multiple sources to generate market direction reports.
 
-## 🌟 Repository Overview
+### Grain Report Update Workflow Overview
 
-This repository represents a comprehensive exploration of modern AI/ML technologies, demonstrating practical implementations across multiple domains:
+![Grain Market Intelligence Update Process](./docs/grain-report-update-process.svg)
 
-### 🎬 OpenAI Video Processing & Translation
-- **AI Video Translator**: A powerful, completely free and local AI-powered video translation system that translates Spanish videos to English using state-of-the-art machine learning models. Features high-accuracy transcription with OpenAI Whisper, neural machine translation with Helsinki-NLP transformers, and natural-sounding speech synthesis with Edge TTS. Supports long videos (2+ hours) with intelligent segment processing, multiple voice options, and 100% local processing ensuring complete privacy. No cloud services, subscriptions, or data privacy concerns.
+The grain market intelligence system follows a 5-phase AI-assisted workflow:
 
-### 🏥 Medical AI & Computer Vision
-- **DICOM Anonymization**: Advanced medical image processing system that automatically detects and redacts Personal Health Information (PHI) in DICOM medical images using Microsoft's Presidio framework, ensuring HIPAA compliance.
+#### **Phase 1: Data Collection from Multiple Sources**
+The AI Agent Controller orchestrates data collection from:
 
-### 🤖 Google AI Ecosystem
-- **Video Summarizer**: Leverage Google's Gemini 2.0 Flash model for intelligent video content analysis, providing structured summaries and complete transcriptions with cloud integration.
-- **Content Caching**: Optimize token usage and reduce costs through Google's Context Caching feature, demonstrating 99.5% token reduction and 12-18x speed improvements.
+- **USDA Sources** (Monthly/Weekly Updates)
+  - WASDE Report (Monthly)
+  - Grain World Markets (Monthly)
+  - GAIN Reports (Weekly)
+  - World Agricultural Production (Monthly)
+  - PSD Reports (Various schedules)
 
-### ⚡ Distributed Systems
-- **NATS OCR System**: High-performance distributed OCR processing using NATS JetStream for reliable message delivery and RapidOCR for text extraction, perfect for microservice architectures.
+- **IGC Sources** (Monthly)
+  - Supply & Demand Reports
+  - GMR Report
 
-### 💰 Financial Analysis & Trading
-- **Comprehensive RAG System**: Fundamental financial analysis combining traditional techniques with modern AI/ML, featuring real-time data integration and intelligent insights.
-- **Multiple Trading Strategies**: Implementation of sophisticated trading algorithms including:
-  - **Bollinger Bands with RSI crossover analysis**: Multi-indicator confirmation for trending markets
-  - **Z-Score statistical analysis**: Market positioning and mean reversion signals
-  - **Fibonacci retracement integration**: Precise entry/exit points with advanced scoring systems
-  - **Connors RSI Strategy**: Advanced momentum oscillator developed by Larry Connors combining three distinct components:
-    - **Price RSI (33.33%)**: 3-day RSI for recent price momentum
-    - **Streak RSI (33.33%)**: RSI applied to consecutive up/down movements
-    - **Percent Rank (33.33%)**: Percentile ranking over 100-day rolling window
-    - **Enhanced Features**: Z-Score integration, combined scoring system (-100 to +100), LangGraph agent integration
-  - **MACD and Donchian Channels combination**: Momentum analysis with volatility indicators
+- **Stratégie Grains** (Monthly/Various)
+  - EU Grain Report
+  - EU Supply & Demand Balance
 
-### 🔗 Graph Databases & Knowledge Systems
-- **Neo4j RAG Integration**: Natural language interface for complex graph database interactions, enabling conversational queries across interconnected data structures.
+- **Market Data** (Daily)
+  - Euronext MATIF
+  - CME CBOT
+  - Barchart Futures
+  - Mintec/Fastmarkets
 
-### 🔌 Model Context Protocol (MCP)
-- **MCP Server Ecosystem**: Complete implementation of Anthropic's MCP standard, demonstrating the "USB-C for AI integrations" with multiple server configurations.
-- **Python MCP Framework**: Advanced financial analysis server with Server-Sent Events transport, showcasing real-time AI-tool integration.
-- **Multi-Language MCP Client**: Comprehensive client implementation bridging Claude AI with external tools, featuring specialized financial analysis capabilities across Python and Node.js servers.
-- **Chainlit MCP Chatbot**: Sophisticated conversational AI application that seamlessly connects Neo4j graph databases and HubSpot CRM through the Model Context Protocol, built with Chainlit for an intuitive chat interface. Features intelligent data exploration, cross-system analysis, and natural language querying across multiple data sources.
-- **Streamlit CRM & Graph Platform**: Enterprise-grade full-stack application providing AI-powered interactions with Neo4j graph databases, HubSpot CRM systems, and Yahoo Finance data through MCP servers. Features comprehensive authentication, multi-provider AI support, and production-ready architecture with 25+ specialized tools for complete data analysis, management, and automation across database, CRM, and financial data infrastructure.
-- **Build MCP with LLMs**: Comprehensive guide demonstrating how to accelerate MCP server development using language models like Claude. Includes a complete practical example of a PDF document processor with OCR capabilities, custom prompts, and markdown output generation, showcasing how AI can significantly speed up MCP development workflows.
-- **AI-Powered Search MCP Integration Platform**: A comprehensive full-stack application that provides AI-powered interactions with Google Search and Perplexity AI through Model Context Protocol (MCP) servers. This platform enables seamless web search, AI-powered analysis, and content extraction with optional HTTPS security, user authentication, and advanced caching for optimal performance. Features include intelligent caching system with 40-70% API usage reduction, enterprise-grade security with bcrypt authentication and SSL/HTTPS support, dual search engine integration (Google Custom Search and Perplexity AI), and 10 specialized tools across search, content extraction, and cache management. The system provides 80-95% faster response times for cached content and comprehensive monitoring capabilities.
-- **Claude Desktop Integration**: Complete setup guide for Claude Desktop application with MCP server configuration, enabling seamless AI-tool interactions on your desktop.
+- **Weather & Monitoring** (Monthly)
+  - GEOGLAM
+  - JRC MARS Bulletin
+  - Crop/Weather Graphs
 
-## 🛠️ Technology Stack
+- **EU Agridata** (Monthly)
+  - Cereals Prices/Production/Trade
+  - Dashboard Updates
 
-### Core AI/ML Frameworks
-- **OpenAI Whisper**: State-of-the-art speech recognition model trained on 680,000 hours of multilingual audio data
-- **Helsinki-NLP Transformers**: High-quality neural machine translation for Spanish→English
-- **Edge TTS & pyttsx3**: Advanced text-to-speech engines with natural-sounding voices
-- **LangChain & LangGraph**: Advanced AI orchestration and agent workflows
-- **Google Gemini Pro**: State-of-the-art language models for various applications
-- **OpenAI GPT Models**: Integration with OpenAI's API for intelligent processing
-- **Microsoft Presidio**: Privacy protection and PII detection framework
-- **Chainlit**: Python framework for building conversational AI applications
-- **Streamlit**: Python framework for building interactive web applications and data dashboards
+#### **Phase 2: AI-Assisted Data Ingestion**
+Four methods for data ingestion, with varying levels of automation:
 
-### Data Processing & Analytics
-- **FFmpeg & Librosa**: Complete audio/video processing and analysis toolkit
-- **PyTorch**: Deep learning framework for running AI models
-- **Yahoo Finance & Financial APIs**: Real-time and historical financial data
-- **PyDICOM**: Medical image processing and DICOM standard compliance
-- **Pandas & NumPy**: Comprehensive data manipulation and analysis
-- **Plotly & Matplotlib**: Advanced data visualization and interactive charts
+1. **PDF Download & Ingestion** [MANUAL] - Navigate → Download PDF → Vector Store
+2. **Interactive Browsing** [MANUAL] - Filter → Export (PDF/Excel) → Vector Store
+3. **HTML Parsing** [AUTOMATED] - Browse → Parse HTML → Extract Data
+4. **Login & Download** [MANUAL] - Login → Download → Vector Store
 
-### Distributed Systems & Messaging
-- **NATS JetStream**: High-performance distributed messaging system
-- **FastAPI**: Modern, fast web framework for building APIs
-- **Docker**: Containerization for scalable deployment
-- **Server-Sent Events (SSE)**: Real-time bidirectional communication
+The AI Agent performs context creation and extracts relevant 2025/2026 projections and market insights.
 
-### Databases & Storage
-- **Neo4j**: Graph database for complex relationship modeling
-- **HubSpot CRM**: Customer relationship management and sales pipeline tracking
-- **Qdrant**: Vector database for similarity search and RAG applications
-- **Google Cloud Storage**: Scalable cloud storage integration
+#### **Phase 3: Dashboard Updates**
+Automated updates to supply & demand dashboards:
 
-#### **MCP Development**
-```yaml
-Framework: Model Context Protocol (Anthropic)
-Languages: Python, Node.js, TypeScript
-Transport: STDIO, SSE, HTTP
-Tools: FastMCP, PDF processing, OCR
-Development Acceleration: LLM-assisted development
+- **Corn Dashboard** (`corn_dashboard_updated_july_2025.md`)
+  - Production, Export, Import, Ending Stocks, Stock-to-Use
+  - Acreage, Yield, World Demand (2025/2026 column only)
+
+- **Wheat Dashboard** (`wheat_dashboard_updated_july_2025.md`)
+  - Production, Export, Import, Ending Stocks, Stock-to-Use
+  - Acreage, Yield, World Demand (2025/2026 column only)
+
+#### **Phase 4: Database Synchronization**
+- Updates SQLite databases with new figures
+- Syncs corn and wheat data for interactive dashboard refresh
+
+#### **Phase 5: Market Direction Report Generation**
+AI-powered analysis and synthesis:
+1. Analyzes all collected data and updated dashboards
+2. Extracts key market trends, regional variations, and price drivers
+3. Updates `corn_wheat_report.md` with comprehensive analysis
+4. Generates final PDF report: "European Wheat and Corn Market Direction Analysis"
+
+### Update Frequencies
+- 🟢 **Daily**: Market futures, pricing data
+- 🔵 **Weekly**: GAIN reports
+- 🟠 **Monthly**: Most agricultural reports, weather data
+- 🟣 **Variable**: PSD reports, balance sheets
+
+### Key Process Features
+- **Manual Processes**: Methods 1, 2, and 4 require manual intervention
+- **Automated Process**: Method 3 (HTML Parsing) is fully automated
+- **AI Assistance**: Agents help with data extraction, context creation, and report synthesis
+- **Focus**: Only 2025/2026 projection columns are updated in dashboards
+- **Vector Store**: All PDFs and documents are indexed for AI retrieval
+
+## 🚀 System Overview
+
+This application consists of four integrated components working together to provide comprehensive AI-powered search and analysis capabilities:
+
+1. **Streamlit Client** - AI chat interface with multi-provider support, authentication, SSL support, embedded MCP server, and agricultural analytics dashboards
+2. **Firecrawl MCP Server** - Advanced web scraping, crawling, and content extraction via Firecrawl API
+3. **Google Search MCP Server** - Web search and content extraction via Google Custom Search API with intelligent caching
+4. **Perplexity MCP Server** - AI-powered search with intelligent analysis via Perplexity API with response caching
+
+## 🏗️ System Architecture
+
+![MCP Platform Architecture](./docs/mcp_platform_architecture.svg)
+
+## 📋 Port Reference Table
+
+| Service | Port | Protocol | Purpose |
+|---------|------|----------|---------|
+| **Streamlit HTTP** | 8501 | HTTP | Main web interface |
+| **Streamlit HTTPS** | 8503 | HTTPS | Secure web interface (recommended) |
+| **Firecrawl MCP** | 8001 | HTTP/SSE | Web scraping and crawling server |
+| **Google Search MCP** | 8002 | HTTP/SSE | Web search server with caching |
+| **Perplexity MCP** | 8003 | HTTP/SSE | AI search server with caching |
+
+## 🔧 Core Technologies & Dependencies
+
+### **🌐 Frontend & User Interface**
+
+#### **[Streamlit](https://streamlit.io/)** - Web Application Framework
+- **Purpose**: Primary web interface for user interactions and agricultural analytics
+- **Version**: 1.44+
+- **Features**: Real-time updates, component system, session management, data visualization
+- **Enhanced**: Multi-tab interface with agricultural dashboards and AI tools
+
+#### **[Streamlit Authenticator](https://github.com/mkhorasani/Streamlit-Authenticator)** - Authentication System
+- **Purpose**: Secure user login and session management
+- **Version**: 0.3.2
+- **Features**: bcrypt password hashing, role-based access control, 30-day session persistence
+
+### **🧠 AI & Language Models**
+
+#### **[LangChain](https://python.langchain.com/)** - AI Framework
+- **Purpose**: AI agent orchestration and tool routing
+- **Version**: 0.3.20+
+- **Features**: ReAct agents, memory management, tool execution, conversation history
+
+#### **[OpenAI API](https://openai.com/api/)** - AI Language Models
+- **Models**: GPT-4o, GPT-4o-mini
+- **Features**: Tool calling, streaming responses, context handling
+
+#### **[Anthropic Claude](https://anthropic.com)** - AI Language Models
+- **Models**: Claude 3.5 Sonnet
+- **Features**: Advanced reasoning, tool use, long context windows
+
+### **🔍 Search & Data Sources**
+
+#### **[Firecrawl API](https://firecrawl.dev/)** - Advanced Web Scraping
+- **Purpose**: Comprehensive web scraping and crawling capabilities
+- **Features**: Single page scraping, batch scraping, website mapping, deep research
+- **Caching**: Built-in maxAge parameter for 500% faster scrapes
+
+#### **[Google Custom Search API](https://developers.google.com/custom-search)** - Web Search Engine
+- **Purpose**: Comprehensive web search capabilities with intelligent caching
+- **Version**: v1
+- **Caching**: 30-minute TTL for search results, 2-hour TTL for webpage content
+- **Features**: Custom search engines, result filtering, content extraction optimization
+
+#### **[Perplexity AI API](https://www.perplexity.ai/)** - AI-Powered Search
+- **Models**: sonar-deep-research, sonar-reasoning-pro, sonar-reasoning, sonar-pro, sonar, r1-1776
+- **Caching**: 30-minute TTL for API responses
+- **Features**: Recency filtering, model selection, citation support, temperature control
+
+### **🔗 Communication Protocols**
+
+#### **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)** - Standardized AI Communication
+- **Purpose**: Universal protocol for AI tool integration
+- **Version**: 1.0+
+- **Features**: Tool discovery, schema validation, transport flexibility (SSE + stdio)
+
+#### **[Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)** - Real-time Communication
+- **Purpose**: Real-time bidirectional communication for external MCP servers
+- **Features**: Automatic reconnection, message ordering, multiplexing
+
+### **🐳 Infrastructure & Deployment**
+
+#### **[Docker](https://www.docker.com/)** - Containerization Platform
+- **Purpose**: Consistent deployment across environments
+- **Features**: Multi-container orchestration, health checks, volume mounting
+
+#### **[Docker Compose](https://docs.docker.com/compose/)** - Multi-Container Orchestration
+- **Purpose**: Coordinated deployment of multiple services
+- **Features**: Service scaling, configuration management, logging
+
+### **📊 Data Management**
+
+#### **[SQLite](https://www.sqlite.org/)** - Database Engine
+- **Purpose**: Store agricultural production data and analytics
+- **Features**: Lightweight, serverless, zero-configuration
+- **Databases**: wheat_production.db, corn_production.db
+
+#### **[Plotly](https://plotly.com/)** - Data Visualization
+- **Purpose**: Interactive charts and graphs for agricultural data
+- **Features**: Dynamic visualizations, export capabilities, responsive design
+
+## ⚡ Quick Start
+
+### Prerequisites
+- Docker & Docker Compose
+- API Keys:
+  - Firecrawl API key
+  - Google Custom Search API key & Search Engine ID
+  - Perplexity API key
+  - OpenAI or Anthropic API key
+- Optional: SQLite databases for agricultural analytics
+
+### 1. Environment Setup
+
+Create a `.env` file in the project root:
+
+```env
+# AI Provider Configuration (choose one)
+OPENAI_API_KEY=your_openai_api_key_here
+# OR
+ANTHROPIC_API_KEY=your_anthropic_api_key
+
+# Firecrawl Configuration
+FIRECRAWL_API_KEY=your_firecrawl_api_key
+FIRECRAWL_API_URL=https://api.firecrawl.dev
+
+# Google Search Configuration
+GOOGLE_API_KEY=your_google_api_key
+GOOGLE_SEARCH_ENGINE_ID=your_custom_search_engine_id
+
+# Perplexity Configuration
+PERPLEXITY_API_KEY=your_perplexity_api_key
+PERPLEXITY_MODEL=sonar
+
+# SSL Configuration (Optional)
+SSL_ENABLED=true
 ```
 
-### Development Tools
-- **UV Package Manager**: Fast Python package management
-- **Jupyter Notebooks**: Interactive development and documentation
-- **Environment Management**: Secure configuration with environment variables
+### 2. API Setup
 
-## 🚀 Key Features & Innovations
+#### Firecrawl Setup
+1. **Get API Key**: Sign up at [Firecrawl](https://firecrawl.dev) and get your API key
+2. **Configure**: Add to `.env` file
 
-### 🔥 Advanced AI Integration Patterns
-- **Local AI Processing**: Complete privacy-preserving video translation without cloud dependencies
-- **Multi-Modal AI Processing**: Integration of speech recognition, text translation, and speech synthesis
-- **Retrieval-Augmented Generation (RAG)**: Multiple implementations showing different approaches to combining retrieval with generation
-- **Multi-Modal AI**: Integration of text, image, and video processing capabilities
-- **Agent-Based Systems**: Intelligent agents that can discover and use tools dynamically
-- **Model Context Protocol**: Standardized AI-tool integration across multiple languages and platforms
-- **Conversational AI**: Interactive chatbot interfaces for natural language data exploration
-- **Enterprise Web Applications**: Production-ready web platforms with comprehensive authentication and multi-user support
-- **LLM-Accelerated Development**: Using language models to significantly speed up MCP server development and reduce boilerplate code
+#### Google Custom Search Setup
+1. **Get API Key**: Go to [Google Cloud Console](https://console.cloud.google.com/), enable Custom Search API, create credentials
+2. **Create Custom Search Engine**: Go to [Google Custom Search](https://cse.google.com/cse/), create new search engine, get Search Engine ID
 
-### 📊 Sophisticated Financial Analysis
-- **Multi-Indicator Strategies**: Complex trading strategies combining 3-4 technical indicators
-- **Advanced Momentum Analysis**: Connors RSI implementation with component analysis and AI-powered recommendations
-- **Scoring Systems**: Standardized (-100 to +100) scoring for consistent signal interpretation
-- **Real-Time Processing**: Live market data integration with intelligent analysis
-- **Cross-Platform Integration**: Financial tools accessible via multiple transport mechanisms
-- **Enterprise Financial Platform**: Full-stack financial analysis with CRM integration and graph database connectivity
+#### Perplexity API Setup
+1. **Get API Key**: Sign up at [Perplexity AI](https://perplexity.ai) and get your API key
+2. **Choose Model**: Select from available models (sonar, sonar-pro, sonar-reasoning, etc.)
 
-### 🏗️ Production-Ready Architecture
-- **Microservice Design**: Distributed systems with clear separation of concerns
-- **Security Best Practices**: Proper authentication, authorization, and data protection
-- **Scalable Infrastructure**: Cloud-native designs with containerization support
-- **Multi-Transport Support**: STDIO, SSE, and HTTP transport mechanisms for flexible deployment
-- **Conversational Interfaces**: User-friendly chat interfaces for complex data interactions
-- **Enterprise Authentication**: Advanced user management with bcrypt encryption, session management, and SSL/TLS support
-- **LLM-Assisted Development**: Accelerated development workflows using language models to generate MCP servers, reducing development time from days to hours
+### 3. User Authentication Setup
 
-### 🔧 Developer Experience
-- **Comprehensive Documentation**: Detailed READMEs with setup instructions and examples
-- **Interactive Notebooks**: Jupyter notebooks for learning and experimentation
-- **Type Safety**: Python type hints and schema validation throughout
-- **Tool Discovery**: Automatic discovery and orchestration of available capabilities
-- **Chat-Based Development**: Natural language interfaces for data exploration and analysis
-- **Web-Based Interfaces**: Modern, tabbed interfaces for comprehensive system management
+Generate user credentials for the application:
 
-## 🎯 Use Cases & Applications
+```bash
+cd client
+python simple_generate_password.py
+```
 
-### Media & Content Processing
-- **Video Translation**: Automated Spanish-to-English video translation with professional voice synthesis
-- **Educational Content**: Translate Spanish lectures, tutorials, courses for accessibility
-- **Entertainment**: Translate movies, documentaries, shows while preserving video quality
-- **Business Content**: Translate presentations, meetings, training videos for international teams
-- **Content Creation**: Translate YouTube videos, vlogs, interviews for broader audiences
-- **Real-Time Processing**: Live content analysis and intelligent insights
+This creates `keys/config.yaml` with default users. You can modify user credentials as needed.
 
-### Healthcare & Medical
-- **Medical Image Anonymization**: HIPAA-compliant processing of medical images
-- **Clinical Workflow Integration**: Seamless integration with existing medical systems
+### 4. Launch the Platform
 
-### Financial Services
-- **Algorithmic Trading**: Automated trading signal generation and analysis including advanced momentum strategies
-- **Mean Reversion Analysis**: Connors RSI and Z-Score based strategies for overbought/oversold conditions
-- **Risk Assessment**: Advanced risk metrics and portfolio analysis
-- **Market Research**: Intelligent analysis of financial trends and patterns
-- **Multi-Platform Access**: Financial analysis accessible through web, desktop, and API interfaces
-- **Enterprise Financial Management**: Comprehensive platform combining technical analysis, CRM integration, and graph database insights
+```bash
+# Build and start all services
+docker-compose up --build
 
-### Enterprise AI
-- **Document Processing**: Automated extraction and analysis of business documents
-- **Knowledge Management**: Graph-based knowledge systems for complex data relationships
-- **AI-Powered Analytics**: Integration of AI capabilities into existing business workflows
-- **Tool Orchestration**: Intelligent discovery and coordination of external services
-- **Desktop AI Integration**: Native Claude Desktop application with MCP protocol support for enhanced productivity
-- **Conversational CRM**: Chat-based interfaces for customer relationship management and data exploration
-- **Full-Stack AI Platforms**: Enterprise-grade web applications with comprehensive authentication, multi-user support, and cross-system data integration
+# Or start individual services
+docker-compose up mcpserver1    # Firecrawl MCP Server
+docker-compose up mcpserver2    # Google Search MCP Server (with caching)
+docker-compose up mcpserver3    # Perplexity MCP Server (with caching)
+docker-compose up mcp-client    # Streamlit Client
+```
 
-### Data Integration & Analysis
-- **Cross-System Connectivity**: Seamless integration between Neo4j graph databases and HubSpot CRM
-- **Natural Language Querying**: Chat-based interfaces for complex data exploration
-- **Multi-Source Analytics**: Intelligent correlation and analysis across different data platforms
-- **Enterprise Data Management**: Comprehensive platforms for managing and analyzing data across multiple sources with AI-powered insights
+### 5. Access the Application
 
-### Advanced Search & Research
-- **AI-Powered Web Search**: Intelligent search capabilities combining Google Custom Search and Perplexity AI with advanced caching
-- **Content Extraction & Analysis**: Automated webpage content extraction with intelligent summarization
-- **Research Automation**: Streamlined research workflows with cross-platform data correlation
-- **Enterprise Search Solutions**: Production-ready search platforms with authentication, SSL/HTTPS support, and performance monitoring
+#### HTTPS Mode (Recommended)
+- **Main Interface**: https://localhost:8503
+- **Security**: Self-signed certificate (accept browser warning)
 
-## 🚦 Getting Started
+#### HTTP Mode (Default)
+- **Main Interface**: http://localhost:8501
 
-### Quick Setup
-1. **Choose Your Domain**: Select a project from the table above based on your interests
-2. **Follow Documentation**: Each project has comprehensive setup instructions
-3. **Environment Setup**: Most projects use Python with specific dependency management
-4. **API Keys**: Secure your API keys in environment variables
+#### Health Checks & Monitoring
+- **Firecrawl Server**: http://localhost:8001/health
+- **Google Search Server**: http://localhost:8002/health
+- **Perplexity Server**: http://localhost:8003/health
+- **Detailed Google Search Stats**: http://localhost:8002/health/detailed
+- **Clear Google Search Cache**: http://localhost:8002/cache/clear
 
-### Recommended Learning Path
-1. **Start with Local AI Processing**: Begin with the AI Video Translator for understanding local AI workflows and multi-modal processing
-2. **Progress to RAG Systems**: Move to the Financial Analysis RAG for foundational concepts
-3. **Explore Trading Strategies**: Progress through the different trading algorithm implementations
-   - Begin with basic Bollinger Z-Score analysis
-   - Advance to Connors RSI for sophisticated momentum analysis
-   - Explore combined strategies like Bollinger-Fibonacci
-4. **Advanced Integration**: Move to MCP servers for understanding modern AI integration patterns
-5. **Multi-Platform Development**: Explore the MCP client for cross-language tool orchestration
-6. **LLM-Accelerated Development**: Learn how to use Claude and other LLMs to rapidly develop custom MCP servers with the comprehensive PDF processor example
-7. **Conversational AI**: Set up the Chainlit MCP chatbot for natural language data interaction
-8. **Enterprise Platforms**: Deploy the Streamlit CRM & Graph Platform for full-stack enterprise AI application experience
-9. **Advanced Search Integration**: Explore the AI-Powered Search MCP Integration Platform for comprehensive search capabilities with intelligent caching
-10. **Desktop AI Integration**: Set up Claude Desktop with MCP servers for native AI-tool interactions
-11. **Specialized Applications**: Dive into domain-specific applications like medical AI or distributed OCR
+## 🎯 Key Features
 
-### Research Areas
-- **Local AI Processing**: Privacy-preserving AI workflows without cloud dependencies
-- **Multimodal AI**: Advanced integration of different AI modalities
-- **Federated Learning**: Distributed machine learning implementations
-- **Edge Computing**: Edge-deployed AI processing capabilities
-- **Quantum Computing**: Quantum-enhanced algorithms for optimization
-- **Conversational Data Science**: Natural language interfaces for complex data analysis
-- **Enterprise AI Platforms**: Full-stack applications combining multiple AI services and data sources
-- **Rapid MCP Development**: LLM-assisted development patterns for accelerating AI integration projects
-- **Intelligent Search Systems**: Advanced search architectures with AI-powered analysis and caching
+### **🌾 Agricultural Analytics**
+- **Wheat Supply & Demand**: Production, trade, stocks, yield analytics
+- **Corn Supply & Demand**: Global market tracking and analysis
+- **Interactive Dashboards**: Dynamic visualizations with Plotly
+- **Data Management**: Import/export capabilities, in-line editing
+- **Multi-Year Tracking**: Historical data and projections
+- **Grain Market Intelligence**: Automated report generation from multiple sources
 
-## ⚖️ License & Disclaimer
+### **🤖 AI-Powered Search & Analysis**
+- **Multi-Engine Search**: Firecrawl, Google Search, and Perplexity AI integration
+- **Intelligent Caching**: Reduced API costs and improved response times
+- **Tool Orchestration**: Automatic tool selection based on query intent
+- **Conversation Memory**: Persistent chat history with context awareness
 
-This repository contains educational and research implementations. Individual projects may have specific licensing terms. Please review each project's documentation for:
+### **🔍 Advanced Search Capabilities**
 
-- **Usage Rights**: Appropriate use cases and restrictions
-- **API Terms**: Third-party service terms and conditions
-- **Financial Disclaimer**: Investment and trading risk warnings
-- **Medical Disclaimer**: Healthcare application limitations
+#### **Firecrawl Operations (8 Tools)**
+- **firecrawl_scrape**: Single page content extraction with caching
+- **firecrawl_map**: Website URL discovery and mapping
+- **firecrawl_crawl**: Asynchronous website crawling
+- **firecrawl_check_crawl_status**: Monitor crawl job progress
+- **firecrawl_search**: Web search with optional content extraction
+- **firecrawl_extract**: LLM-powered structured data extraction
+- **firecrawl_deep_research**: Comprehensive research on topics
+- **firecrawl_generate_llmstxt**: Generate AI interaction guidelines
+
+#### **Google Search Operations (4 Tools)** - Enhanced with Caching
+- **google-search**: Google Custom Search API integration with 30-minute caching
+- **read-webpage**: Clean webpage content extraction with 2-hour caching
+- **clear-cache**: Cache management tool for clearing search and webpage caches
+- **cache-stats**: Monitoring tool for cache performance and statistics
+
+#### **Perplexity AI Operations (4 Tools)** - Enhanced with Caching
+- **perplexity_search_web**: Standard AI-powered web search with 30-minute caching
+- **perplexity_advanced_search**: Advanced search with custom model parameters and caching
+- **clear_api_cache**: Cache management for Perplexity API responses
+- **get_cache_stats**: Cache statistics and performance monitoring
+
+### **🔒 Security & Authentication**
+- **User Authentication System**: Secure login with bcrypt password hashing
+- **Session Management**: Persistent user sessions with configurable expiry (30 days default)
+- **SSL/HTTPS Support**: Optional encrypted connections with self-signed certificates on port 8503
+- **Role-Based Access**: Pre-authorized email domains and user management
+
+### **📈 Performance Optimization**
+- **Intelligent Caching System**: Multi-layered caching for optimal performance
+- **Cache Hit Rates**: 40-80% reduction in API calls
+- **Response Times**: 80-95% faster for cached content
+- **Resource Efficiency**: Automatic cleanup and memory management
+
+## 📚 Available Tools & Capabilities
+
+### **Total Tools Available: 16 Tools**
+
+#### **Firecrawl MCP Server (8 Tools)**
+1. **firecrawl_scrape** - Extract content from single URLs with advanced options
+2. **firecrawl_map** - Discover all URLs on a website
+3. **firecrawl_crawl** - Start asynchronous crawl jobs
+4. **firecrawl_check_crawl_status** - Monitor crawl progress
+5. **firecrawl_search** - Search web with optional scraping
+6. **firecrawl_extract** - Extract structured data using LLM
+7. **firecrawl_deep_research** - Conduct comprehensive research
+8. **firecrawl_generate_llmstxt** - Create AI interaction guidelines
+
+#### **Google Search MCP Server (4 Tools)** - With Intelligent Caching
+1. **google-search** - Perform Google searches with 30-minute cache
+2. **read-webpage** - Extract webpage content with 2-hour cache
+3. **clear-cache** - Clear cached search results and content
+4. **cache-stats** - Monitor cache performance metrics
+
+#### **Perplexity Search MCP Server (4 Tools)** - With Response Caching
+1. **perplexity_search_web** - AI-powered search with 30-minute cache
+2. **perplexity_advanced_search** - Advanced search with parameters
+3. **clear_api_cache** - Clear Perplexity API cache
+4. **get_cache_stats** - Get cache statistics
+
+## 📝 Usage Examples
+
+### **Agricultural Analysis Workflow**
+```
+1. Navigate to Wheat/Corn dashboards
+2. View production, trade, and demand analytics
+3. Edit projections in-line
+4. Export data for reporting
+5. Use AI tools for market research
+```
+
+### **Grain Market Intelligence Workflow**
+```
+1. AI Agent initiates data collection from all sources
+2. Manual download of PDFs for USDA, IGC reports
+3. Automated HTML parsing for market data
+4. AI extracts 2025/2026 projections
+5. Dashboard updates with new figures
+6. Database synchronization
+7. AI generates comprehensive market direction report
+8. Final PDF export for distribution
+```
+
+### **Comprehensive Research Workflow**
+```
+# 1. Deep research on a topic
+Use firecrawl_deep_research: "renewable energy trends 2024"
+
+# 2. Search for specific information
+Use google-search: "solar panel efficiency improvements"
+
+# 3. Extract content from results
+Use read-webpage: "https://example.com/solar-research"
+
+# 4. Get AI-powered synthesis
+Use perplexity_search_web: "summarize latest solar technology breakthroughs"
+```
+
+### **Web Scraping Workflow**
+```
+# 1. Map a website
+Use firecrawl_map: {"url": "https://example.com", "limit": 100}
+
+# 2. Scrape specific pages
+Use firecrawl_scrape: {"url": "https://example.com/page", "formats": ["markdown"]}
+
+# 3. Extract structured data
+Use firecrawl_extract: {
+  "urls": ["https://example.com/products"],
+  "schema": {"name": "string", "price": "number"}
+}
+```
+
+### **Cache Management**
+```
+# Monitor performance
+Use cache-stats: {"detailed": true}
+Use get_cache_stats from Perplexity
+
+# Clear caches when needed
+Use clear-cache: {"cacheType": "all"}
+Use clear_api_cache from Perplexity
+```
+
+## 🔧 Component Documentation
+
+### [🖥️ Streamlit Client Documentation](./client/Readme.md)
+- Agricultural analytics dashboards (wheat & corn)
+- Authentication system setup and configuration
+- SSL/HTTPS configuration and certificate management
+- AI provider setup (OpenAI, Anthropic)
+- Tool execution monitoring and conversation management
+
+### [🔥 Firecrawl MCP Server Documentation](./servers/server1/readme.md)
+- Firecrawl API integration for advanced web scraping
+- 8 specialized tools for content extraction and research
+- Support for self-hosted Firecrawl instances
+- SSE and stdio transport options
+
+### [🔍 Google Search MCP Server Documentation](./servers/server2/readme.md)
+- Google Custom Search API integration with intelligent caching
+- Web search and content extraction tools (4 tools)
+- Performance optimization and cache monitoring
+- SSE transport implementation with health checks
+
+### [🔮 Perplexity MCP Server Documentation](./servers/server3/Readme.md)
+- Perplexity AI API integration with response caching
+- AI-powered search with multiple models (4 tools)
+- Advanced search parameters and filtering
+- Cache management and performance monitoring
+
+## 🛠️ Development & Customization
+
+### **Adding New Features**
+
+#### Agricultural Data
+- Add new commodity types in database_setup/
+- Create corresponding dashboard pages in client/pages/
+- Update navigation in client/app.py
+
+#### MCP Tools
+- Add new tools to respective server implementations
+- Update tool registries
+- Add appropriate caching if applicable
+
+### **Cache Configuration**
+
+#### **Google Search Server**
+```javascript
+// In servers/server2/tools/searchTool.js
+const searchCache = new SearchCache(30); // 30 minutes TTL
+
+// In servers/server2/tools/readWebpageTool.js
+const webpageCache = new WebpageCacheClass(2); // 2 hours TTL
+```
+
+#### **Perplexity Server**
+```python
+# In servers/server3/perplexity_sse_server.py
+api_cache = APICache(ttl_seconds=1800)  # 30 minutes cache
+health_check_cache = {"ttl": 300}  # 5 minutes health check cache
+```
+
+## 🔒 Security & Best Practices
+
+### **API Security**
+- Store all API keys in environment variables
+- Use .env files for local development (never commit)
+- Implement rate limiting through caching
+- Enable SSL/TLS for all communications
+- Regularly rotate API keys and credentials
+
+### **Data Security**
+- SQLite databases should be backed up regularly
+- User passwords are bcrypt hashed
+- Session data is isolated per user
+- No sensitive data stored in caches
+
+### **Performance Monitoring**
+- Monitor cache hit rates to optimize TTL settings
+- Track API usage reduction through caching
+- Monitor memory usage for cache sizing
+- Use health check endpoints for system monitoring
+
+## 🐛 Troubleshooting
+
+### **Common Issues**
+
+#### **Service Connection Issues**
+```bash
+# Check all services are running
+docker-compose ps
+
+# View logs for specific service
+docker-compose logs mcpserver1  # Firecrawl
+docker-compose logs mcpserver2  # Google Search
+docker-compose logs mcpserver3  # Perplexity
+docker-compose logs mcp-client   # Streamlit
+```
+
+#### **Cache-Related Issues**
+```bash
+# Check cache statistics
+curl http://localhost:8002/health/detailed  # Google Search
+curl http://localhost:8003/health           # Perplexity
+
+# Clear caches if needed
+curl http://localhost:8002/cache/clear
+```
+
+#### **API Issues**
+- Verify all API keys are set in .env file
+- Check API quotas and rate limits
+- Monitor cache hit rates for cost optimization
+
+#### **Database Issues**
+- Ensure SQLite database files exist
+- Check file permissions
+- Run database setup scripts if needed
+
+## 📈 Performance Metrics
+
+### **Caching Performance**
+- **Google Search Cache Hit Rate**: 40-60% for repeated queries
+- **Webpage Content Cache Hit Rate**: 60-80% for popular pages
+- **Perplexity Cache Hit Rate**: 30-50% for similar queries
+- **API Call Reduction**: 40-70% overall reduction
+- **Response Time Improvement**: 80-95% faster for cached responses
+
+### **System Performance**
+- **Cached Response Times**: ~50-100ms
+- **Fresh API Calls**: 500-5000ms depending on service
+- **Authentication**: <1s login/logout operations
+- **Tool Discovery**: <2s for MCP server connection
+- **Dashboard Loading**: <3s for agricultural analytics
+
+## 🤝 Contributing
+
+### **Development Workflow**
+1. Fork the repository
+2. Create feature branches
+3. Test all components thoroughly
+4. Ensure cache functionality works correctly
+5. Submit pull requests with comprehensive testing
+
+### **Testing Guidelines**
+- Test authentication and security features
+- Verify all search tools with and without cache
+- Test agricultural dashboard functionality
+- Monitor cache performance under load
+- Verify health check endpoints
 
 ---
 
-**This repository represents the convergence of traditional domain expertise with cutting-edge AI capabilities, demonstrating how modern AI systems can be integrated into real-world applications while maintaining production-quality standards and best practices.**
+**Version**: 3.0.0  
+**Last Updated**: January 2025  
+**Compatibility**: Docker 20+, Python 3.11+, Node.js 18+  
+**Total Tools**: 16 tools (8 Firecrawl, 4 Google Search with caching, 4 Perplexity with caching)  
+**Servers**: 4 services (Streamlit Client, Firecrawl MCP, Google Search MCP, Perplexity MCP)  
+**Performance**: Intelligent caching with 40-70% API usage reduction  
+**Features**: Agricultural analytics, AI-powered search, web scraping, authentication, SSL support, grain market intelligence
