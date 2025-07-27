@@ -78,9 +78,7 @@ logs/
 temp/
 
 # Database
-*.db
-*.sqlite
-*.sqlite3
+
 
 # Node modules (for Google Search MCP Server)
 node_modules/
