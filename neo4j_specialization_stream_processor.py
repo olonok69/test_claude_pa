@@ -9,9 +9,12 @@ import inspect
 
 class Neo4jSpecializationStreamProcessor:
     """
-    A class to process specialization to stream mappings and create relationships in Neo4j.
+    A generic class to process specialization to stream mappings and create relationships in Neo4j.
     This class is responsible for creating relationships between visitor nodes and
     stream nodes based on practice specializations.
+    
+    GENERIC: Supports configurable node labels, relationship names, field names, and show filtering.
+    Compatible with both BVA and ECOMM show configurations.
     """
 
     def __init__(self, config):
@@ -41,28 +44,56 @@ class Neo4jSpecializationStreamProcessor:
             )
             raise ValueError("Missing Neo4j credentials in .env file")
 
-        # Initialize statistics structure
+        # GENERIC ADDITIONS - Get configuration values with fallbacks for backward compatibility
+        self.neo4j_config = config.get("neo4j", {})
+        self.show_name = self.neo4j_config.get("show_name", None)  # None = backward compatibility mode
+        self.node_labels = self.neo4j_config.get("node_labels", {})
+        self.relationships = self.neo4j_config.get("relationships", {})
+        self.specialization_stream_mapping_config = self.neo4j_config.get("specialization_stream_mapping", {})
+        
+        # Get configuration values for specialization mapping
+        self.specialization_field_this_year = self.specialization_stream_mapping_config.get(
+            "specialization_field_this_year", "what_type_does_your_practice_specialise_in"
+        )
+        self.specialization_field_bva = self.specialization_stream_mapping_config.get(
+            "specialization_field_bva", "what_areas_do_you_specialise_in"
+        )
+        self.specialization_field_lva = self.specialization_stream_mapping_config.get(
+            "specialization_field_lva", "what_areas_do_you_specialise_in"
+        )
+        
+        # Get node labels with fallback to original hardcoded values
+        self.visitor_this_year_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
+        self.visitor_last_year_bva_label = self.node_labels.get("visitor_last_year_bva", "Visitor_last_year_bva")
+        self.visitor_last_year_lva_label = self.node_labels.get("visitor_last_year_lva", "Visitor_last_year_lva")
+        self.stream_label = self.node_labels.get("stream", "Stream")
+        self.relationship_name = self.relationships.get("specialization_stream", "specialization_to_stream")
+
+        # Get mapping files from config
+        self.specialization_mapping_file = self.specialization_stream_mapping_config.get(
+            "file", "spezialization_to_stream.csv"
+        )
+        self.specialization_map = self.specialization_stream_mapping_config.get(
+            "specialization_map", {}
+        )
+        
+        # Fallback to default mapping if not configured
+        if not self.specialization_map:
+            self.specialization_map = {
+                "Wildlife": "Other",
+                "Small Animal": "Companion Animal",
+                "Mixed": "Other",
+                "Dairy": "Farm",
+                "Poultry": "Farm",
+                "Cattle": "Farm",
+                "Pigs": "Farm",
+                "Sheep": "Farm",
+            }
+
+        # Initialize statistics
         self.statistics = {
             "initial_count": 0,
             "final_count": 0,
-            "relationships_created": {
-                "visitor_this_year": 0,
-                "visitor_last_year_bva": 0,
-                "visitor_last_year_lva": 0,
-                "total": 0,
-            },
-            "relationships_skipped": {
-                "visitor_this_year": 0,
-                "visitor_last_year_bva": 0,
-                "visitor_last_year_lva": 0,
-                "total": 0,
-            },
-            "relationships_failed": {
-                "visitor_this_year": 0,
-                "visitor_last_year_bva": 0,
-                "visitor_last_year_lva": 0,
-                "total": 0,
-            },
             "visitor_nodes_processed": {
                 "visitor_this_year": 0,
                 "visitor_last_year_bva": 0,
@@ -72,10 +103,13 @@ class Neo4jSpecializationStreamProcessor:
             "specializations_processed": 0,
             "specializations_mapped": 0,
             "stream_matches_found": 0,
+            "relationships_created": {"total": 0},
+            "relationships_skipped": {"total": 0},
+            "relationships_failed": {"total": 0},
         }
 
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j Specialization Stream Processor initialized successfully"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j Specialization Stream Processor initialized for show: {self.show_name or 'generic'} (generic mode)"
         )
 
     def _test_connection(self):
@@ -103,6 +137,7 @@ class Neo4jSpecializationStreamProcessor:
     def load_mappings(self):
         """
         Load the specialization mappings from CSV files.
+        GENERIC: Uses configurable file paths and mapping configuration.
 
         Returns:
             tuple: (map_specialization, specialization_stream_mapping)
@@ -112,22 +147,21 @@ class Neo4jSpecializationStreamProcessor:
         )
 
         try:
-            # Load specialization mapping
-            map_specialization = {
-                "Wildlife": "Other",
-                "Small Animal": "Companion Animal",
-                "Mixed": "Other",
-                "Dairy": "Farm",
-                "Poultry": "Farm",
-                "Cattle": "Farm",
-                "Pigs": "Farm",
-                "Sheep": "Farm",
-            }
+            # Use the configured specialization mapping
+            map_specialization = self.specialization_map
 
-            # Load specialization to stream mapping
+            # Load specialization to stream mapping from configured file
             specialization_stream_file = os.path.join(
-                self.input_dir, "spezialization_to_stream.csv"
+                self.input_dir, self.specialization_mapping_file
             )
+            
+            if not os.path.exists(specialization_stream_file):
+                # Try root directory as fallback
+                specialization_stream_file = self.specialization_mapping_file
+                
+            if not os.path.exists(specialization_stream_file):
+                raise FileNotFoundError(f"Specialization mapping file not found: {self.specialization_mapping_file}")
+                
             map_specialization_stream = pd.read_csv(specialization_stream_file)
 
             # Convert to dictionary
@@ -150,84 +184,111 @@ class Neo4jSpecializationStreamProcessor:
             raise
 
     def _count_relationships(self, session):
-        """Count the total number of specialization_to_stream relationships"""
-        result = session.run(
-            """
-            MATCH ()-[r:specialization_to_stream]->(:Stream)
+        """
+        Count the total number of specialization_to_stream relationships.
+        GENERIC: Uses configurable relationship and node labels with show filtering.
+        """
+        query = f"""
+        MATCH (:{self.visitor_this_year_label})-[r:{self.relationship_name}]->(:{self.stream_label})
+        RETURN COUNT(r) AS count
+        """
+        
+        # Add show filtering if configured
+        if self.show_name:
+            query = f"""
+            MATCH (v:{self.visitor_this_year_label})-[r:{self.relationship_name}]->(s:{self.stream_label})
+            WHERE v.show = $show_name AND s.show = $show_name
             RETURN COUNT(r) AS count
             """
-        )
+            result = session.run(query, show_name=self.show_name)
+        else:
+            result = session.run(query)
+            
         return result.single()["count"]
 
-    def _print_reconciliation_report(self):
-        """Print a detailed reconciliation report with all counts"""
+    def create_specialization_stream_relationships(
+        self, map_specialization, specialization_stream_mapping, create_only_new=True
+    ):
+        """
+        Create relationships between visitor nodes and stream nodes based on specializations.
+        GENERIC: Supports configurable node labels, relationship names, and show filtering.
+
+        Args:
+            map_specialization (dict): Dictionary mapping old specialization names to new ones.
+            specialization_stream_mapping (dict): Dictionary mapping specializations to streams.
+            create_only_new (bool): If True, only create relationships that don't exist.
+
+        Returns:
+            dict: Statistics about the relationship creation process.
+        """
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Specialization to stream relationship processing summary:"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initial relationship count: {self.statistics['initial_count']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Final relationship count: {self.statistics['final_count']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Actual new relationships (database): {self.statistics['final_count'] - self.statistics['initial_count']}"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating specialization to stream relationships (generic mode)"
         )
 
-        for visitor_type in [
-            "visitor_this_year",
-            "visitor_last_year_bva",
-            "visitor_last_year_lva",
-        ]:
+        driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+
+        # First count the initial relationships
+        with driver.session() as session:
+            initial_count = self._count_relationships(session)
+            self.statistics["initial_count"] = initial_count
             self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {visitor_type.capitalize()} nodes processed: {self.statistics['visitor_nodes_processed'][visitor_type]}"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {visitor_type.capitalize()} relationships created: {self.statistics['relationships_created'][visitor_type]}"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {visitor_type.capitalize()} relationships skipped: {self.statistics['relationships_skipped'][visitor_type]}"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {visitor_type.capitalize()} relationships failed: {self.statistics['relationships_failed'][visitor_type]}"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initial relationship count: {initial_count}"
             )
 
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total visitor nodes processed: {self.statistics['visitor_nodes_processed']['total']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total specializations processed: {self.statistics['specializations_processed']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total specializations mapped: {self.statistics['specializations_mapped']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total stream matches found: {self.statistics['stream_matches_found']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total relationships created: {self.statistics['relationships_created']['total']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total relationships skipped: {self.statistics['relationships_skipped']['total']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total relationships failed: {self.statistics['relationships_failed']['total']}"
+        # Process different visitor types
+        visitor_types = [
+            {
+                "node_label": self.visitor_this_year_label,
+                "specialization_field": self.specialization_field_this_year,
+            },
+            {
+                "node_label": self.visitor_last_year_bva_label,
+                "specialization_field": self.specialization_field_bva,
+            },
+            {
+                "node_label": self.visitor_last_year_lva_label,
+                "specialization_field": self.specialization_field_lva,
+            },
+        ]
+
+        # Process each visitor type
+        with driver.session() as session:
+            for visitor_type in visitor_types:
+                self.logger.info(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing {visitor_type['node_label']} nodes"
+                )
+
+                # Use write transaction for consistency
+                session.execute_write(
+                    self._process_visitor_type,
+                    visitor_type["node_label"],
+                    visitor_type["specialization_field"],
+                    map_specialization,
+                    specialization_stream_mapping,
+                    self.statistics,
+                    create_only_new,
+                )
+
+        # Count final relationships
+        with driver.session() as session:
+            final_count = self._count_relationships(session)
+            self.statistics["final_count"] = final_count
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Final relationship count: {final_count}"
+            )
+
+        driver.close()
+
+        # Calculate totals
+        self.statistics["visitor_nodes_processed"]["total"] = sum(
+            self.statistics["visitor_nodes_processed"][key]
+            for key in ["visitor_this_year", "visitor_last_year_bva", "visitor_last_year_lva"]
         )
 
-        # Check for discrepancies
-        actual_created = (
-            self.statistics["final_count"] - self.statistics["initial_count"]
-        )
-        if actual_created != self.statistics["relationships_created"]["total"]:
-            self.logger.warning(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - WARNING: Discrepancy detected! Database shows {actual_created} new relationships, but code tracked {self.statistics['relationships_created']['total']}."
-            )
-            self.logger.warning(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - This may indicate concurrent database access or transaction issues."
-            )
+        return self.statistics
 
-    @staticmethod
     def _process_visitor_type(
+        self,
         tx,
         node_label,
         specialization_field,
@@ -238,38 +299,47 @@ class Neo4jSpecializationStreamProcessor:
     ):
         """
         Process a specific type of visitor nodes to create specialization to stream relationships.
+        GENERIC: Supports configurable node labels, field names, and show filtering.
 
         Args:
             tx: Neo4j transaction
-            node_label (str): Label of the visitor nodes (e.g., "Visitor_this_year")
-            specialization_field (str): Name of the field containing specialization info
-            map_specialization (dict): Dictionary mapping specialization names to standard format
-            specialization_stream_mapping (dict): Dictionary mapping specializations to applicable streams
-            stats (dict): Statistics dictionary to update
-            create_only_new (bool): If True, only create relationships that don't exist (default: True)
-
-        Returns:
-            dict: Updated statistics dictionary
+            node_label (str): The label of the visitor nodes to process.
+            specialization_field (str): The field containing specialization information.
+            map_specialization (dict): Dictionary mapping old specialization names to new ones.
+            specialization_stream_mapping (dict): Dictionary mapping specializations to streams.
+            stats (dict): Statistics dictionary to update.
+            create_only_new (bool): If True, only create relationships that don't exist.
         """
-        # Get all visitor nodes with valid specializations
-        # When create_only_new is True, only process visitors without recommendations for Visitor_this_year
+        # Additional filter for create_only_new
         additional_filter = ""
-        if create_only_new and node_label == "Visitor_this_year":
-            additional_filter = (
-                ' AND (v.has_recommendation IS NULL OR v.has_recommendation = "0")'
-            )
+        if create_only_new:
+            additional_filter = ' AND (v.has_recommendation IS NULL OR v.has_recommendation = "0")'
 
+        # Add show filtering if configured
+        show_filter = ""
+        if self.show_name:
+            show_filter = ' AND v.show = $show_name'
+
+        # Query to get visitor nodes with specializations
         query = f"""
         MATCH (v:{node_label})
         WHERE v.{specialization_field} IS NOT NULL 
         AND LOWER(v.{specialization_field}) <> 'na'
+        {show_filter}
         {additional_filter}
         RETURN v, v.{specialization_field} as specializations, 
             v.BadgeId as badge_id, v.Email as email
         """
 
-        results = tx.run(query)
-        visitor_type_key = node_label.lower()
+        # Execute query with parameters if needed
+        if self.show_name:
+            results = tx.run(query, show_name=self.show_name)
+        else:
+            results = tx.run(query)
+            
+        visitor_type_key = node_label.lower().replace(self.visitor_this_year_label.lower(), "visitor_this_year").replace(
+            self.visitor_last_year_bva_label.lower(), "visitor_last_year_bva").replace(
+            self.visitor_last_year_lva_label.lower(), "visitor_last_year_lva")
 
         for record in results:
             visitor = record["v"]
@@ -311,214 +381,145 @@ class Neo4jSpecializationStreamProcessor:
                         if applies == "YES":
                             stats["stream_matches_found"] += 1
 
-                            # First find the Stream node separately to avoid Cartesian product
-                            stream_query = """
-                            MATCH (s:Stream)
+                            # First find the stream node (case-insensitive search)
+                            stream_search_filter = ""
+                            if self.show_name:
+                                stream_search_filter = ' AND s.show = $show_name'
+
+                            find_stream_query = f"""
+                            MATCH (s:{self.stream_label})
                             WHERE LOWER(s.stream) = LOWER($stream_name)
-                            RETURN s
+                            {stream_search_filter}
+                            RETURN s LIMIT 1
                             """
 
-                            stream_result = tx.run(
-                                stream_query, stream_name=stream_name
-                            )
-                            stream_record = stream_result.single()
+                            stream_params = {"stream_name": stream_name}
+                            if self.show_name:
+                                stream_params["show_name"] = self.show_name
 
-                            # Skip if stream doesn't exist
-                            if not stream_record:
-                                stats["relationships_failed"][visitor_type_key] += 1
-                                continue
+                            stream_result = tx.run(find_stream_query, **stream_params)
+                            stream_node = stream_result.single()
 
-                            if create_only_new:
-                                # Check if the relationship already exists
-                                relationship_exists_query = f"""
-                                MATCH (v:{node_label} {{BadgeId: $badge_id, Email: $email}})
-                                MATCH (s:Stream)
+                            if stream_node:
+                                # Create relationship if it doesn't exist
+                                visitor_filter = ""
+                                if self.show_name:
+                                    visitor_filter = ' AND v.show = $show_name'
+
+                                relationship_query = f"""
+                                MATCH (v:{node_label})
+                                WHERE v.BadgeId = $badge_id AND v.Email = $email{visitor_filter}
+                                
+                                MATCH (s:{self.stream_label})
                                 WHERE LOWER(s.stream) = LOWER($stream_name)
-                                RETURN EXISTS((v)-[:specialization_to_stream]->(s)) AS exists
-                                """
-
-                                relationship_exists = tx.run(
-                                    relationship_exists_query,
-                                    badge_id=badge_id,
-                                    email=email,
-                                    stream_name=stream_name,
-                                ).single()["exists"]
-
-                                if relationship_exists:
-                                    stats["relationships_skipped"][
-                                        visitor_type_key
-                                    ] += 1
-                                    continue
-
-                            # Create the relationship (or MERGE if create_only_new=False)
-                            if create_only_new:
-                                create_rel_query = f"""
-                                MATCH (v:{node_label} {{BadgeId: $badge_id, Email: $email}})
-                                MATCH (s:Stream WHERE LOWER(s.stream) = LOWER($stream_name))
-                                CREATE (v)-[r:specialization_to_stream]->(s)
-                                RETURN r
-                                """
-                            else:
-                                create_rel_query = f"""
-                                MATCH (v:{node_label} {{BadgeId: $badge_id, Email: $email}})
-                                MATCH (s:Stream WHERE LOWER(s.stream) = LOWER($stream_name))
-                                MERGE (v)-[r:specialization_to_stream]->(s)
+                                {stream_search_filter}
+                                
+                                MERGE (v)-[r:{self.relationship_name}]->(s)
+                                ON CREATE SET r.created_by = 'specialization_processor'
                                 RETURN r
                                 """
 
-                            try:
-                                tx.run(
-                                    create_rel_query,
-                                    badge_id=badge_id,
-                                    email=email,
-                                    stream_name=stream_name,
-                                )
-                                stats["relationships_created"][visitor_type_key] += 1
-                            except Exception as e:
-                                stats["relationships_failed"][visitor_type_key] += 1
+                                rel_params = {
+                                    "badge_id": badge_id,
+                                    "email": email,
+                                    "stream_name": stream_name
+                                }
+                                if self.show_name:
+                                    rel_params["show_name"] = self.show_name
 
-        return stats
-
-    def create_specialization_stream_relationships(
-        self, map_specialization, specialization_stream_mapping, create_only_new=True
-    ):
-        """
-        Create relationships between visitor nodes and stream nodes based on practice specializations.
-
-        Args:
-            map_specialization (dict): Dictionary mapping specialization names to standard format
-            specialization_stream_mapping (dict): Dictionary mapping specializations to applicable streams
-            create_only_new (bool): If True, only create relationships that don't exist (default: True)
-
-        Returns:
-            dict: Statistics about the relationship creation process
-        """
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating specialization to stream relationships (create_only_new={create_only_new})"
-        )
-
-        driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
-
-        try:
-            with driver.session() as session:
-                # Count initial relationships for reconciliation
-                self.statistics["initial_count"] = self._count_relationships(session)
-                self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initial relationship count: {self.statistics['initial_count']}"
-                )
-
-                # Process all three visitor types
-                visitor_types = [
-                    ("Visitor_this_year", "what_type_does_your_practice_specialise_in"),
-                    ("Visitor_last_year_bva", "what_areas_do_you_specialise_in"),
-                    ("Visitor_last_year_lva", "what_areas_do_you_specialise_in"),
-                ]
-
-                for node_label, specialization_field in visitor_types:
-                    self.logger.info(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing {node_label} nodes"
-                    )
-
-                    # Modify the process_visitor_type to include create_only_new parameter
-                    def process_with_create_flag(tx):
-                        return self._process_visitor_type(
-                            tx,
-                            node_label,
-                            specialization_field,
-                            map_specialization,
-                            specialization_stream_mapping,
-                            self.statistics,
-                            create_only_new,
-                        )
-
-                    # Execute write transaction for this visitor type
-                    session.execute_write(process_with_create_flag)
-
-                # Calculate totals
-                self.statistics["visitor_nodes_processed"]["total"] = sum(
-                    self.statistics["visitor_nodes_processed"][k]
-                    for k in [
-                        "visitor_this_year",
-                        "visitor_last_year_bva",
-                        "visitor_last_year_lva",
-                    ]
-                )
-
-                self.statistics["relationships_created"]["total"] = sum(
-                    self.statistics["relationships_created"][k]
-                    for k in [
-                        "visitor_this_year",
-                        "visitor_last_year_bva",
-                        "visitor_last_year_lva",
-                    ]
-                )
-
-                self.statistics["relationships_skipped"]["total"] = sum(
-                    self.statistics["relationships_skipped"][k]
-                    for k in [
-                        "visitor_this_year",
-                        "visitor_last_year_bva",
-                        "visitor_last_year_lva",
-                    ]
-                )
-
-                self.statistics["relationships_failed"]["total"] = sum(
-                    self.statistics["relationships_failed"][k]
-                    for k in [
-                        "visitor_this_year",
-                        "visitor_last_year_bva",
-                        "visitor_last_year_lva",
-                    ]
-                )
-
-                # Count final relationships for reconciliation
-                self.statistics["final_count"] = self._count_relationships(session)
-                self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Final relationship count: {self.statistics['final_count']}"
-                )
-
-        finally:
-            driver.close()
-
-        return self.statistics
+                                try:
+                                    rel_result = tx.run(relationship_query, **rel_params)
+                                    if rel_result.single():
+                                        stats["relationships_created"]["total"] += 1
+                                    else:
+                                        stats["relationships_skipped"]["total"] += 1
+                                except Exception as e:
+                                    self.logger.error(
+                                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating relationship: {str(e)}"
+                                    )
+                                    stats["relationships_failed"]["total"] += 1
 
     def process(self, create_only_new=True):
         """
-        Process specialization to stream mappings and create relationships in Neo4j.
+        Main processing method that coordinates the entire specialization to stream relationship creation process.
+        GENERIC: Maintains backward compatibility while supporting new configuration.
 
         Args:
-            create_only_new (bool): If True, only create relationships that don't exist (default: True)
+            create_only_new (bool): If True, only create relationships that don't already exist.
+
+        Returns:
+            dict: Processing statistics
         """
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Starting Neo4j specialization to stream relationship processing (create_only_new={create_only_new})"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Starting specialization to stream processing (generic mode)"
         )
 
-        # Test the connection first
-        if not self._test_connection():
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Cannot proceed with Neo4j processing due to connection failure"
-            )
-            return
-
         try:
-            # Load the mappings
+            # Test connection first
+            if not self._test_connection():
+                raise ConnectionError("Cannot connect to Neo4j database")
+
+            # Load mappings
             map_specialization, specialization_stream_mapping = self.load_mappings()
 
-            # Create the relationships with the create_only_new parameter
-            self.create_specialization_stream_relationships(
+            # Create relationships
+            stats = self.create_specialization_stream_relationships(
                 map_specialization, specialization_stream_mapping, create_only_new
             )
 
-            # Print reconciliation report
-            self._print_reconciliation_report()
+            # Log final statistics
+            self._log_statistics()
 
             self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j specialization to stream relationship processing completed"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Specialization to stream processing completed successfully"
             )
 
-            return self.statistics
+            return stats
+
         except Exception as e:
             self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error in specialization to stream relationship processing: {str(e)}"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error in specialization to stream processing: {str(e)}"
             )
             raise
+
+    def _log_statistics(self):
+        """Log detailed processing statistics"""
+        # Log per-visitor-type statistics
+        for visitor_type in ["visitor_this_year", "visitor_last_year_bva", "visitor_last_year_lva"]:
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {visitor_type.replace('_', ' ').title()} nodes processed: {self.statistics['visitor_nodes_processed'][visitor_type]}"
+            )
+
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total visitor nodes processed: {self.statistics['visitor_nodes_processed']['total']}"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total specializations processed: {self.statistics['specializations_processed']}"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total specializations mapped: {self.statistics['specializations_mapped']}"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total stream matches found: {self.statistics['stream_matches_found']}"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total relationships created: {self.statistics['relationships_created']['total']}"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total relationships skipped: {self.statistics['relationships_skipped']['total']}"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total relationships failed: {self.statistics['relationships_failed']['total']}"
+        )
+
+        # Check for discrepancies
+        actual_created = (
+            self.statistics["final_count"] - self.statistics["initial_count"]
+        )
+        if actual_created != self.statistics["relationships_created"]["total"]:
+            self.logger.warning(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - WARNING: Discrepancy detected! Database shows {actual_created} new relationships, but code tracked {self.statistics['relationships_created']['total']}."
+            )
+            self.logger.warning(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - This may indicate concurrent database access or transaction issues."
+            )
