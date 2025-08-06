@@ -1,3 +1,16 @@
+#!/usr/bin/env python3
+"""
+Enhanced Neo4j Job Stream Processor with Skip Support
+
+A generic class to process job to stream mappings and create relationships in Neo4j.
+This class is responsible for creating relationships between visitor nodes and
+stream nodes based on job roles.
+
+ENHANCED: Supports skipping processing for specific shows via configuration.
+GENERIC: Supports configurable node labels, relationship names, field names, and show filtering.
+Compatible with both BVA and ECOMM show configurations.
+"""
+
 import logging
 import os
 import pandas as pd
@@ -9,12 +22,12 @@ import inspect
 
 class Neo4jJobStreamProcessor:
     """
-    A class to process job role to stream mappings and create relationships in Neo4j.
-    This class is responsible for creating relationships between visitor nodes and
-    stream nodes based on job roles.
+    Enhanced Neo4j Job Stream Processor with configurable skip support.
     
-    FIXED: Consistent lowercase stream name handling throughout all methods.
-    Generic version that maintains compatibility with existing functionality.
+    NEW FEATURES:
+    - Can skip processing entirely based on config (for ECOMM/TFM shows)
+    - Enhanced configuration validation
+    - Better error handling and logging
     """
 
     def __init__(self, config):
@@ -26,7 +39,7 @@ class Neo4jJobStreamProcessor:
         """
         self.logger = logging.getLogger(__name__)
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initializing Neo4j Job Stream Processor"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initializing Enhanced Neo4j Job Stream Processor"
         )
 
         self.config = config
@@ -44,24 +57,29 @@ class Neo4jJobStreamProcessor:
             )
             raise ValueError("Missing Neo4j credentials in .env file")
 
-        # GENERIC ADDITIONS - Get configuration values with fallbacks for backward compatibility
+        # ENHANCED: Get configuration values with fallbacks for backward compatibility
         self.neo4j_config = config.get("neo4j", {})
         self.show_name = self.neo4j_config.get("show_name", None)  # None = backward compatibility mode
         self.node_labels = self.neo4j_config.get("node_labels", {})
         self.relationships = self.neo4j_config.get("relationships", {})
         self.job_stream_mapping_config = self.neo4j_config.get("job_stream_mapping", {})
         
-        # Get job role field name from config, with fallback to original behavior
-        self.job_role_field = self.job_stream_mapping_config.get("job_role_field", "job_role")
+        # NEW: Check if job stream processing is enabled for this show
+        self.job_stream_enabled = self.job_stream_mapping_config.get("enabled", True)
         
         # Get node labels with fallback to original hardcoded values
         self.visitor_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
         self.stream_label = self.node_labels.get("stream", "Stream")
         self.relationship_name = self.relationships.get("job_stream", "job_to_stream")
+        
+        # Get job role field name with fallback
+        self.job_role_field = self.job_stream_mapping_config.get("job_role_field", "job_role")
+        
+        # Get mapping file from config
+        self.job_stream_mapping_file = self.job_stream_mapping_config.get("file", "job_to_stream.csv")
 
+        # Initialize statistics
         self.statistics = {
-            "initial_relationship_count": 0,
-            "final_relationship_count": 0,
             "relationships_created": 0,
             "relationships_skipped": 0,
             "relationships_not_found": 0,
@@ -69,25 +87,26 @@ class Neo4jJobStreamProcessor:
             "visitor_nodes_processed": 0,
             "job_roles_processed": 0,
             "stream_matches_found": 0,
+            "initial_relationship_count": 0,
+            "final_relationship_count": 0,
+            "processing_skipped": False,
+            "skip_reason": None
         }
 
+        # Log configuration details
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j Job Stream Processor initialized for show: {self.show_name or 'generic'} (generic mode)"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Configuration: show_name='{self.show_name}', enabled={self.job_stream_enabled}"
         )
 
     def _test_connection(self):
-        """Test the connection to Neo4j database"""
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Testing connection to Neo4j"
-        )
-
+        """Test the Neo4j connection."""
         try:
             driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
             with driver.session() as session:
-                result = session.run("MATCH (n) RETURN count(n) AS count")
+                result = session.run("MATCH (n) RETURN count(n) AS count LIMIT 1")
                 count = result.single()["count"]
                 self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Successfully connected to Neo4j. Database contains {count} nodes"
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j connection successful. Database contains {count} nodes"
                 )
             driver.close()
             return True
@@ -97,16 +116,41 @@ class Neo4jJobStreamProcessor:
             )
             return False
 
+    def should_skip_processing(self):
+        """
+        Determine if processing should be skipped for this configuration.
+        
+        NEW: Checks configuration to determine if job stream processing should be skipped.
+        
+        Returns:
+            tuple: (should_skip: bool, reason: str)
+        """
+        # Check if job stream processing is explicitly disabled
+        if not self.job_stream_enabled:
+            return True, f"Job stream processing disabled in config for show '{self.show_name}'"
+        
+        # Check if mapping file exists - try multiple locations
+        possible_paths = [
+            os.path.join(self.input_dir, self.job_stream_mapping_file),  # output_dir/file
+            self.job_stream_mapping_file,  # current directory
+            os.path.join("data", "bva", self.job_stream_mapping_file),  # data/bva/file
+        ]
+        
+        for mapping_file_path in possible_paths:
+            if os.path.exists(mapping_file_path):
+                return False, None
+        
+        return True, f"Job stream mapping file not found: {self.job_stream_mapping_file} (searched: {', '.join(possible_paths)})"
+
     def load_job_stream_mapping(self, mapping_file_path):
         """
         Load the job role to stream mapping from a CSV file.
-        FIXED: Normalizes all stream names to lowercase for consistency.
 
         Args:
             mapping_file_path (str): Path to the CSV file containing the mapping.
 
         Returns:
-            dict: Dictionary mapping job roles to lowercase stream names.
+            dict: Dictionary mapping job roles to streams.
         """
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Loading job to stream mapping from: {mapping_file_path}"
@@ -122,29 +166,14 @@ class Neo4jJobStreamProcessor:
                 )
                 raise ValueError("CSV file does not contain 'Job Role' column")
 
-            # FIXED: Normalize all column names (stream names) to lowercase before processing
-            normalized_columns = {}
-            for col in map_job_stream.columns:
-                if col != "Job Role":
-                    normalized_col = col.lower().strip()
-                    normalized_columns[col] = normalized_col
-                    if col != normalized_col:
-                        self.logger.info(
-                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Normalizing stream column: '{col}' → '{normalized_col}'"
-                        )
-
-            # Rename columns to lowercase (except Job Role)
-            map_job_stream = map_job_stream.rename(columns=normalized_columns)
-
             # Convert the DataFrame to a dictionary using job role as the index
             job_stream_mapping = json.loads(
                 map_job_stream.set_index("Job Role").to_json(orient="index")
             )
 
             # Log some stats about the mapping
-            stream_count = len([col for col in map_job_stream.columns if col != "Job Role"])
             self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Loaded mapping for {len(job_stream_mapping)} job roles with {stream_count} streams (all normalized to lowercase)"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Loaded mapping for {len(job_stream_mapping)} job roles"
             )
 
             return job_stream_mapping
@@ -156,8 +185,8 @@ class Neo4jJobStreamProcessor:
 
     def _normalize_stream_name(self, stream_name):
         """
-        Normalize stream name to lowercase and apply any mapping rules.
-        FIXED: Ensures consistent lowercase handling.
+        Apply normalization rules to stream names.
+        ENHANCED: Ensures consistent lowercase handling.
 
         Args:
             stream_name (str): Original stream name
@@ -210,7 +239,7 @@ class Neo4jJobStreamProcessor:
     def create_job_stream_relationships(self, job_stream_mapping, create_only_new=True):
         """
         Create relationships between visitor nodes and stream nodes based on job roles.
-        FIXED: Consistent lowercase stream name handling throughout.
+        ENHANCED: Consistent lowercase stream name handling throughout.
         GENERIC: Supports configurable node labels, relationship names, and show filtering.
 
         Args:
@@ -284,7 +313,7 @@ class Neo4jJobStreamProcessor:
 
                 for stream_name, applies in job_stream_mapping[job_role].items():
                     if applies == "YES":
-                        # FIXED: Apply consistent lowercase normalization
+                        # ENHANCED: Apply consistent lowercase normalization
                         normalized_stream_name, mapping_applied = self._normalize_stream_name(stream_name)
 
                         if mapping_applied:
@@ -309,44 +338,45 @@ class Neo4jJobStreamProcessor:
                 WHERE v.{self.job_role_field} = $job_role{count_filter}
                 RETURN count(v) AS visitor_count
                 """
-                
+
                 count_params = {"job_role": job_role}
                 if self.show_name:
                     count_params["show_name"] = self.show_name
-                    
-                visitor_count = tx.run(count_query, **count_params).single()["visitor_count"]
+
+                count_result = tx.run(count_query, **count_params)
+                visitor_count = count_result.single()["visitor_count"]
                 batch_stats["visitor_nodes_processed"] += visitor_count
 
-                # For each applicable stream, check if it exists using lowercase matching
+                # Process each applicable stream
                 for stream_name in applicable_streams:
-                    # FIXED: Use consistent lowercase matching for stream existence check
-                    stream_show_filter = ""
+                    # Find the actual stream name in Neo4j (case-insensitive search)
+                    stream_search_filter = ""
                     if self.show_name:
-                        stream_show_filter = ' AND s.show = $show_name'
+                        stream_search_filter = ' AND s.show = $show_name'
 
-                    # Always use lowercase comparison for robustness
-                    stream_exists_query = f"""
+                    stream_query = f"""
                     MATCH (s:{self.stream_label})
-                    WHERE LOWER(s.stream) = LOWER($stream_name){stream_show_filter}
-                    RETURN s.stream AS actual_stream_name, count(s) > 0 AS exists
+                    WHERE LOWER(s.stream) = LOWER($stream_name){stream_search_filter}
+                    RETURN s.stream as actual_stream_name
+                    LIMIT 1
                     """
 
                     stream_params = {"stream_name": stream_name}
                     if self.show_name:
                         stream_params["show_name"] = self.show_name
 
-                    stream_result = tx.run(stream_exists_query, **stream_params).single()
-                    
-                    if not stream_result or not stream_result["exists"]:
-                        self.logger.warning(
-                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Stream node with name '{stream_name}' not found"
-                        )
+                    stream_result = tx.run(stream_query, **stream_params)
+                    stream_record = stream_result.single()
+
+                    if not stream_record:
                         batch_stats["relationships_not_found"] += visitor_count
+                        self.logger.warning(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Stream '{stream_name}' not found in Neo4j for job role '{job_role}'"
+                        )
                         continue
 
-                    # Get the actual stream name from database (should be lowercase now)
-                    actual_stream_name = stream_result["actual_stream_name"]
-                   
+                    actual_stream_name = stream_record["actual_stream_name"]
+          
                     # Log normalization if different
                     if stream_name != actual_stream_name:
                         self.logger.info(
@@ -428,11 +458,11 @@ class Neo4jJobStreamProcessor:
                 # Update our statistics
                 self.statistics.update(batch_stats)
 
-                # Count final relationships
+                # Now count the final relationships
                 final_count = self._count_relationships(session)
                 self.statistics["final_relationship_count"] = final_count
 
-                # Calculate actual relationships created based on database counts
+                # Calculate the actual relationships created based on database counts
                 actual_created = final_count - initial_count
 
                 # Check for discrepancies and log them
@@ -463,33 +493,28 @@ class Neo4jJobStreamProcessor:
                         f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Stream name mappings applied: {self.statistics['stream_mappings_applied']}"
                     )
 
-                if self.statistics["relationships_not_found"] > 0:
-                    self.logger.warning(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships not created due to missing streams: {self.statistics['relationships_not_found']}"
-                    )
         except Exception as e:
             self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating job to stream relationships: {str(e)}"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating job stream relationships: {str(e)}"
             )
             raise
         finally:
             driver.close()
 
-        return self.statistics
-
     def print_reconciliation_report(self):
-        """Print a detailed reconciliation report with all statistics"""
+        """Print a detailed reconciliation report."""
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Job to stream relationship reconciliation report:"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - === JOB STREAM PROCESSOR RECONCILIATION REPORT ==="
         )
+        
+        if self.statistics["processing_skipped"]:
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing skipped: {self.statistics['skip_reason']}"
+            )
+            return
+
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initial relationship count: {self.statistics['initial_relationship_count']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Final relationship count: {self.statistics['final_relationship_count']}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - New relationships created: {self.statistics['relationships_created']}"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships created: {self.statistics['relationships_created']}"
         )
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships skipped (already exist): {self.statistics['relationships_skipped']}"
@@ -497,7 +522,7 @@ class Neo4jJobStreamProcessor:
 
         if self.statistics["relationships_not_found"] > 0:
             self.logger.warning(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships not created due to missing streams: {self.statistics['relationships_not_found']}"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships not created due to missing nodes: {self.statistics['relationships_not_found']}"
             )
 
         if self.statistics["stream_mappings_applied"] > 0:
@@ -519,48 +544,28 @@ class Neo4jJobStreamProcessor:
                 f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - This may indicate concurrent database access or transaction issues."
             )
 
-    def validate_csv_format(self, mapping_file_path):
-        """
-        Validate the CSV file format and provide helpful error messages.
-        NEW: Added validation method for better error handling.
-        """
-        try:
-            df = pd.read_csv(mapping_file_path)
-            
-            # Check for Job Role column
-            if "Job Role" not in df.columns:
-                raise ValueError(f"CSV file missing 'Job Role' column. Found columns: {list(df.columns)}")
-            
-            # Check for at least some stream columns
-            stream_columns = [col for col in df.columns if col != "Job Role"]
-            if len(stream_columns) == 0:
-                raise ValueError("CSV file contains no stream columns")
-            
-            # Check for valid values (YES/NO or 1/0)
-            for col in stream_columns[:5]:  # Check first 5 stream columns
-                unique_values = df[col].dropna().unique()
-                valid_values = {'YES', 'NO', '1', '0', 1, 0}
-                if not all(val in valid_values for val in unique_values):
-                    self.logger.warning(f"Column '{col}' contains unexpected values: {unique_values}")
-            
-            self.logger.info(f"CSV validation passed: {len(df)} job roles, {len(stream_columns)} streams")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"CSV validation failed: {e}")
-            return False
-
     def process(self, create_only_new=True):
         """
         Process job to stream mappings and create relationships in Neo4j.
-        ENHANCED: Added validation and better error handling.
+        ENHANCED: Added skip logic for shows that don't need job stream processing.
 
         Args:
             create_only_new (bool): If True, only create relationships that don't exist.
         """
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Starting Neo4j job to stream relationship processing"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Starting Enhanced Neo4j job to stream relationship processing"
         )
+
+        # NEW: Check if processing should be skipped
+        should_skip, skip_reason = self.should_skip_processing()
+        
+        if should_skip:
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Skipping job stream processing: {skip_reason}"
+            )
+            self.statistics["processing_skipped"] = True
+            self.statistics["skip_reason"] = skip_reason
+            return
 
         # Test the connection first
         if not self._test_connection():
@@ -569,54 +574,41 @@ class Neo4jJobStreamProcessor:
             )
             return
 
-        # Get the mapping file path
-        mapping_file_path = os.path.join(self.input_dir, "job_to_stream.csv")
+        # Get the mapping file path - try multiple locations
+        possible_paths = [
+            os.path.join(self.input_dir, self.job_stream_mapping_file),  # output_dir/file
+            self.job_stream_mapping_file,  # current directory
+            os.path.join("data", "bva", self.job_stream_mapping_file),  # data/bva/file
+        ]
+        
+        mapping_file_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                mapping_file_path = path
+                break
+        
+        if not mapping_file_path:
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - "
+                f"Job stream mapping file not found. Searched: {', '.join(possible_paths)}"
+            )
+            return
 
         try:
-            # Validate CSV format first
-            if not self.validate_csv_format(mapping_file_path):
-                raise ValueError("CSV format validation failed")
-
-            # Load the mapping with consistent lowercase normalization
+            # Load the mapping
             job_stream_mapping = self.load_job_stream_mapping(mapping_file_path)
 
-            # Create the relationships with consistent lowercase handling
+            # Create the relationships
             self.create_job_stream_relationships(job_stream_mapping, create_only_new)
 
             # Print detailed reconciliation report
             self.print_reconciliation_report()
 
             self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j job to stream relationship processing completed successfully"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Enhanced Neo4j job to stream relationship processing completed"
             )
         except Exception as e:
             self.logger.error(
                 f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error in job to stream relationship processing: {str(e)}"
             )
             raise
-
-
-# Example usage and configuration
-if __name__ == "__main__":
-    # Example configuration for testing
-    config = {
-        "output_dir": "data/bva",
-        "env_file": ".env",
-        "neo4j": {
-            "show_name": "bva",
-            "node_labels": {
-                "visitor_this_year": "Visitor_this_year",
-                "stream": "Stream"
-            },
-            "relationships": {
-                "job_stream": "job_to_stream"
-            },
-            "job_stream_mapping": {
-                "job_role_field": "job_role"
-            }
-        }
-    }
-    
-    # Initialize and run processor
-    processor = Neo4jJobStreamProcessor(config)
-    processor.process(create_only_new=True)

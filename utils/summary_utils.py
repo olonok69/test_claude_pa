@@ -1,52 +1,92 @@
+"""
+Enhanced Summary utilities for generating and printing pipeline statistics.
+
+This module provides functions to generate comprehensive summaries of the data processing pipeline,
+including registration, scan, session, and Neo4j processing statistics.
+
+ENHANCED: Compatible with both old and new processor statistics formats.
+"""
+
 import json
 import logging
-import os
+from datetime import datetime
 
 
 def generate_and_save_summary(processors, skip_neo4j=False):
     """
-    Generate summary statistics and save them to a JSON file.
+    Generate a comprehensive summary of the data processing pipeline results.
+    
+    ENHANCED: Compatible with both old and new processor statistics formats.
 
     Args:
         processors: Dictionary of processor instances
-        skip_neo4j: Whether Neo4j processing was skipped
+        skip_neo4j: Boolean indicating if Neo4j processing was skipped
+
+    Returns:
+        dict: Summary statistics
     """
     logger = logging.getLogger(__name__)
-    summary = {}
 
-    # Make sure the logs directory exists
-    os.makedirs("logs", exist_ok=True)
+    summary = {
+        "timestamp": datetime.now().isoformat(),
+        "pipeline_version": "enhanced",
+        "processing_mode": "generic" if not skip_neo4j else "data_only",
+        "processors_run": list(processors.keys()),
+    }
 
-    # Extract processors
-    reg_processor = processors.get("reg_processor")
+    # Get key processors
+    reg_processor = processors.get("registration_processor")
     scan_processor = processors.get("scan_processor")
     session_processor = processors.get("session_processor")
 
-    # Create summary statistics for registration data
+    # Create summary statistics for registration data if available
     if reg_processor and hasattr(reg_processor, "df_reg_demo_this"):
         reg_summary = {
-            "total_records": {
+            "total_registrations": {
                 "this_year": len(reg_processor.df_reg_demo_this),
-                "last_year_bva": len(reg_processor.df_reg_demo_last_bva),
-                "last_year_lva": len(reg_processor.df_reg_demo_last_lva),
-            }
+                "last_year_bva": len(reg_processor.df_reg_demo_last_bva)
+                if hasattr(reg_processor, "df_reg_demo_last_bva")
+                else 0,
+                "last_year_lva": len(reg_processor.df_reg_demo_last_lva)
+                if hasattr(reg_processor, "df_reg_demo_last_lva")
+                else 0,
+            },
+            "unique_countries": len(
+                reg_processor.df_reg_demo_this["Country"].unique()
+            )
+            if "Country" in reg_processor.df_reg_demo_this.columns
+            else 0,
+            "unique_organizations": len(
+                reg_processor.df_reg_demo_this["Company"].unique()
+            )
+            if "Company" in reg_processor.df_reg_demo_this.columns
+            else 0,
         }
-        
-        # Only add job_roles for veterinary events (vet-specific)
-        if "job_role" in reg_processor.df_reg_demo_this.columns:
-            reg_summary["job_roles"] = reg_processor.df_reg_demo_this["job_role"].value_counts().to_dict()
-            logger.info("Added job role summary (veterinary event)")
-        else:
-            logger.info("No job_role column found - skipping job role summary (generic event)")
-        
-        # Try to find specialization columns (different for vet vs generic events)
-        specialization_columns = [
-            "what_type_does_your_practice_specialise_in",  # BVA/vet-specific
-            "what_best_describes_what_you_do",  # ECOMM-specific
-            "specialization_current",  # Generic fallback
-            "main_specialization"  # Generic fallback
+
+        # Add job role distribution if available
+        job_role_columns = [
+            "job_role",
+            "JobTitle",
+            "what_is_your_job_role",
         ]
+        job_role_found = False
+        for col in job_role_columns:
+            if col in reg_processor.df_reg_demo_this.columns:
+                reg_summary["job_roles"] = reg_processor.df_reg_demo_this[col].value_counts().to_dict()
+                logger.info(f"Using job role column: {col}")
+                job_role_found = True
+                break
         
+        if not job_role_found:
+            logger.info("No job role column found - skipping job role summary")
+            reg_summary["job_roles"] = {}
+
+        # Add specialization distribution if available
+        specialization_columns = [
+            "what_type_does_your_practice_specialise_in",
+            "what_areas_do_you_specialise_in",
+            "what_best_describes_your_specialism",
+        ]
         specialization_found = False
         for col in specialization_columns:
             if col in reg_processor.df_reg_demo_this.columns:
@@ -77,26 +117,33 @@ def generate_and_save_summary(processors, skip_neo4j=False):
                     scan_processor.seminars_scans_past_enhanced_bva[
                         "Seminar Name"
                     ].unique()
-                ),
+                )
+                if hasattr(scan_processor, "seminars_scans_past_enhanced_bva")
+                else 0,
                 "last_year_lva": len(
                     scan_processor.seminars_scans_past_enhanced_lva[
                         "Seminar Name"
                     ].unique()
-                ),
+                )
+                if hasattr(scan_processor, "seminars_scans_past_enhanced_lva")
+                else 0,
             },
             "unique_attendees": {
                 "last_year_bva": len(
                     scan_processor.enhanced_seminars_df_bva["Badge Id"].unique()
-                ),
+                )
+                if "Badge Id" in scan_processor.enhanced_seminars_df_bva.columns
+                else 0,
                 "last_year_lva": len(
                     scan_processor.enhanced_seminars_df_lva["Badge Id"].unique()
-                ),
+                )
+                if "Badge Id" in scan_processor.enhanced_seminars_df_lva.columns
+                else 0,
             },
         }
         summary["scan"] = scan_summary
 
     # Create summary statistics for session data if available
-
     if (
         session_processor
         and hasattr(session_processor, "session_this_filtered_valid_cols")
@@ -107,10 +154,14 @@ def generate_and_save_summary(processors, skip_neo4j=False):
                 "this_year": len(session_processor.session_this_filtered_valid_cols),
                 "last_year_bva": len(
                     session_processor.session_last_filtered_valid_cols_bva
-                ),
+                )
+                if hasattr(session_processor, "session_last_filtered_valid_cols_bva")
+                else 0,
                 "last_year_lva": len(
                     session_processor.session_last_filtered_valid_cols_lva
-                ),
+                )
+                if hasattr(session_processor, "session_last_filtered_valid_cols_lva")
+                else 0,
             },
             # FIXED: Use unique_streams instead of streams
             "unique_streams": len(session_processor.unique_streams) if hasattr(session_processor, "unique_streams") else 0,
@@ -144,7 +195,9 @@ def generate_and_save_summary(processors, skip_neo4j=False):
 
 def add_neo4j_statistics(summary, processors):
     """
-    Add Neo4j statistics to the summary dictionary.
+    Add Neo4j-related statistics to the summary.
+    
+    ENHANCED: Compatible with both old and new processor statistics formats.
 
     Args:
         summary: Summary dictionary to update
@@ -192,13 +245,13 @@ def add_neo4j_statistics(summary, processors):
         }
         summary["neo4j_session"] = neo4j_session_summary
 
-    # Add Neo4j job stream statistics if available
+    # Add Neo4j job stream statistics if available (ENHANCED)
     neo4j_job_stream_processor = processors.get("neo4j_job_stream_processor")
     if neo4j_job_stream_processor and hasattr(neo4j_job_stream_processor, "statistics"):
-        neo4j_job_stream_summary = neo4j_job_stream_processor.statistics
+        neo4j_job_stream_summary = neo4j_job_stream_processor.statistics.copy()
         summary["neo4j_job_stream"] = neo4j_job_stream_summary
 
-    # Add Neo4j specialization stream statistics if available
+    # Add Neo4j specialization stream statistics if available (ENHANCED)
     neo4j_specialization_stream_processor = processors.get(
         "neo4j_specialization_stream_processor"
     )
@@ -206,21 +259,43 @@ def add_neo4j_statistics(summary, processors):
         neo4j_specialization_stream_processor, "statistics"
     ):
         neo4j_specialization_stream_summary = (
-            neo4j_specialization_stream_processor.statistics
+            neo4j_specialization_stream_processor.statistics.copy()
         )
-        # Calculate totals
-        neo4j_specialization_stream_summary["total_relationships_created"] = sum(
-            neo4j_specialization_stream_summary["relationships_created"].values()
-        )
-        neo4j_specialization_stream_summary["total_relationships_skipped"] = sum(
-            neo4j_specialization_stream_summary["relationships_skipped"].values()
-        )
-        neo4j_specialization_stream_summary["total_visitor_nodes_processed"] = sum(
-            neo4j_specialization_stream_summary["visitor_nodes_processed"].values()
-        )
+        
+        # ENHANCED: Handle both old and new statistics formats
+        relationships_created = neo4j_specialization_stream_summary.get("relationships_created", 0)
+        relationships_skipped = neo4j_specialization_stream_summary.get("relationships_skipped", 0)
+        visitor_nodes_processed = neo4j_specialization_stream_summary.get("visitor_nodes_processed", {})
+        
+        # If relationships_created is a dict (old format), calculate totals
+        if isinstance(relationships_created, dict):
+            neo4j_specialization_stream_summary["total_relationships_created"] = sum(
+                relationships_created.values()
+            )
+        else:
+            # If it's already an int (new format), use as is
+            neo4j_specialization_stream_summary["total_relationships_created"] = relationships_created
+        
+        # If relationships_skipped is a dict (old format), calculate totals
+        if isinstance(relationships_skipped, dict):
+            neo4j_specialization_stream_summary["total_relationships_skipped"] = sum(
+                relationships_skipped.values()
+            )
+        else:
+            # If it's already an int (new format), use as is
+            neo4j_specialization_stream_summary["total_relationships_skipped"] = relationships_skipped
+        
+        # Handle visitor_nodes_processed
+        if isinstance(visitor_nodes_processed, dict):
+            neo4j_specialization_stream_summary["total_visitor_nodes_processed"] = sum(
+                visitor_nodes_processed.values()
+            )
+        else:
+            neo4j_specialization_stream_summary["total_visitor_nodes_processed"] = visitor_nodes_processed
+        
         summary["neo4j_specialization_stream"] = neo4j_specialization_stream_summary
 
-    # Add Neo4j visitor relationship statistics if available
+    # Add Neo4j visitor relationship statistics if available (ENHANCED)
     neo4j_visitor_relationship_processor = processors.get(
         "neo4j_visitor_relationship_processor"
     )
@@ -228,15 +303,27 @@ def add_neo4j_statistics(summary, processors):
         neo4j_visitor_relationship_processor, "statistics"
     ):
         neo4j_visitor_relationship_summary = (
-            neo4j_visitor_relationship_processor.statistics
+            neo4j_visitor_relationship_processor.statistics.copy()
         )
-        # Calculate totals
-        neo4j_visitor_relationship_summary["total_relationships_created"] = sum(
-            neo4j_visitor_relationship_summary["relationships_created"].values()
-        )
-        neo4j_visitor_relationship_summary["total_relationships_skipped"] = sum(
-            neo4j_visitor_relationship_summary["relationships_skipped"].values()
-        )
+        
+        # Handle both old and new formats
+        relationships_created = neo4j_visitor_relationship_summary.get("relationships_created", {})
+        relationships_skipped = neo4j_visitor_relationship_summary.get("relationships_skipped", {})
+        
+        if isinstance(relationships_created, dict):
+            neo4j_visitor_relationship_summary["total_relationships_created"] = sum(
+                relationships_created.values()
+            )
+        else:
+            neo4j_visitor_relationship_summary["total_relationships_created"] = relationships_created
+            
+        if isinstance(relationships_skipped, dict):
+            neo4j_visitor_relationship_summary["total_relationships_skipped"] = sum(
+                relationships_skipped.values()
+            )
+        else:
+            neo4j_visitor_relationship_summary["total_relationships_skipped"] = relationships_skipped
+            
         summary["neo4j_visitor_relationship"] = neo4j_visitor_relationship_summary
 
     # Add Session Embedding statistics if available
@@ -251,69 +338,101 @@ def add_neo4j_statistics(summary, processors):
 def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
     """
     Print summary statistics to console and log key information.
+    
+    ENHANCED: Compatible with both old and new processor statistics formats.
 
     Args:
-        summary: Dictionary containing summary statistics
-        skip_neo4j: Whether Neo4j processing was skipped
-        reg_processor: Registration processor instance (for data distributions)
+        summary: Summary dictionary
+        skip_neo4j: Boolean indicating if Neo4j processing was skipped
+        reg_processor: Registration processor instance (optional)
     """
     logger = logging.getLogger(__name__)
 
-    # Get event names from processor config if available
-    main_event_name = "BVA"  # Default fallback
-    secondary_event_name = "LVA"  # Default fallback
+    # Get event configuration for printing
+    main_event_name = "BVA"
+    secondary_event_name = "LVA"
     
+    # Try to get event names from registration processor
     if reg_processor and hasattr(reg_processor, 'config'):
-        event_config = reg_processor.config.get("event", {})
-        main_event_name = event_config.get("main_event_name", "BVA")
-        secondary_event_name = event_config.get("secondary_event_name", "LVA")
+        event_config = reg_processor.config.get('event', {})
+        main_event_name = event_config.get('main_event_name', 'BVA').upper()
+        secondary_event_name = event_config.get('secondary_event_name', 'LVA').upper()
+
+    # Print header
+    print("\n" + "=" * 60)
+    print("PIPELINE PROCESSING SUMMARY")
+    print("=" * 60)
+    print(f"Processing completed at: {summary['timestamp']}")
+    print(f"Pipeline version: {summary['pipeline_version']}")
+    print(f"Processing mode: {summary['processing_mode']}")
+    print(f"Processors run: {', '.join(summary['processors_run'])}")
 
     # Print registration summary
     if "registration" in summary:
         reg_summary = summary["registration"]
         logger.info(
-            f"Total registration records this year: {reg_summary['total_records']['this_year']}"
+            f"Total registrations this year: {reg_summary['total_registrations']['this_year']}"
         )
         logger.info(
-            f"Total registration records last year {main_event_name}: {reg_summary['total_records']['last_year_bva']}"
+            f"Total registrations last year {main_event_name}: {reg_summary['total_registrations']['last_year_bva']}"
         )
         logger.info(
-            f"Total registration records last year {secondary_event_name}: {reg_summary['total_records']['last_year_lva']}"
+            f"Total registrations last year {secondary_event_name}: {reg_summary['total_registrations']['last_year_lva']}"
         )
+        logger.info(f"Unique countries: {reg_summary['unique_countries']}")
+        logger.info(f"Unique organizations: {reg_summary['unique_organizations']}")
 
-        print("\nSummary Statistics:")
+        print("\nRegistration Summary:")
         print(
-            f"Total registration records this year: {reg_summary['total_records']['this_year']}"
+            f"Total registrations this year: {reg_summary['total_registrations']['this_year']}"
         )
         print(
-            f"Total registration records last year {main_event_name}: {reg_summary['total_records']['last_year_bva']}"
+            f"Total registrations last year {main_event_name}: {reg_summary['total_registrations']['last_year_bva']}"
         )
         print(
-            f"Total registration records last year {secondary_event_name}: {reg_summary['total_records']['last_year_lva']}"
+            f"Total registrations last year {secondary_event_name}: {reg_summary['total_registrations']['last_year_lva']}"
         )
+        print(f"Unique countries represented: {reg_summary['unique_countries']}")
+        print(f"Unique organizations: {reg_summary['unique_organizations']}")
+
+        if reg_summary.get("job_roles"):
+            print("\nTop 5 Job Roles:")
+            for i, (role, count) in enumerate(list(reg_summary["job_roles"].items())[:5]):
+                print(f"  {i+1}. {role}: {count}")
+
+        if reg_summary.get("specializations"):
+            print("\nTop 5 Specializations:")
+            for i, (spec, count) in enumerate(list(reg_summary["specializations"].items())[:5]):
+                print(f"  {i+1}. {spec}: {count}")
 
     # Print scan summary
     if "scan" in summary:
         scan_summary = summary["scan"]
         logger.info(
-            f"Total seminar scans last year {main_event_name}: {scan_summary['total_scans']['last_year_bva']}"
+            f"Total scans last year {main_event_name}: {scan_summary['total_scans']['last_year_bva']}"
         )
         logger.info(
-            f"Total seminar scans last year {secondary_event_name}: {scan_summary['total_scans']['last_year_lva']}"
+            f"Total scans last year {secondary_event_name}: {scan_summary['total_scans']['last_year_lva']}"
         )
         logger.info(
-            f"Unique seminar attendees last year {main_event_name}: {scan_summary['unique_attendees']['last_year_bva']}"
+            f"Unique seminars last year {main_event_name}: {scan_summary['unique_seminars']['last_year_bva']}"
         )
         logger.info(
-            f"Unique seminar attendees last year {secondary_event_name}: {scan_summary['unique_attendees']['last_year_lva']}"
+            f"Unique seminars last year {secondary_event_name}: {scan_summary['unique_seminars']['last_year_lva']}"
         )
 
         print("\nScan Summary:")
         print(
-            f"Total seminar scans last year {main_event_name}: {scan_summary['total_scans']['last_year_bva']}"
+            f"Total scans last year {main_event_name}: {scan_summary['total_scans']['last_year_bva']}"
         )
         print(
-            f"Total seminar scans last year {secondary_event_name}: {scan_summary['total_scans']['last_year_lva']}"
+            f"Total scans last year {secondary_event_name}: {scan_summary['total_scans']['last_year_lva']}"
+        )
+        print(
+            f"Unique seminars last year {main_event_name}: {scan_summary['unique_seminars']['last_year_bva']}"
+        )
+        print(
+            f"Unique seminars last year {secondary_event_name}: {scan_summary['unique_seminars']['last_year_lva']}"
         )
         print(
             f"Unique seminar attendees last year {main_event_name}: {scan_summary['unique_attendees']['last_year_bva']}"
@@ -353,6 +472,10 @@ def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
         for i, stream in enumerate(session_summary["stream_categories"][:5]):
             print(f"  {i+1}. {stream}")
 
+    # Print Neo4j statistics if available
+    if not skip_neo4j:
+        print_neo4j_statistics(summary, main_event_name, secondary_event_name)
+
     # Print session recommendation summary
     if "session_recommendation" in summary:
         rec_summary = summary["session_recommendation"]
@@ -379,108 +502,53 @@ def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
         print(
             f"Total recommendations generated: {rec_summary['total_recommendations_generated']}"
         )
-        print(
-            f"Unique sessions recommended: {rec_summary['unique_recommended_sessions']}"
-        )
-        print(f"Processing time: {rec_summary['processing_time']:.2f} seconds")
+        print(f"Unique sessions recommended: {rec_summary['unique_recommended_sessions']}")
         if rec_summary.get("errors", 0) > 0:
             print(f"Errors encountered: {rec_summary['errors']}")
 
-    # Print Neo4j statistics
-    if not skip_neo4j:
-        print_neo4j_statistics(summary, main_event_name, secondary_event_name)
-
-    # Print data distributions - FIXED: Check if columns exist before accessing
-    if reg_processor and hasattr(reg_processor, "df_reg_demo_this"):
-        # Only print job role distribution if the column exists (veterinary events)
-        if "job_role" in reg_processor.df_reg_demo_this.columns:
-            print("\nJob Role Distribution This Year:")
-            print(reg_processor.df_reg_demo_this["job_role"].value_counts())
-        else:
-            print("\nJob Role Distribution This Year:")
-            print("Not available (generic event - no job role processing)")
-
-        # Print specialization distribution - try multiple possible column names
-        specialization_columns = [
-            "what_type_does_your_practice_specialise_in",  # BVA/vet-specific
-            "what_best_describes_what_you_do",  # ECOMM-specific
-            "specialization_current",  # Generic fallback
-            "main_specialization"  # Generic fallback
-        ]
-        
-        specialization_printed = False
-        for col in specialization_columns:
-            if col in reg_processor.df_reg_demo_this.columns:
-                print(f"\nPractice Specialization Distribution This Year:")
-                print(reg_processor.df_reg_demo_this[col].value_counts())
-                specialization_printed = True
-                break
-        
-        if not specialization_printed:
-            print(f"\nPractice Specialization Distribution This Year:")
-            print("Not available (no specialization column found)")
-
-    # Print Neo4j usage information if Neo4j processing wasn't skipped
-    if not skip_neo4j:
-        print_neo4j_usage_info()
+    # Print summary location
+    print(f"\n📄 Detailed summary saved to: logs/processing_summary.json")
+    print("=" * 60)
 
 
-def print_neo4j_statistics(summary, main_event_name="BVA", secondary_event_name="LVA"):
+def print_neo4j_statistics(summary, main_event_name, secondary_event_name):
     """
-    Print Neo4j statistics to console.
+    Print Neo4j-related statistics.
+    
+    ENHANCED: Compatible with both old and new processor statistics formats.
 
     Args:
-        summary: Dictionary containing summary statistics
-        main_event_name: Name of the main event (default: BVA)
-        secondary_event_name: Name of the secondary event (default: LVA)
+        summary: Summary dictionary
+        main_event_name: Name of main event (e.g., BVA)
+        secondary_event_name: Name of secondary event (e.g., LVA)
     """
     logger = logging.getLogger(__name__)
 
     # Print Neo4j visitor statistics
     if "neo4j_visitor" in summary:
         neo4j_visitor_summary = summary["neo4j_visitor"]
-        logger.info(
-            f"Total Neo4j visitor nodes created: {neo4j_visitor_summary['total_nodes_created']}"
-        )
-        logger.info(
-            f"Total Neo4j visitor nodes skipped: {neo4j_visitor_summary['total_nodes_skipped']}"
-        )
-
-        print("\nNeo4j Visitor Upload Summary:")
+        print("\nNeo4j Visitor Node Summary:")
         print(
             f"Total visitor nodes created: {neo4j_visitor_summary['total_nodes_created']}"
         )
         print(
             f"Total visitor nodes skipped: {neo4j_visitor_summary['total_nodes_skipped']}"
         )
-        print("\nDetailed Neo4j Visitor Statistics:")
+        print("\nDetailed Visitor Node Statistics:")
         print(
-            f"  Visitors this year: {neo4j_visitor_summary['nodes_created']['visitor_this_year']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_this_year']} skipped"
+            f"  This year visitors: {neo4j_visitor_summary['nodes_created']['visitor_this_year']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_this_year']} skipped"
         )
         print(
-            f"  Visitors last year {main_event_name}: {neo4j_visitor_summary['nodes_created']['visitor_last_year_bva']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_last_year_bva']} skipped"
+            f"  Last year {main_event_name} visitors: {neo4j_visitor_summary['nodes_created']['visitor_last_year_bva']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_last_year_bva']} skipped"
         )
         print(
-            f"  Visitors last year {secondary_event_name}: {neo4j_visitor_summary['nodes_created']['visitor_last_year_lva']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_last_year_lva']} skipped"
+            f"  Last year {secondary_event_name} visitors: {neo4j_visitor_summary['nodes_created']['visitor_last_year_lva']} created, {neo4j_visitor_summary['nodes_skipped']['visitor_last_year_lva']} skipped"
         )
 
     # Print Neo4j session statistics
     if "neo4j_session" in summary:
         neo4j_session_summary = summary["neo4j_session"]
-        logger.info(
-            f"Total Neo4j session nodes created: {neo4j_session_summary['total_nodes_created']}"
-        )
-        logger.info(
-            f"Total Neo4j session nodes skipped: {neo4j_session_summary['total_nodes_skipped']}"
-        )
-        logger.info(
-            f"Total Neo4j relationships created: {neo4j_session_summary['total_relationships_created']}"
-        )
-        logger.info(
-            f"Total Neo4j relationships skipped: {neo4j_session_summary['total_relationships_skipped']}"
-        )
-
-        print("\nNeo4j Session Upload Summary:")
+        print("\nNeo4j Session Node Summary:")
         print(
             f"Total session nodes created: {neo4j_session_summary['total_nodes_created']}"
         )
@@ -488,23 +556,17 @@ def print_neo4j_statistics(summary, main_event_name="BVA", secondary_event_name=
             f"Total session nodes skipped: {neo4j_session_summary['total_nodes_skipped']}"
         )
         print(
-            f"Total relationships created: {neo4j_session_summary['total_relationships_created']}"
+            f"Total session-stream relationships created: {neo4j_session_summary['total_relationships_created']}"
         )
         print(
-            f"Total relationships skipped: {neo4j_session_summary['total_relationships_skipped']}"
+            f"Total session-stream relationships skipped: {neo4j_session_summary['total_relationships_skipped']}"
         )
-        print("\nDetailed Neo4j Session Statistics:")
+        print("\nDetailed Session Node Statistics:")
         print(
-            f"  Sessions this year: {neo4j_session_summary['nodes_created']['sessions_this_year']} created, {neo4j_session_summary['nodes_skipped']['sessions_this_year']} skipped"
-        )
-        print(
-            f"  Sessions past year {main_event_name}: {neo4j_session_summary['nodes_created']['sessions_past_year_bva']} created, {neo4j_session_summary['nodes_skipped']['sessions_past_year_bva']} skipped"
+            f"  This year sessions: {neo4j_session_summary['nodes_created']['sessions_this_year']} created, {neo4j_session_summary['nodes_skipped']['sessions_this_year']} skipped"
         )
         print(
-            f"  Sessions past year {secondary_event_name}: {neo4j_session_summary['nodes_created']['sessions_past_year_lva']} created, {neo4j_session_summary['nodes_skipped']['sessions_past_year_lva']} skipped"
-        )
-        print(
-            f"  Stream nodes: {neo4j_session_summary['nodes_created']['streams']} created, {neo4j_session_summary['nodes_skipped']['streams']} skipped"
+            f"  Past year sessions: {neo4j_session_summary['nodes_created']['sessions_past_year']} created, {neo4j_session_summary['nodes_skipped']['sessions_past_year']} skipped"
         )
         print(
             f"  Session-Stream relationships this year: {neo4j_session_summary['relationships_created']['sessions_this_year_has_stream']} created, {neo4j_session_summary['relationships_skipped']['sessions_this_year_has_stream']} skipped"
@@ -513,76 +575,109 @@ def print_neo4j_statistics(summary, main_event_name="BVA", secondary_event_name=
             f"  Session-Stream relationships past year: {neo4j_session_summary['relationships_created']['sessions_past_year_has_stream']} created, {neo4j_session_summary['relationships_skipped']['sessions_past_year_has_stream']} skipped"
         )
 
-    # Print Neo4j job stream statistics
+    # Print Neo4j job stream statistics (ENHANCED)
     if "neo4j_job_stream" in summary:
         neo4j_job_stream_summary = summary["neo4j_job_stream"]
         print("\nNeo4j Job-Stream Relationship Summary:")
-        print(
-            f"Total job-stream relationships created: {neo4j_job_stream_summary['relationships_created']}"
-        )
-        print(
-            f"Total job-stream relationships skipped: {neo4j_job_stream_summary['relationships_skipped']}"
-        )
-        print("\nDetailed Job-Stream Statistics:")
-        print(
-            f"  Visitor nodes processed: {neo4j_job_stream_summary['visitor_nodes_processed']}"
-        )
-        print(f"  Job roles matched: {neo4j_job_stream_summary['job_roles_processed']}")
-        print(
-            f"  Stream matches found: {neo4j_job_stream_summary['stream_matches_found']}"
-        )
+        
+        # Handle skipped processing
+        if neo4j_job_stream_summary.get("processing_skipped", False):
+            skip_reason = neo4j_job_stream_summary.get("skip_reason", "Unknown reason")
+            print(f"Processing skipped: {skip_reason}")
+        else:
+            print(
+                f"Total job-stream relationships created: {neo4j_job_stream_summary['relationships_created']}"
+            )
+            print(
+                f"Total job-stream relationships skipped: {neo4j_job_stream_summary['relationships_skipped']}"
+            )
+            print("\nDetailed Job-Stream Statistics:")
+            print(
+                f"  Visitor nodes processed: {neo4j_job_stream_summary['visitor_nodes_processed']}"
+            )
+            print(f"  Job roles matched: {neo4j_job_stream_summary['job_roles_processed']}")
+            print(
+                f"  Stream matches found: {neo4j_job_stream_summary['stream_matches_found']}"
+            )
 
-    # Print Neo4j specialization stream statistics
+    # Print Neo4j specialization stream statistics (ENHANCED)
     if "neo4j_specialization_stream" in summary:
         neo4j_specialization_stream_summary = summary["neo4j_specialization_stream"]
         print("\nNeo4j Specialization-Stream Relationship Summary:")
-        print(
-            f"Total specialization-stream relationships created: {neo4j_specialization_stream_summary['total_relationships_created']}"
-        )
-        print(
-            f"Total specialization-stream relationships skipped: {neo4j_specialization_stream_summary['total_relationships_skipped']}"
-        )
-        print("\nDetailed Specialization-Stream Statistics:")
-        print(f"  Visitor nodes processed:")
-        print(
-            f"    This year: {neo4j_specialization_stream_summary['visitor_nodes_processed']['visitor_this_year']}"
-        )
-        print(
-            f"    Last year {main_event_name}: {neo4j_specialization_stream_summary['visitor_nodes_processed']['visitor_last_year_bva']}"
-        )
-        print(
-            f"    Last year {secondary_event_name}: {neo4j_specialization_stream_summary['visitor_nodes_processed']['visitor_last_year_lva']}"
-        )
-        print(
-            f"  Specializations processed: {neo4j_specialization_stream_summary['specializations_processed']}"
-        )
-        print(
-            f"  Stream matches found: {neo4j_specialization_stream_summary['stream_matches_found']}"
-        )
+        
+        # Handle skipped processing
+        if neo4j_specialization_stream_summary.get("processing_skipped", False):
+            skip_reason = neo4j_specialization_stream_summary.get("skip_reason", "Unknown reason")
+            print(f"Processing skipped: {skip_reason}")
+        else:
+            # Handle both old and new formats
+            total_created = neo4j_specialization_stream_summary.get("total_relationships_created", 
+                neo4j_specialization_stream_summary.get("relationships_created", 0))
+            total_skipped = neo4j_specialization_stream_summary.get("total_relationships_skipped",
+                neo4j_specialization_stream_summary.get("relationships_skipped", 0))
+            
+            print(f"Total specialization-stream relationships created: {total_created}")
+            print(f"Total specialization-stream relationships skipped: {total_skipped}")
+            
+            print("\nDetailed Specialization-Stream Statistics:")
+            visitor_nodes_processed = neo4j_specialization_stream_summary.get("visitor_nodes_processed", {})
+            
+            if isinstance(visitor_nodes_processed, dict):
+                print(f"  Visitor nodes processed:")
+                # Handle both old and new key formats
+                this_year_key = next((key for key in visitor_nodes_processed.keys() 
+                                    if 'this_year' in key.lower()), None)
+                bva_key = next((key for key in visitor_nodes_processed.keys() 
+                              if 'bva' in key.lower() and 'last' in key.lower()), None)
+                lva_key = next((key for key in visitor_nodes_processed.keys() 
+                              if 'lva' in key.lower() and 'last' in key.lower()), None)
+                
+                if this_year_key:
+                    print(f"    This year: {visitor_nodes_processed[this_year_key]}")
+                if bva_key:
+                    print(f"    Last year {main_event_name}: {visitor_nodes_processed[bva_key]}")
+                if lva_key:
+                    print(f"    Last year {secondary_event_name}: {visitor_nodes_processed[lva_key]}")
+            else:
+                print(f"  Total visitor nodes processed: {visitor_nodes_processed}")
+            
+            specializations_processed = neo4j_specialization_stream_summary.get("specializations_processed", 0)
+            stream_matches_found = neo4j_specialization_stream_summary.get("stream_matches_found", 0)
+            
+            print(f"  Specializations processed: {specializations_processed}")
+            print(f"  Stream matches found: {stream_matches_found}")
 
-    # Print Neo4j visitor relationship statistics
+    # Print Neo4j visitor relationship statistics (ENHANCED)
     if "neo4j_visitor_relationship" in summary:
         neo4j_visitor_relationship_summary = summary["neo4j_visitor_relationship"]
         print("\nNeo4j Visitor Relationship Summary:")
-        print(
-            f"Total visitor relationships created: {neo4j_visitor_relationship_summary['total_relationships_created']}"
-        )
-        print(
-            f"Total visitor relationships skipped: {neo4j_visitor_relationship_summary['total_relationships_skipped']}"
-        )
-        print("\nDetailed Visitor Relationship Statistics:")
-        print(
-            f"  Same_Visitor relationships for {main_event_name}: {neo4j_visitor_relationship_summary['relationships_created']['same_visitor_bva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['same_visitor_bva']} skipped"
-        )
-        print(
-            f"  Same_Visitor relationships for {secondary_event_name}: {neo4j_visitor_relationship_summary['relationships_created']['same_visitor_lva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['same_visitor_lva']} skipped"
-        )
-        print(
-            f"  attended_session relationships for {main_event_name}: {neo4j_visitor_relationship_summary['relationships_created']['attended_session_bva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['attended_session_bva']} skipped"
-        )
-        print(
-            f"  attended_session relationships for {secondary_event_name}: {neo4j_visitor_relationship_summary['relationships_created']['attended_session_lva']} created, {neo4j_visitor_relationship_summary['relationships_skipped']['attended_session_lva']} skipped"
-        )
+        
+        total_created = neo4j_visitor_relationship_summary.get("total_relationships_created", 0)
+        total_skipped = neo4j_visitor_relationship_summary.get("total_relationships_skipped", 0)
+        
+        print(f"Total visitor relationships created: {total_created}")
+        print(f"Total visitor relationships skipped: {total_skipped}")
+        
+        # Print detailed stats if available
+        relationships_created = neo4j_visitor_relationship_summary.get("relationships_created", {})
+        relationships_skipped = neo4j_visitor_relationship_summary.get("relationships_skipped", {})
+        
+        if isinstance(relationships_created, dict):
+            print("\nDetailed Visitor Relationship Statistics:")
+            same_visitor_bva = relationships_created.get("same_visitor_bva", 0)
+            same_visitor_lva = relationships_created.get("same_visitor_lva", 0)
+            attended_session_bva = relationships_created.get("attended_session_bva", 0)
+            attended_session_lva = relationships_created.get("attended_session_lva", 0)
+            
+            same_visitor_bva_skipped = relationships_skipped.get("same_visitor_bva", 0)
+            same_visitor_lva_skipped = relationships_skipped.get("same_visitor_lva", 0)
+            attended_session_bva_skipped = relationships_skipped.get("attended_session_bva", 0)
+            attended_session_lva_skipped = relationships_skipped.get("attended_session_lva", 0)
+            
+            print(f"  Same_Visitor relationships for {main_event_name}: {same_visitor_bva} created, {same_visitor_bva_skipped} skipped")
+            print(f"  Same_Visitor relationships for {secondary_event_name}: {same_visitor_lva} created, {same_visitor_lva_skipped} skipped")
+            print(f"  attended_session relationships for {main_event_name}: {attended_session_bva} created, {attended_session_bva_skipped} skipped")
+            print(f"  attended_session relationships for {secondary_event_name}: {attended_session_lva} created, {attended_session_lva_skipped} skipped")
 
     # Print session embedding statistics
     if "session_embedding" in summary:
@@ -619,49 +714,41 @@ def print_neo4j_usage_info():
     """
     Print Neo4j usage information and example queries.
     """
-    print("\nNeo4j Processing Overview:")
-    print(
-        "- Uploaded visitor data to Neo4j as separate node types for this year and past years"
-    )
-    print(
-        "- Uploaded session data to Neo4j as separate node types for this year and past years"
-    )
-    print("- Created stream nodes with descriptions")
-    print("- Established HAS_STREAM relationships between sessions and streams")
-    print(
-        "- Created JOB_TO_STREAM relationships between visitors and recommended streams based on job roles"
-    )
-    print(
-        "- Created SPECIALIZATION_TO_STREAM relationships between visitors and relevant streams based on practice specializations"
-    )
-    print(
-        "- Created Same_Visitor relationships between visitors this year and visitors from past events"
-    )
-    print(
-        "- Created attended_session relationships between past visitors and the sessions they attended"
-    )
-    print("- Generated text embeddings for all session nodes to enable semantic search")
-    print("- Generated personalized session recommendations for all visitors")
-    print("- Use the Neo4j Browser to explore and query the data")
-    print("- Example queries:")
-    print(
-        "  1. MATCH (s:Sessions_this_year)-[:HAS_STREAM]->(st:Stream) RETURN s, st LIMIT 25"
-    )
-    print(
-        "  2. MATCH (v:Visitor_this_year)-[:JOB_TO_STREAM]->(st:Stream) RETURN v.job_role, collect(st.stream) as recommended_streams LIMIT 10"
-    )
-    print(
-        "  3. MATCH (v:Visitor_this_year)-[:SPECIALIZATION_TO_STREAM]->(st:Stream) RETURN v.what_type_does_your_practice_specialise_in, collect(st.stream) as relevant_streams LIMIT 10"
-    )
-    print(
-        "  4. MATCH (v:Visitor_this_year) WHERE v.job_role='Veterinary Surgeon' RETURN v.job_role, count(v) as vet_count"
-    )
-    print(
-        "  5. MATCH (v:Visitor_this_year)-[:Same_Visitor]->(v_past) RETURN v.BadgeId, v_past.BadgeId, v_past.job_role LIMIT 10"
-    )
-    print(
-        "  6. MATCH (v:Visitor_last_year_bva)-[:attended_session]->(s:Sessions_past_year) RETURN v.BadgeId, count(s) as sessions_attended ORDER BY sessions_attended DESC LIMIT 10"
-    )
-    print(
-        "  7. MATCH (s:Sessions_this_year) WHERE s.embedding IS NOT NULL RETURN count(s) as sessions_with_embeddings"
-    )
+    print("\n" + "=" * 60)
+    print("NEO4J DATABASE USAGE INFORMATION")
+    print("=" * 60)
+    print("The following nodes and relationships have been created in Neo4j:")
+    print("\nNode Types:")
+    print("  - Visitor_this_year: Current year visitors")
+    print("  - Visitor_last_year_bva: Previous year BVA visitors")
+    print("  - Visitor_last_year_lva: Previous year LVA visitors")
+    print("  - Sessions_this_year: Current year sessions")
+    print("  - Sessions_past_year: Previous year sessions")
+    print("  - Stream: Session categories/streams")
+    
+    print("\nRelationship Types:")
+    print("  - HAS_STREAM: Sessions to their stream categories")
+    print("  - job_to_stream: Visitors to relevant streams based on job roles")
+    print("  - specialization_to_stream: Visitors to streams based on specializations")
+    print("  - Same_Visitor: Links visitors across years")
+    print("  - attended_session: Visitors to sessions they attended")
+    
+    print("\nExample Queries:")
+    print("1. Count visitor nodes:")
+    print("   MATCH (v:Visitor_this_year) RETURN count(v)")
+    
+    print("\n2. Find sessions in a specific stream:")
+    print("   MATCH (s:Sessions_this_year)-[:HAS_STREAM]->(st:Stream {stream: 'cardiology'})")
+    print("   RETURN s.title, s.date, s.start_time")
+    
+    print("\n3. Find visitors with job-to-stream relationships:")
+    print("   MATCH (v:Visitor_this_year)-[:job_to_stream]->(s:Stream)")
+    print("   RETURN v.job_role, s.stream, count(*) as connections")
+    print("   ORDER BY connections DESC LIMIT 10")
+    
+    print("\n4. Find recommended sessions for a visitor:")
+    print("   MATCH (v:Visitor_this_year {BadgeId: 'your_badge_id'})-[:job_to_stream]->(s:Stream)")
+    print("   MATCH (session:Sessions_this_year)-[:HAS_STREAM]->(s)")
+    print("   RETURN session.title, session.date, s.stream")
+    
+    print("=" * 60)
