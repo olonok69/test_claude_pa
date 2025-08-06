@@ -102,10 +102,7 @@ input_files:
   main_event_demographic: "data/bva/20250609_demographics_BVA24_BVA25.json"
   secondary_event_demographic: "data/bva/20250428_demographics_LVS24.json"
   practices: "data/bva/practices_missing.csv"
-  main_event_scan: "data/bva/20240723_scan_data_BVA25.json"
-  secondary_event_scan: "data/bva/20240724_scan_data_LVS25.json"
-  main_event_sessions: "data/bva/20240725_sessions_BVA25.json"
-  secondary_event_sessions: "data/bva/20240726_sessions_LVS25.json"
+
 
 # Scan data configuration
 scan_files:

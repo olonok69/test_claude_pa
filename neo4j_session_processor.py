@@ -472,6 +472,17 @@ class Neo4jSessionProcessor:
             self.statistics["nodes_created"]["sessions_past_year_lva"] = nodes_created
             self.statistics["nodes_skipped"]["sessions_past_year_lva"] = nodes_skipped
 
+            # CRITICAL FIX: Add combined sessions_past_year statistics that summary_utils.py expects
+            main_nodes_created = self.statistics["nodes_created"].get(f"sessions_past_year_{self.main_event_name}", 0)
+            main_nodes_skipped = self.statistics["nodes_skipped"].get(f"sessions_past_year_{self.main_event_name}", 0)
+
+            secondary_nodes_created = self.statistics["nodes_created"].get(f"sessions_past_year_{self.secondary_event_name}", 0)
+            secondary_nodes_skipped = self.statistics["nodes_skipped"].get(f"sessions_past_year_{self.secondary_event_name}", 0)
+
+            # Create the combined sessions_past_year key that summary_utils.py expects
+            self.statistics["nodes_created"]["sessions_past_year"] = main_nodes_created + secondary_nodes_created
+            self.statistics["nodes_skipped"]["sessions_past_year"] = main_nodes_skipped + secondary_nodes_skipped
+
             # Create stream nodes
             self.logger.info("Creating stream nodes")
             streams_file_path = os.path.join(self.output_dir, "output/streams.json")
