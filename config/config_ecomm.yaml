@@ -85,7 +85,7 @@ pipeline_steps:
   neo4j_job_stream_processing: true  # ENABLED but will be skipped via config
   neo4j_specialization_stream_processing: true  # ENABLED but will be skipped via config
   neo4j_visitor_relationship_processing: true
-  session_embedding_processing: false
+  session_embedding_processing: true
   session_recommendation_processing: false  # Enable session recommendation processing
 
 # Input file paths - CHANGED FOR ECOMM
@@ -118,7 +118,7 @@ session_files:
 
 # Stream processing configuration
 stream_processing:
-  use_cached_descriptions: false
+  use_cached_descriptions: true
 
 # Scan output files
 scan_output_files:

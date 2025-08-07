@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+"""
+Generic Session Embedding Processor
+
+This processor generates and stores text embeddings for session nodes in Neo4j.
+It creates embeddings that incorporate session data and stream descriptions
+to enrich search capabilities.
+
+This is a generic version that works with any show configuration.
+"""
+
 import logging
 import os
 import json
@@ -9,7 +20,7 @@ from dotenv import load_dotenv
 
 class SessionEmbeddingProcessor:
     """
-    A class to generate and store text embeddings for session nodes in Neo4j.
+    A generic class to generate and store text embeddings for session nodes in Neo4j.
     This class is responsible for creating embeddings that incorporate session data
     and stream descriptions to enrich the search capabilities.
     """
@@ -28,6 +39,10 @@ class SessionEmbeddingProcessor:
 
         self.config = config
         self.input_dir = config["output_dir"]
+
+        # Get show name from config
+        self.show_name = config.get("neo4j", {}).get("show_name", "unknown")
+        self.logger.info(f"Processing for show: {self.show_name}")
 
         # Check if we should include stream descriptions in embeddings
         self.include_stream_descriptions = config.get("embeddings", {}).get(
@@ -163,16 +178,24 @@ class SessionEmbeddingProcessor:
                 "sessions_by_type": {"sessions_this_year": 0, "sessions_past_year": 0},
             }
 
-            # Fixed the WHERE clause syntax error
-            filter_clause = (
-                "WHERE (s.embedding IS NULL OR s.embedding = '') AND "
-                if create_only_new
-                else "WHERE "
-            )
+            # Build the WHERE clause
+            where_conditions = []
+            
+            # Filter by show
+            where_conditions.append(f"s.show = '{self.show_name}'")
+            
+            # Filter by embedding existence if needed
+            if create_only_new:
+                where_conditions.append("(s.embedding IS NULL OR s.embedding = '')")
+            
+            # Filter by node labels
+            where_conditions.append("(s:Sessions_this_year OR s:Sessions_past_year)")
+            
+            where_clause = "WHERE " + " AND ".join(where_conditions)
 
             query = f"""
             MATCH (s)
-            {filter_clause} (s:Sessions_this_year OR s:Sessions_past_year)
+            {where_clause}
             RETURN s.session_id as session_id, s.title as title, 
                 s.stream as stream, s.synopsis_stripped as synopsis_stripped,
                 s.theatre__name as theatre__name, labels(s)[0] as type,
@@ -185,8 +208,10 @@ class SessionEmbeddingProcessor:
             # Fetch all stream descriptions once (only if needed)
             stream_descriptions = {}
             if model.include_stream_descriptions:
-                stream_query = """
+                # Filter streams by show as well
+                stream_query = f"""
                 MATCH (s:Stream)
+                WHERE s.show = '{self.show_name}'
                 RETURN s.stream as stream, s.description as description
                 """
                 stream_data = tx.run(stream_query).data()
@@ -245,12 +270,13 @@ class SessionEmbeddingProcessor:
                     # Save the embedding back to the node
                     update_query = """
                     MATCH (s)
-                    WHERE s.session_id = $session_id
+                    WHERE s.session_id = $session_id AND s.show = $show_name
                     SET s.embedding = $embedding
                     """
                     tx.run(
                         update_query,
                         session_id=session["session_id"],
+                        show_name=self.show_name,
                         embedding=json.dumps(embedding),
                     )
 
@@ -258,89 +284,75 @@ class SessionEmbeddingProcessor:
 
             return batch_stats
 
-        try:
-            with driver.session() as session:
-                # Pass self as the model to access _create_session_embedding method
-                batch_stats = session.execute_write(
-                    batch_compute_embeddings, create_only_new, self.batch_size, self
-                )
-
-                # Update our statistics
-                stats.update(batch_stats)
-
-                self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Session embeddings - processed: {stats['total_sessions_processed']}, created: {stats['sessions_with_embeddings']}"
-                )
-                self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Sessions with stream descriptions: {stats['sessions_with_stream_descriptions']}"
-                )
-                self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Sessions by type - this year: {stats['sessions_by_type']['sessions_this_year']}, past year: {stats['sessions_by_type']['sessions_past_year']}"
-                )
-        except Exception as e:
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error computing session embeddings: {str(e)}"
+        # Execute the batch processing with a transaction
+        with driver.session() as session:
+            result = session.execute_write(
+                batch_compute_embeddings, create_only_new, self.batch_size, self
             )
-            stats["errors"] += 1
-            raise
-        finally:
-            driver.close()
+
+            # Update overall statistics
+            stats["total_sessions_processed"] = result["total_sessions_processed"]
+            stats["sessions_with_embeddings"] = result["sessions_with_embeddings"]
+            stats["sessions_with_stream_descriptions"] = result[
+                "sessions_with_stream_descriptions"
+            ]
+            stats["sessions_by_type"] = result["sessions_by_type"]
+
+        driver.close()
+
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Embedding computation complete. Stats: {stats}"
+        )
+
+        # Update instance statistics
+        self.statistics.update(stats)
 
         return stats
 
     def process(self, create_only_new=True):
         """
-        Process session nodes in Neo4j and generate embeddings.
+        Main processing method that orchestrates the embedding generation.
 
         Args:
             create_only_new (bool): If True, only create embeddings for nodes that don't already have them
+
+        Returns:
+            bool: True if processing was successful, False otherwise
         """
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Starting session embedding processing"
         )
 
-        # Test the connection first
-        if not self._test_connection():
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Cannot proceed with Neo4j processing due to connection failure"
-            )
-            return
-
         try:
-            # Compute and save embeddings
-            stats = self.compute_and_save_embeddings(create_only_new)
+            # Test Neo4j connection
+            if not self._test_connection():
+                self.logger.error(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Failed to connect to Neo4j database"
+                )
+                return False
 
-            # Update the statistics
-            self.statistics.update(stats)
+            # Compute and save embeddings
+            stats = self.compute_and_save_embeddings(create_only_new=create_only_new)
 
             # Log summary
             self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Session embedding processing summary:"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing complete"
             )
             self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Total sessions processed: {self.statistics['total_sessions_processed']}"
+                f"Total sessions processed: {stats['total_sessions_processed']}"
             )
             self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Sessions with embeddings created: {self.statistics['sessions_with_embeddings']}"
+                f"Sessions with embeddings: {stats['sessions_with_embeddings']}"
             )
             self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Sessions with stream descriptions: {self.statistics['sessions_with_stream_descriptions']}"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Sessions by type - this year: {self.statistics['sessions_by_type']['sessions_this_year']}, past year: {self.statistics['sessions_by_type']['sessions_past_year']}"
+                f"Sessions with stream descriptions: {stats['sessions_with_stream_descriptions']}"
             )
 
-            if self.statistics.get("errors", 0) > 0:
-                self.logger.warning(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Errors encountered during processing: {self.statistics['errors']}"
-                )
+            return True
 
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Session embedding processing completed"
-            )
         except Exception as e:
             self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error in session embedding processing: {str(e)}"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error during processing: {str(e)}"
             )
             self.statistics["errors"] += 1
-            raise
+            return False
