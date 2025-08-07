@@ -312,7 +312,7 @@ class Neo4jSessionProcessor:
                         continue
                     
                     # Split stream string by semicolon and normalize case
-                    streams = [s.strip().lower() for s in streams_str.split(";") if s.strip()]
+                    streams = [s.strip() for s in streams_str.split(";") if s.strip()]  # Removed .lower()
                     
                     for stream in streams:
                         # SIMPLE FIX: Check if relationship already exists using a more robust query
@@ -320,7 +320,7 @@ class Neo4jSessionProcessor:
                             rel_exists_query = f"""
                             MATCH (s:{session_node_label} {{session_id: $session_id}})
                             MATCH (st:{stream_node_label})
-                            WHERE LOWER(st.stream) = $stream
+                            WHERE LOWER(st.stream) = LOWER($stream)
                             WITH s, st
                             RETURN EXISTS((s)-[:HAS_STREAM]->(st)) AS exists
                             """
@@ -336,7 +336,7 @@ class Neo4jSessionProcessor:
                         create_query = f"""
                         MATCH (s:{session_node_label} {{session_id: $session_id}})
                         MATCH (st:{stream_node_label})
-                        WHERE LOWER(st.stream) = $stream
+                        WHERE LOWER(st.stream) = LOWER($stream)
                         MERGE (s)-[r:HAS_STREAM]->(st)
                         RETURN COUNT(r) AS created
                         """

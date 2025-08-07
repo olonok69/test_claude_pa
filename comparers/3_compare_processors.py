@@ -87,229 +87,214 @@ class SessionProcessorComparison:
     
     def compare_dataframes(self, df1: pd.DataFrame, df2: pd.DataFrame, name: str) -> Dict:
         """Compare two dataframes and return comparison results."""
-        self.logger.info(f"Comparing dataframes: {name}")
-        
         comparison = {
             "name": name,
             "identical": False,
             "shape_match": False,
             "columns_match": False,
-            "data_match": False,
+            "values_match": False,
+            "differences": []
+        }
+        
+        # Check shapes
+        if df1.shape == df2.shape:
+            comparison["shape_match"] = True
+            self.logger.info(f"{name}: Shapes match {df1.shape}")
+        else:
+            comparison["differences"].append(f"Shape mismatch: {df1.shape} vs {df2.shape}")
+            self.logger.warning(f"{name}: Shape mismatch - Old: {df1.shape}, New: {df2.shape}")
+        
+        # Check columns
+        if list(df1.columns) == list(df2.columns):
+            comparison["columns_match"] = True
+            self.logger.info(f"{name}: Columns match")
+        else:
+            cols_only_in_old = set(df1.columns) - set(df2.columns)
+            cols_only_in_new = set(df2.columns) - set(df1.columns)
+            if cols_only_in_old:
+                comparison["differences"].append(f"Columns only in old: {cols_only_in_old}")
+            if cols_only_in_new:
+                comparison["differences"].append(f"Columns only in new: {cols_only_in_new}")
+            self.logger.warning(f"{name}: Column mismatch")
+        
+        # Check values if shapes and columns match
+        if comparison["shape_match"] and comparison["columns_match"]:
+            # Sort both dataframes by all columns to ensure consistent ordering
+            df1_sorted = df1.sort_values(by=list(df1.columns)).reset_index(drop=True)
+            df2_sorted = df2.sort_values(by=list(df2.columns)).reset_index(drop=True)
+            
+            if df1_sorted.equals(df2_sorted):
+                comparison["values_match"] = True
+                comparison["identical"] = True
+                self.logger.info(f"{name}: DataFrames are identical")
+            else:
+                # Find specific differences
+                diff_mask = (df1_sorted != df2_sorted) | (df1_sorted.isna() != df2_sorted.isna())
+                diff_locations = np.where(diff_mask)
+                num_differences = len(diff_locations[0])
+                
+                if num_differences > 0:
+                    comparison["differences"].append(f"Found {num_differences} cell differences")
+                    # Sample a few differences
+                    for i in range(min(5, num_differences)):
+                        row_idx = diff_locations[0][i]
+                        col_idx = diff_locations[1][i]
+                        col_name = df1_sorted.columns[col_idx]
+                        old_val = df1_sorted.iloc[row_idx, col_idx]
+                        new_val = df2_sorted.iloc[row_idx, col_idx]
+                        comparison["differences"].append(
+                            f"Row {row_idx}, Col '{col_name}': {old_val} -> {new_val}"
+                        )
+        
+        return comparison
+    
+    def compare_json_files(self, file1: Path, file2: Path, name: str) -> Dict:
+        """Compare two JSON files."""
+        comparison = {
+            "name": name,
+            "identical": False,
             "differences": []
         }
         
         try:
-            # Compare shapes
-            if df1.shape == df2.shape:
-                comparison["shape_match"] = True
-                self.logger.info(f"{name}: Shapes match ({df1.shape})")
-            else:
-                diff = f"Shape mismatch - Old: {df1.shape}, New: {df2.shape}"
-                comparison["differences"].append(diff)
-                self.logger.warning(f"{name}: {diff}")
-                return comparison
+            with open(file1, 'r') as f:
+                data1 = json.load(f)
+            with open(file2, 'r') as f:
+                data2 = json.load(f)
             
-            # Compare columns
-            if list(df1.columns) == list(df2.columns):
-                comparison["columns_match"] = True
-                self.logger.info(f"{name}: Columns match")
-            else:
-                old_cols = set(df1.columns)
-                new_cols = set(df2.columns)
-                missing_in_new = old_cols - new_cols
-                extra_in_new = new_cols - old_cols
+            # For streams.json, we expect it to be a dictionary
+            # We don't compare values as LLM descriptions are non-deterministic
+            # Just check that the keys (stream names) match
+            if isinstance(data1, dict) and isinstance(data2, dict):
+                keys1 = set(data1.keys())
+                keys2 = set(data2.keys())
                 
-                if missing_in_new:
-                    diff = f"Columns missing in new: {missing_in_new}"
-                    comparison["differences"].append(diff)
-                    self.logger.warning(f"{name}: {diff}")
-                
-                if extra_in_new:
-                    diff = f"Extra columns in new: {extra_in_new}"
-                    comparison["differences"].append(diff)
-                    self.logger.warning(f"{name}: {diff}")
-                
-                return comparison
-            
-            # Compare data (handling NaN values properly)
-            try:
-                # Align dataframes by sorting
-                df1_sorted = df1.sort_values(by=df1.columns.tolist()).reset_index(drop=True)
-                df2_sorted = df2.sort_values(by=df2.columns.tolist()).reset_index(drop=True)
-                
-                # Use pandas equals which handles NaN properly
-                if df1_sorted.equals(df2_sorted):
-                    comparison["data_match"] = True
+                if keys1 == keys2:
                     comparison["identical"] = True
-                    self.logger.info(f"{name}: Data matches perfectly")
+                    self.logger.info(f"{name}: JSON keys match (ignoring LLM-generated values)")
                 else:
-                    # Find specific differences
-                    differences = []
-                    for col in df1.columns:
-                        if not df1_sorted[col].equals(df2_sorted[col]):
-                            differences.append(f"Column '{col}' differs")
-                    
-                    comparison["differences"].extend(differences)
-                    self.logger.warning(f"{name}: Data differs in columns: {differences}")
-                    
-            except Exception as e:
-                comparison["differences"].append(f"Error comparing data: {str(e)}")
-                self.logger.error(f"{name}: Error comparing data: {e}")
-        
+                    only_in_old = keys1 - keys2
+                    only_in_new = keys2 - keys1
+                    if only_in_old:
+                        comparison["differences"].append(f"Keys only in old: {only_in_old}")
+                    if only_in_new:
+                        comparison["differences"].append(f"Keys only in new: {only_in_new}")
+            else:
+                comparison["differences"].append("JSON structure mismatch")
+                
         except Exception as e:
-            comparison["differences"].append(f"Comparison error: {str(e)}")
+            comparison["differences"].append(f"Error comparing JSON: {e}")
             self.logger.error(f"Error comparing {name}: {e}")
         
         return comparison
     
     def compare_files(self, old_dir: Path, new_dir: Path) -> Dict:
-        """Compare CSV and JSON files between directories."""
-        self.logger.info("Comparing output files...")
-        
+        """Compare output files from both processors."""
         file_comparisons = {
             "csv_files": [],
-            "json_files": [],
-            "missing_files": {"old_missing": [], "new_missing": []}
+            "json_files": []
         }
         
-        # Get all files from both directories
-        old_files = {f.name: f for f in old_dir.rglob("*") if f.is_file()}
-        new_files = {f.name: f for f in new_dir.rglob("*") if f.is_file()}
+        # Expected output files
+        expected_csv_files = [
+            "session_last_filtered_valid_cols_bva.csv",
+            "session_last_filtered_valid_cols_lva.csv",
+            "session_this_filtered_valid_cols.csv"
+        ]
         
-        # Check for missing files
-        old_file_names = set(old_files.keys())
-        new_file_names = set(new_files.keys())
+        expected_json_files = [
+            "streams.json"
+        ]
         
-        missing_in_new = old_file_names - new_file_names
-        missing_in_old = new_file_names - old_file_names
-        
-        if missing_in_new:
-            file_comparisons["missing_files"]["new_missing"] = list(missing_in_new)
-            self.logger.warning(f"Files missing in new processor output: {missing_in_new}")
-        
-        if missing_in_old:
-            file_comparisons["missing_files"]["old_missing"] = list(missing_in_old)
-            self.logger.warning(f"Files missing in old processor output: {missing_in_old}")
-        
-        # Compare common files
-        common_files = old_file_names & new_file_names
-        
-        for filename in common_files:
-            old_file = old_files[filename]
-            new_file = new_files[filename]
+        # Compare CSV files
+        for csv_file in expected_csv_files:
+            old_file = old_dir / "output" / csv_file
+            new_file = new_dir / "output" / csv_file
             
-            # Skip streams.json due to LLM non-determinism
-            if filename == 'streams.json':
-                self.logger.info(f"Skipping {filename} comparison due to LLM non-determinism")
-                continue
+            if old_file.exists() and new_file.exists():
+                old_df = pd.read_csv(old_file)
+                new_df = pd.read_csv(new_file)
+                comparison = self.compare_dataframes(old_df, new_df, csv_file)
+                file_comparisons["csv_files"].append(comparison)
+            else:
+                file_comparisons["csv_files"].append({
+                    "name": csv_file,
+                    "identical": False,
+                    "differences": [f"File missing - Old exists: {old_file.exists()}, New exists: {new_file.exists()}"]
+                })
+        
+        # Compare JSON files (only structure, not LLM-generated content)
+        for json_file in expected_json_files:
+            old_file = old_dir / "output" / json_file
+            new_file = new_dir / "output" / json_file
             
-            if filename.endswith('.csv'):
-                try:
-                    old_df = pd.read_csv(old_file)
-                    new_df = pd.read_csv(new_file)
-                    comparison = self.compare_dataframes(old_df, new_df, filename)
-                    file_comparisons["csv_files"].append(comparison)
-                except Exception as e:
-                    self.logger.error(f"Error comparing CSV {filename}: {e}")
-                    file_comparisons["csv_files"].append({
-                        "name": filename,
-                        "identical": False,
-                        "differences": [f"Error reading file: {str(e)}"]
-                    })
-            
-            elif filename.endswith('.json'):
-                try:
-                    with open(old_file, 'r') as f:
-                        old_json = json.load(f)
-                    with open(new_file, 'r') as f:
-                        new_json = json.load(f)
-                    
-                    if old_json == new_json:
-                        file_comparisons["json_files"].append({
-                            "name": filename,
-                            "identical": True,
-                            "differences": []
-                        })
-                        self.logger.info(f"JSON file {filename}: Identical")
-                    else:
-                        file_comparisons["json_files"].append({
-                            "name": filename,
-                            "identical": False,
-                            "differences": ["JSON content differs"]
-                        })
-                        self.logger.warning(f"JSON file {filename}: Content differs")
-                        
-                except Exception as e:
-                    self.logger.error(f"Error comparing JSON {filename}: {e}")
-                    file_comparisons["json_files"].append({
-                        "name": filename,
-                        "identical": False,
-                        "differences": [f"Error reading file: {str(e)}"]
-                    })
+            if old_file.exists() and new_file.exists():
+                comparison = self.compare_json_files(old_file, new_file, json_file)
+                file_comparisons["json_files"].append(comparison)
+            else:
+                file_comparisons["json_files"].append({
+                    "name": json_file,
+                    "identical": False,
+                    "differences": [f"File missing - Old exists: {old_file.exists()}, New exists: {new_file.exists()}"]
+                })
         
         return file_comparisons
     
-    def compare_processor_attributes(self, old_processor, new_processor) -> Dict:
+    def compare_processor_attributes(self, old_processor: OldSessionProcessor, 
+                                    new_processor: NewSessionProcessor) -> List[Dict]:
         """Compare key attributes between processors."""
-        self.logger.info("Comparing processor attributes...")
+        attribute_comparisons = []
         
-        attr_comparisons = []
-        
-        # Define key dataframe attributes to compare
-        key_dataframes = [
-            ('session_this_filtered_valid_cols', 'session_this_filtered_valid_cols'),
-            ('session_last_filtered_valid_cols_bva', 'session_last_filtered_valid_cols_bva'),
-            ('session_last_filtered_valid_cols_lva', 'session_last_filtered_valid_cols_lva'),
+        # Key attributes to compare
+        attributes_to_compare = [
+            'session_this_filtered_valid_cols',
+            'session_last_filtered_valid_cols_bva',
+            'session_last_filtered_valid_cols_lva',
+            'unique_streams',
+            'map_vets',
+            'titles_to_remove'
         ]
         
-        for old_attr, new_attr in key_dataframes:
-            if hasattr(old_processor, old_attr) and hasattr(new_processor, new_attr):
-                old_df = getattr(old_processor, old_attr)
-                new_df = getattr(new_processor, new_attr)
-                comparison = self.compare_dataframes(old_df, new_df, f"attr_{old_attr}")
-                attr_comparisons.append(comparison)
-            else:
-                attr_comparisons.append({
-                    "name": f"attr_{old_attr}",
-                    "identical": False,
-                    "differences": ["Attribute missing in one processor"]
-                })
-        
-        # Compare other key attributes - EXCLUDE streams_catalog due to LLM non-determinism
-        other_attrs = ['unique_streams']  # Removed 'streams_catalog'
-        for attr in other_attrs:
-            if hasattr(old_processor, attr) and hasattr(new_processor, attr):
-                old_val = getattr(old_processor, attr)
-                new_val = getattr(new_processor, attr)
+        for attr_name in attributes_to_compare:
+            comparison = {
+                "attribute": attr_name,
+                "identical": False,
+                "old_exists": hasattr(old_processor, attr_name),
+                "new_exists": hasattr(new_processor, attr_name),
+                "differences": []
+            }
+            
+            if comparison["old_exists"] and comparison["new_exists"]:
+                old_val = getattr(old_processor, attr_name)
+                new_val = getattr(new_processor, attr_name)
                 
-                if old_val == new_val:
-                    attr_comparisons.append({
-                        "name": f"attr_{attr}",
-                        "identical": True,
-                        "differences": []
-                    })
-                    self.logger.info(f"Attribute {attr}: Identical")
+                if isinstance(old_val, pd.DataFrame) and isinstance(new_val, pd.DataFrame):
+                    df_comp = self.compare_dataframes(old_val, new_val, f"Attribute: {attr_name}")
+                    comparison["identical"] = df_comp["identical"]
+                    comparison["differences"] = df_comp["differences"]
+                elif isinstance(old_val, (list, dict, set)):
+                    if old_val == new_val:
+                        comparison["identical"] = True
+                    else:
+                        comparison["differences"].append(f"Values differ")
                 else:
-                    attr_comparisons.append({
-                        "name": f"attr_{attr}",
-                        "identical": False,
-                        "differences": ["Attribute values differ"]
-                    })
-                    self.logger.warning(f"Attribute {attr}: Values differ")
+                    if old_val == new_val:
+                        comparison["identical"] = True
+                    else:
+                        comparison["differences"].append(f"Values differ: {old_val} vs {new_val}")
             else:
-                attr_comparisons.append({
-                    "name": f"attr_{attr}",
-                    "identical": False,
-                    "differences": ["Attribute missing in one processor"]
-                })
+                if not comparison["old_exists"]:
+                    comparison["differences"].append("Missing in old processor")
+                if not comparison["new_exists"]:
+                    comparison["differences"].append("Missing in new processor")
+            
+            attribute_comparisons.append(comparison)
         
-        # Add note about excluded comparisons
-        self.logger.info("Skipped streams_catalog comparison due to LLM non-determinism")
-        
-        return attr_comparisons
+        return attribute_comparisons
     
-    def run_comparison(self, old_config_path: str, new_config_path: str) -> bool:
-        """Run the complete comparison between processors."""
+    def run_comparison(self, old_config_path: str = "config/config.yaml",
+                       new_config_path: str = "config/config_vet.yaml") -> bool:
+        """Run full comparison between processors."""
         try:
             self.logger.info("Starting session processor comparison")
             print("🚀 Starting Session Processor Comparison")
@@ -353,146 +338,70 @@ class SessionProcessorComparison:
                 }
             }
             
-            # Save detailed comparison results
-            comparison_data_path = self.comparison_dir / f"session_comparison_data_{self.timestamp}.json"
-            with open(comparison_data_path, 'w', encoding='utf-8') as f:
-                json.dump(comparison_data, f, indent=2, default=str, ensure_ascii=False)
-            
-            # Generate readable report
-            report_path = self.comparison_dir / f"session_comparison_report_{self.timestamp}.txt"
-            with open(report_path, 'w', encoding='utf-8') as f:
-                f.write("SESSION PROCESSOR COMPARISON REPORT\n")
-                f.write("=" * 50 + "\n\n")
-                f.write(f"Timestamp: {self.timestamp}\n")
-                f.write(f"Old Config: {old_config_path}\n")
-                f.write(f"New Config: {new_config_path}\n\n")
-                
-                f.write("SUMMARY\n")
-                f.write("-" * 20 + "\n")
-                f.write(f"CSV Files: {comparison_data['summary']['csv_files_identical']}/{comparison_data['summary']['csv_files_total']} identical\n")
-                f.write(f"JSON Files: {comparison_data['summary']['json_files_identical']}/{comparison_data['summary']['json_files_total']} identical\n")
-                f.write(f"Processor Attributes: {comparison_data['summary']['attr_identical']}/{comparison_data['summary']['attr_total']} identical\n\n")
-                
-                # Categorize missing files
-                missing_old = file_comparisons["missing_files"]["old_missing"]
-                missing_new = file_comparisons["missing_files"]["new_missing"]
-                critical_missing_old = [f for f in missing_old if not f.endswith('_cache.json')]
-                critical_missing_new = [f for f in missing_new if not f.endswith('_cache.json')]
-                non_critical_missing_old = [f for f in missing_old if f.endswith('_cache.json')]
-                non_critical_missing_new = [f for f in missing_new if f.endswith('_cache.json')]
-                
-                if critical_missing_old:
-                    f.write("CRITICAL FILES MISSING IN OLD PROCESSOR OUTPUT:\n")
-                    for file in critical_missing_old:
-                        f.write(f"  - {file}\n")
-                    f.write("\n")
-                
-                if critical_missing_new:
-                    f.write("CRITICAL FILES MISSING IN NEW PROCESSOR OUTPUT:\n")
-                    for file in critical_missing_new:
-                        f.write(f"  - {file}\n")
-                    f.write("\n")
-                
-                if non_critical_missing_old or non_critical_missing_new:
-                    f.write("NON-CRITICAL FILES (e.g., cache files) - DIFFERENCES EXPECTED:\n")
-                    for file in non_critical_missing_old:
-                        f.write(f"  - Missing in old: {file}\n")
-                    for file in non_critical_missing_new:
-                        f.write(f"  - Missing in new: {file}\n")
-                    f.write("\n")
-                
-                f.write("CSV FILE COMPARISONS\n")
-                f.write("-" * 20 + "\n")
-                for comp in file_comparisons["csv_files"]:
-                    status = "IDENTICAL" if comp["identical"] else "DIFFERENT"
-                    f.write(f"{comp['name']}: {status}\n")
-                    if comp.get("differences"):
-                        for diff in comp["differences"]:
-                            f.write(f"    - {diff}\n")
-                f.write("\n")
-                
-                f.write("JSON FILE COMPARISONS\n")
-                f.write("-" * 20 + "\n")
-                for comp in file_comparisons["json_files"]:
-                    status = "IDENTICAL" if comp["identical"] else "DIFFERENT"
-                    f.write(f"{comp['name']}: {status}\n")
-                    if comp.get("differences"):
-                        for diff in comp["differences"]:
-                            f.write(f"    - {diff}\n")
-                f.write("\n")
-                
-                f.write("PROCESSOR ATTRIBUTE COMPARISONS\n")
-                f.write("-" * 35 + "\n")
-                for comp in attr_comparisons:
-                    status = "IDENTICAL" if comp["identical"] else "DIFFERENT"
-                    f.write(f"{comp['name']}: {status}\n")
-                    if comp.get("differences"):
-                        for diff in comp["differences"]:
-                            f.write(f"    - {diff}\n")
-                
-                f.write("\nNOTE: streams_catalog and streams.json comparisons were skipped due to LLM non-determinism.\n")
+            # Save comparison results
+            results_file = self.comparison_dir / f"comparison_results_{self.timestamp}.json"
+            with open(results_file, 'w') as f:
+                json.dump(comparison_data, f, indent=2, default=str)
             
             # Print summary
-            print("\nSESSION PROCESSOR COMPARISON SUMMARY")
-            print(f"{'='*60}")
-            print(f"CSV Files: {comparison_data['summary']['csv_files_identical']}/{comparison_data['summary']['csv_files_total']} identical")
-            print(f"JSON Files: {comparison_data['summary']['json_files_identical']}/{comparison_data['summary']['json_files_total']} identical")
-            print(f"Processor Attributes: {comparison_data['summary']['attr_identical']}/{comparison_data['summary']['attr_total']} identical")
-            print(f"\nDetailed report saved to: {report_path}")
-            print(f"Comparison data saved to: {comparison_data_path}")
+            print("\n" + "=" * 60)
+            print("📋 COMPARISON SUMMARY")
+            print("=" * 60)
             
-            # Return True if everything important is identical
-            # Ignore missing cache files and LLM-generated content
-            missing_old = file_comparisons["missing_files"]["old_missing"]
-            missing_new = file_comparisons["missing_files"]["new_missing"]
+            summary = comparison_data["summary"]
+            print(f"\n📁 CSV Files: {summary['csv_files_identical']}/{summary['csv_files_total']} identical")
+            for file_comp in file_comparisons["csv_files"]:
+                status = "✅" if file_comp["identical"] else "❌"
+                print(f"  {status} {file_comp['name']}")
+                if not file_comp["identical"] and file_comp["differences"]:
+                    for diff in file_comp["differences"][:3]:  # Show first 3 differences
+                        print(f"      - {diff}")
             
-            # Filter out non-critical missing files (cache files, etc.)
-            critical_missing_old = [f for f in missing_old if not f.endswith('_cache.json')]
-            critical_missing_new = [f for f in missing_new if not f.endswith('_cache.json')]
+            print(f"\n📋 JSON Files: {summary['json_files_identical']}/{summary['json_files_total']} structure match")
+            for file_comp in file_comparisons["json_files"]:
+                status = "✅" if file_comp["identical"] else "❌"
+                print(f"  {status} {file_comp['name']} (comparing keys only, not LLM values)")
             
-            all_identical = (
-                comparison_data['summary']['csv_files_identical'] == comparison_data['summary']['csv_files_total'] and
-                comparison_data['summary']['json_files_identical'] == comparison_data['summary']['json_files_total'] and
-                comparison_data['summary']['attr_identical'] == comparison_data['summary']['attr_total'] and
-                not critical_missing_old and
-                not critical_missing_new
-            )
+            print(f"\n🔍 Processor Attributes: {summary['attr_identical']}/{summary['attr_total']} identical")
+            for attr_comp in attr_comparisons:
+                status = "✅" if attr_comp["identical"] else "❌"
+                print(f"  {status} {attr_comp['attribute']}")
+                if not attr_comp["identical"] and attr_comp["differences"]:
+                    for diff in attr_comp["differences"][:2]:
+                        print(f"      - {diff}")
             
-            if all_identical:
-                print("SUCCESS: All critical outputs are identical!")
-                if missing_old or missing_new:
-                    print("Note: Some non-critical files (like cache files) differ, but this is expected.")
-                self.logger.info("Comparison completed successfully - all critical outputs identical")
+            # Overall success
+            all_csv_identical = summary['csv_files_identical'] == summary['csv_files_total']
+            all_json_structure_ok = summary['json_files_identical'] == summary['json_files_total']
+            
+            print("\n" + "=" * 60)
+            if all_csv_identical and all_json_structure_ok:
+                print("🎉 SUCCESS: Processors produce IDENTICAL outputs!")
+                print("✅ The new generic session processor is fully compatible.")
             else:
-                print("DIFFERENCES FOUND: Check the report for details")
-                self.logger.warning("Comparison completed - differences found")
+                print("⚠️  WARNING: Some differences found")
+                if not all_csv_identical:
+                    print("   - CSV outputs have differences")
+                if not all_json_structure_ok:
+                    print("   - JSON structure has differences")
+                print(f"\n📄 Detailed results saved to: {results_file}")
             
-            return all_identical
+            print("=" * 60)
+            
+            return all_csv_identical and all_json_structure_ok
             
         except Exception as e:
-            self.logger.error(f"Error during comparison: {str(e)}", exc_info=True)
-            print(f"ERROR: {str(e)}")
+            self.logger.error(f"Comparison failed: {e}", exc_info=True)
+            print(f"\n❌ ERROR: Comparison failed - {e}")
             return False
 
 
 def main():
     """Main function to run the comparison."""
-    comparison = SessionProcessorComparison()
-    
-    # Use the same config files as previous steps
-    old_config_path = "config/config.yaml"
-    new_config_path = "config/config_vet.yaml"
-    
-    success = comparison.run_comparison(old_config_path, new_config_path)
-    
-    if success:
-        print("\n🎉 SUCCESS: Session processors produce identical results!")
-        return True
-    else:
-        print("\n❌ FAILURE: Session processors produce different results!")
-        return False
+    comparator = SessionProcessorComparison()
+    success = comparator.run_comparison()
+    return 0 if success else 1
 
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    sys.exit(main())

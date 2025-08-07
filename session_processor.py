@@ -1,37 +1,46 @@
 #!/usr/bin/env python3
 """
-Session Data Processor
+Generic Session Data Processor
 
-This module processes conference session data and generates stream descriptions.
-It handles filtering, cleaning, and organizing session data for different events.
-FIXED: Added consistent lowercase stream handling to match production behavior.
+This processor handles session data for various events, extracting unique streams,
+generating descriptions, and preparing data for analytics.
+
+FIXED: Matches production old_session_processor.py functionality exactly.
+- Correct key_text handling (create from title, not expect it in input)
+- NO stream normalization - keeps original case
+- Exact title filtering using .isin() not .contains()
 """
 
 import os
-import sys
 import json
-import pandas as pd
+import string
 import logging
-from pathlib import Path
-from typing import Dict, Set, List
+import pandas as pd
+import functools
+from typing import Dict, List, Set, Any
 from dotenv import load_dotenv, dotenv_values
-from pandas.errors import SettingWithCopyWarning
-import warnings
-warnings.simplefilter(action="ignore", category=(SettingWithCopyWarning))
-# Optional imports for LLM functionality
-try:
-    from langchain_openai import ChatOpenAI, AzureChatOpenAI
-    has_langchain = True
-except ImportError:
-    has_langchain = False
-    print("LangChain not available. Stream descriptions will not be generated.")
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
+
+
+# Configure logger
+logger = logging.getLogger(__name__)
+
+
+# Optional decorator for logging function call
+def log_function_call(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logger = logging.getLogger(func.__module__)
+        logger.debug(f"Entering {func.__name__}")
+        result = func(*args, **kwargs)
+        logger.debug(f"Exiting {func.__name__}")
+        return result
+
+    return wrapper
 
 
 class SessionProcessor:
-    """
-    Process session data and generate stream descriptions for conference events.
-    FIXED: Added consistent lowercase stream handling throughout all methods.
-    """
+    """Process session data for event analytics."""
 
     def __init__(self, config: Dict):
         """
@@ -42,13 +51,6 @@ class SessionProcessor:
         """
         self.config = config
         self.output_dir = config.get("output_dir", "output")
-
-        # Get event configuration
-        self.event_config = config.get("event", {})
-        
-        # Get event names
-        self.main_event_name = self.event_config.get("main_event_name", "main")
-        self.secondary_event_name = self.event_config.get("secondary_event_name", "secondary")
 
         # Initialize the use_cached_descriptions parameter from config (default is True)
         self.use_cached_descriptions = config.get("stream_processing", {}).get(
@@ -69,25 +71,11 @@ class SessionProcessor:
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, "output"), exist_ok=True)
 
-        # Get output file configurations with backward compatibility
-        self.output_files = config.get("session_output_files", {})
-        
-        # Backward compatibility: if session_output_files section doesn't exist, use default names
-        if not self.output_files:
-            self.output_files = {
-                "processed_sessions": {
-                    "this_year": "session_this_filtered_valid_cols.csv",
-                    "last_year_main": "session_last_filtered_valid_cols_bva.csv",
-                    "last_year_secondary": "session_last_filtered_valid_cols_lva.csv"
-                },
-                "streams_catalog": "streams.json"
-            }
-
         self.logger.info(
-            f"Initialized SessionProcessor for {self.main_event_name} event with output to {self.output_dir}"
+            f"Initialized SessionProcessor with output to {self.output_dir}"
         )
 
-        # Load map_vets and titles_to_remove from config (for veterinary-specific processing)
+        # Load map_vets and titles_to_remove from config
         self.map_vets = self.config.get("map_vets", {})
         self.titles_to_remove = self.config.get("titles_to_remove", [])
 
@@ -137,37 +125,20 @@ class SessionProcessor:
     def load_session_data(self) -> None:
         """Load all session data files based on configuration."""
         try:
-            # Load session data with backward compatibility
-            session_files = self.config["session_files"]
-            session_this_path = session_files["session_this"]
-            
-            # Handle backward compatibility for session file names
-            # Try new generic names first, fall back to old names
-            if "session_past_main" in session_files:
-                session_past_path_main = session_files["session_past_main"]
-            else:
-                session_past_path_main = session_files["session_past_bva"]
-                self.logger.info("Using legacy session_past_bva configuration")
-            
-            if "session_past_secondary" in session_files:
-                session_past_path_secondary = session_files["session_past_secondary"]
-            else:
-                session_past_path_secondary = session_files["session_past_lva"]
-                self.logger.info("Using legacy session_past_lva configuration")
+            # Load session data
+            session_this_path = self.config["session_files"]["session_this"]
+            session_past_path_bva = self.config["session_files"]["session_past_bva"]
+            session_past_path_lva = self.config["session_files"]["session_past_lva"]
 
             # Read session data
             self.session_this = pd.read_csv(session_this_path)
-            self.session_past_main = pd.read_csv(session_past_path_main)
-            self.session_past_secondary = pd.read_csv(session_past_path_secondary)
-            
-            # Create backward compatible aliases for old names
-            self.session_past_bva = self.session_past_main
-            self.session_past_lva = self.session_past_secondary
+            self.session_past_bva = pd.read_csv(session_past_path_bva)
+            self.session_past_lva = pd.read_csv(session_past_path_lva)
 
             self.logger.info(
                 f"Loaded session data: {len(self.session_this)} records this year, "
-                f"{len(self.session_past_main)} {self.main_event_name} records last year, "
-                f"{len(self.session_past_secondary)} {self.secondary_event_name} records last year"
+                f"{len(self.session_past_bva)} BVA records last year, "
+                f"{len(self.session_past_lva)} LVA records last year"
             )
 
         except Exception as e:
@@ -175,82 +146,61 @@ class SessionProcessor:
             raise
 
     def filter_session_data(self) -> None:
-        """Filter and clean session data."""
+        """Filter and clean session data - MATCHES PRODUCTION EXACTLY."""
         # Convert titles_to_remove to lowercase for case-insensitive comparison
         titles_to_remove_lower = [title.lower() for title in self.titles_to_remove]
         try:
             # Apply filters for each dataset
             self.session_this_filtered = self.session_this.copy()
-            self.session_last_filtered_main = self.session_past_main.copy()
-            self.session_last_filtered_secondary = self.session_past_secondary.copy()
-            
-            # Create backward compatible aliases
-            self.session_last_filtered_bva = self.session_last_filtered_main
-            self.session_last_filtered_lva = self.session_last_filtered_secondary
+            self.session_last_filtered_bva = self.session_past_bva.copy()
+            self.session_last_filtered_lva = self.session_past_lva.copy()
 
-            # Apply title filters if titles_to_remove is configured
-            if self.titles_to_remove:
-                # Filter out rows where the title EXACTLY matches any in titles_to_remove (case-insensitive)
-                self.session_this_filtered = self.session_this_filtered[
-                    ~self.session_this_filtered["title"]
-                    .str.lower()
-                    .isin(titles_to_remove_lower)
-                ]
+            # Apply title filters
+            # Filter out rows where the title EXACTLY matches any in titles_to_remove (case-insensitive)
+            self.session_this_filtered = self.session_this_filtered[
+                ~self.session_this_filtered["title"]
+                .str.lower()
+                .isin(titles_to_remove_lower)
+            ]
 
-                self.session_last_filtered_main = self.session_last_filtered_main[
-                    ~self.session_last_filtered_main["title"]
-                    .str.lower()
-                    .isin(titles_to_remove_lower)
-                ]
+            self.session_last_filtered_bva = self.session_last_filtered_bva[
+                ~self.session_last_filtered_bva["title"]
+                .str.lower()
+                .isin(titles_to_remove_lower)
+            ]
 
-                self.session_last_filtered_secondary = self.session_last_filtered_secondary[
-                    ~self.session_last_filtered_secondary["title"]
-                    .str.lower()
-                    .isin(titles_to_remove_lower)
-                ]
-                
-                # Update aliases
-                self.session_last_filtered_bva = self.session_last_filtered_main
-                self.session_last_filtered_lva = self.session_last_filtered_secondary
+            self.session_last_filtered_lva = self.session_last_filtered_lva[
+                ~self.session_last_filtered_lva["title"]
+                .str.lower()
+                .isin(titles_to_remove_lower)
+            ]
 
-                self.logger.info(f"Applied title filters - removed titles: {self.titles_to_remove}")
-            else:
-                self.logger.info("No title filtering configured - proceeding without title filters")
-
-            # Create text keys for matching
+            # Create text keys for matching - FROM TITLE FIELD
             self.session_this_filtered["key_text"] = self.session_this_filtered[
                 "title"
             ].apply(self.clean_text)
-            self.session_last_filtered_main["key_text"] = self.session_last_filtered_main[
+            self.session_last_filtered_bva["key_text"] = self.session_last_filtered_bva[
                 "title"
             ].apply(self.clean_text)
-            self.session_last_filtered_secondary["key_text"] = self.session_last_filtered_secondary[
+            self.session_last_filtered_lva["key_text"] = self.session_last_filtered_lva[
                 "title"
             ].apply(self.clean_text)
 
-            # Update aliases key_text
-            self.session_last_filtered_bva["key_text"] = self.session_last_filtered_main["key_text"]
-            self.session_last_filtered_lva["key_text"] = self.session_last_filtered_secondary["key_text"]
-
-            # Remove duplicates
+            # Remove duplicates based on key_text
             self.session_this_filtered = self.session_this_filtered.drop_duplicates(
                 subset=["key_text"]
             )
-            self.session_last_filtered_main = (
-                self.session_last_filtered_main.drop_duplicates(subset=["key_text"])
+            self.session_last_filtered_bva = (
+                self.session_last_filtered_bva.drop_duplicates(subset=["key_text"])
             )
-            self.session_last_filtered_secondary = (
-                self.session_last_filtered_secondary.drop_duplicates(subset=["key_text"])
+            self.session_last_filtered_lva = (
+                self.session_last_filtered_lva.drop_duplicates(subset=["key_text"])
             )
-            
-            # Update aliases after deduplication
-            self.session_last_filtered_bva = self.session_last_filtered_main
-            self.session_last_filtered_lva = self.session_last_filtered_secondary
 
             self.logger.info(
                 f"Filtered session data: {len(self.session_this_filtered)} records this year, "
-                f"{len(self.session_last_filtered_main)} {self.main_event_name} records last year, "
-                f"{len(self.session_last_filtered_secondary)} {self.secondary_event_name} records last year"
+                f"{len(self.session_last_filtered_bva)} BVA records last year, "
+                f"{len(self.session_last_filtered_lva)} LVA records last year"
             )
 
         except Exception as e:
@@ -258,75 +208,53 @@ class SessionProcessor:
             raise
 
     def select_relevant_columns(self) -> None:
-        """Select and clean relevant columns from session data."""
+        """Select only relevant columns from session data."""
         try:
-            # Define relevant columns to keep
-            relevant_columns = [
+            # Define the columns we want to keep - maintain consistent order
+            cols_to_keep = [
                 "session_id",
+                "date",
+                "start_time", 
+                "end_time",
+                "theatre__name",
                 "title",
                 "stream",
                 "synopsis_stripped",
-                "end_time",
-                "key_text",
-                "sponsored_by",
-                "start_time",
                 "sponsored_session",
-                "date",
-                "theatre__name",
+                "sponsored_by",
+                "key_text",  # This was created in filter_session_data
             ]
 
-            # Function to safely select columns
-            def safe_select_columns(df, columns):
-                return df[[col for col in columns if col in df.columns]]
+            # Filter columns for each dataset
+            self.session_this_filtered_valid_cols = self.session_this_filtered[
+                cols_to_keep
+            ].copy()
+            self.session_last_filtered_valid_cols_bva = self.session_last_filtered_bva[
+                cols_to_keep
+            ].copy()
+            self.session_last_filtered_valid_cols_lva = self.session_last_filtered_lva[
+                cols_to_keep
+            ].copy()
 
-            # Apply column selection to all datasets
-            self.session_this_filtered_valid_cols = safe_select_columns(
-                self.session_this_filtered, relevant_columns
+            # Fill NaN values with empty strings
+            self.session_this_filtered_valid_cols = (
+                self.session_this_filtered_valid_cols.fillna("")
             )
-            self.session_last_filtered_valid_cols_main = safe_select_columns(
-                self.session_last_filtered_main, relevant_columns
+            self.session_last_filtered_valid_cols_bva = (
+                self.session_last_filtered_valid_cols_bva.fillna("")
             )
-            self.session_last_filtered_valid_cols_secondary = safe_select_columns(
-                self.session_last_filtered_secondary, relevant_columns
+            self.session_last_filtered_valid_cols_lva = (
+                self.session_last_filtered_valid_cols_lva.fillna("")
             )
-            
-            # Create backward compatible aliases
-            self.session_last_filtered_valid_cols_bva = self.session_last_filtered_valid_cols_main
-            self.session_last_filtered_valid_cols_lva = self.session_last_filtered_valid_cols_secondary
 
-            self.logger.info("Selected relevant columns from session data")
+            self.logger.info("Selected relevant columns and cleaned data")
 
         except Exception as e:
             self.logger.error(f"Error selecting relevant columns: {e}", exc_info=True)
             raise
 
-    def normalize_session_streams(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Normalize stream fields in session dataframes to lowercase.
-        FIXED: Helper method to ensure consistent stream handling.
-        
-        Args:
-            df: DataFrame with session data
-            
-        Returns:
-            DataFrame with normalized stream fields
-        """
-        if 'stream' in df.columns:
-            # Normalize all stream values to lowercase
-            df = df.copy()
-            df['stream'] = df['stream'].apply(
-                lambda x: ';'.join([s.strip().lower() for s in str(x).split(';')]) 
-                if pd.notna(x) and x else x
-            )
-            self.logger.debug("Normalized stream fields to lowercase in session data")
-        
-        return df
-
     def extract_unique_streams(self) -> None:
-        """
-        Extract unique streams from all session data.
-        FIXED: Normalizes all streams to lowercase during extraction.
-        """
+        """Extract unique stream values from all session datasets."""
         try:
             # Collect all stream values
             all_streams = set()
@@ -334,22 +262,22 @@ class SessionProcessor:
             # Extract streams from each dataset
             for df in [
                 self.session_this_filtered_valid_cols,
-                self.session_last_filtered_valid_cols_main,
-                self.session_last_filtered_valid_cols_secondary,
+                self.session_last_filtered_valid_cols_bva,
+                self.session_last_filtered_valid_cols_lva,
             ]:
                 for stream_cell in df["stream"]:
                     if pd.notna(stream_cell) and stream_cell:
-                        # FIXED: Split by ';' and clean each stream, normalizing to lowercase
-                        streams = [s.strip().lower() for s in str(stream_cell).split(";")]
+                        # Split by ';' and clean each stream - NO LOWERCASE CONVERSION
+                        streams = [s.strip() for s in str(stream_cell).split(";")]
                         all_streams.update(streams)
 
             # Remove empty strings and sort
             self.unique_streams = sorted([s for s in all_streams if s])
             
-            # Also create 'streams' attribute for backward compatibility with old processor
+            # Also create 'streams' attribute for backward compatibility
             self.streams = self.unique_streams
 
-            self.logger.info(f"Extracted {len(self.unique_streams)} unique streams (all normalized to lowercase)")
+            self.logger.info(f"Extracted {len(self.unique_streams)} unique streams")
 
         except Exception as e:
             self.logger.error(f"Error extracting unique streams: {e}", exc_info=True)
@@ -358,236 +286,121 @@ class SessionProcessor:
     def setup_language_model(self) -> None:
         """Set up the language model for generating stream descriptions."""
         try:
-            # UPDATED PRIORITY: Check Azure OpenAI credentials FIRST
-            if all(
-                key in self.env_config
-                for key in [
-                    "AZURE_OPENAI_API_KEY",
-                    "AZURE_OPENAI_ENDPOINT",
-                    "AZURE_DEPLOYMENT",
-                    "AZURE_API_VERSION",
-                ]
-            ):
-                self.llm = AzureChatOpenAI(
+            # Try to load cached descriptions first
+            if self.use_cached_descriptions and os.path.exists(self.cache_file_path):
+                with open(self.cache_file_path, "r") as f:
+                    self.streams_catalog = json.load(f)
+                    self.logger.info(
+                        f"Loaded cached stream descriptions from {self.cache_file_path}"
+                    )
+                    return
 
-                    azure_deployment=self.env_config["AZURE_DEPLOYMENT"],
-                    api_version=self.env_config["AZURE_API_VERSION"],
-                    temperature=0.3,
+            # Check for Azure OpenAI credentials first
+            if "AZURE_API_KEY" in self.env_config:
+                from langchain_openai import AzureChatOpenAI
+                self.llm = AzureChatOpenAI(
+                    azure_endpoint=self.env_config.get("AZURE_ENDPOINT"),
+                    openai_api_version=self.env_config.get("AZURE_API_VERSION"),
+                    deployment_name=self.env_config.get("AZURE_DEPLOYMENT", "gpt-4o-mini"),
+                    openai_api_key=self.env_config["AZURE_API_KEY"],
+                    temperature=0.7,
                 )
                 self.logger.info("Initialized Azure OpenAI language model")
-            # Check OpenAI credentials as FALLBACK
             elif "OPENAI_API_KEY" in self.env_config:
+                from langchain_openai import ChatOpenAI
                 self.llm = ChatOpenAI(
-                    api_key=self.env_config["OPENAI_API_KEY"],
                     model="gpt-4o-mini",
-                    temperature=0.3,
+                    temperature=0.7,
+                    openai_api_key=self.env_config["OPENAI_API_KEY"],
                 )
                 self.logger.info("Initialized OpenAI language model")
             else:
-                raise ValueError("No valid API credentials found for language model")
+                self.logger.warning(
+                    "No API keys available - stream descriptions will be skipped"
+                )
+                self.llm = None
 
         except Exception as e:
             self.logger.error(f"Error setting up language model: {e}", exc_info=True)
-            raise
-
-    def load_cached_descriptions(self) -> bool:
-        """
-        Load cached stream descriptions from file and convert to internal format.
-        FIXED: Ensures loaded streams are normalized to lowercase.
-        """
-        try:
-            if os.path.exists(self.cache_file_path):
-                with open(self.cache_file_path, "r") as cache_file:
-                    cached_data = json.load(cache_file)
-                
-                # FIXED: Convert old format cache to internal new format with lowercase normalization
-                self.streams_catalog = {}
-                
-                if isinstance(cached_data, dict):
-                    for stream_name, description in cached_data.items():
-                        # FIXED: Normalize stream names to lowercase when loading from cache
-                        normalized_stream_name = stream_name.lower().strip()
-                        
-                        if isinstance(description, str):
-                            # Old format: {"stream_name": "description"}
-                            self.streams_catalog[normalized_stream_name] = {
-                                "stream": normalized_stream_name,
-                                "description": description
-                            }
-                            
-                            # Log normalization if different
-                            if stream_name != normalized_stream_name:
-                                self.logger.info(f"Normalized cached stream: '{stream_name}' → '{normalized_stream_name}'")
-                                
-                        elif isinstance(description, dict) and 'description' in description:
-                            # Already in new format (shouldn't happen but handle it)
-                            self.streams_catalog[normalized_stream_name] = {
-                                "stream": normalized_stream_name,
-                                "description": description['description']
-                            }
-                        else:
-                            self.logger.warning(f"Unexpected cached description format for {stream_name}: {description}")
-                
-                self.logger.info(f"Loaded {len(self.streams_catalog)} cached stream descriptions and converted to internal format (lowercase)")
-                return True
-            else:
-                self.logger.info("No cached descriptions found. Will generate new descriptions.")
-                self.streams_catalog = {}
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"Error loading cached descriptions: {e}", exc_info=True)
-            self.streams_catalog = {}
-            return False
+            self.llm = None
 
     def save_cached_descriptions(self) -> None:
-        """
-        Save current stream descriptions to cache file in CONSISTENT OLD FORMAT.
-        FIXED: Ensures cached streams are stored in lowercase.
-        """
+        """Save generated stream descriptions to cache file."""
         try:
-            # FIXED: Save cache in old format for consistency with streams.json (lowercase)
-            cache_data = {}
-            if hasattr(self, 'streams_catalog') and self.streams_catalog:
-                for stream_data in self.streams_catalog.values():
-                    if isinstance(stream_data, dict) and 'stream' in stream_data and 'description' in stream_data:
-                        # Convert from new format to old format for cache with lowercase normalization
-                        stream_name = stream_data['stream'].lower().strip()  # FIXED: Ensure lowercase
-                        description = stream_data['description']
-                        cache_data[stream_name] = description
-                    else:
-                        # Handle case where stream_data might already be in old format
-                        self.logger.warning(f"Unexpected stream data format in cache: {stream_data}")
-            
-            # Save in old format (consistent with streams.json) with lowercase keys
-            with open(self.cache_file_path, "w") as cache_file:
-                json.dump(cache_data, cache_file, indent=4)
-                self.logger.info(f"Saved {len(cache_data)} stream descriptions to cache in old format (lowercase)")
-                
+            if hasattr(self, "streams_catalog") and self.streams_catalog:
+                with open(self.cache_file_path, "w") as f:
+                    json.dump(self.streams_catalog, f, indent=2)
+                self.logger.info(f"Saved stream descriptions to cache: {self.cache_file_path}")
         except Exception as e:
             self.logger.error(f"Error saving cached descriptions: {e}", exc_info=True)
 
     def generate_stream_descriptions(self) -> None:
-        """Generate or load descriptions for streams."""
-        try:
-            # Try to load cached descriptions first if caching is enabled
-            if self.use_cached_descriptions and self.load_cached_descriptions():
-                self.logger.info("Using cached stream descriptions")
-                return
-
-            # If we reach here, we need to generate new descriptions
-            self.logger.info("Will generate new stream descriptions")
-            self.streams_catalog = {}
-
-        except Exception as e:
-            self.logger.error(f"Error in generate_stream_descriptions: {e}", exc_info=True)
-            raise
-
-    def generate_stream_catalog(self) -> None:
-        """
-        Generate descriptions for all streams using the language model.
-        FIXED: Ensures generated streams are stored in lowercase.
-        """
+        """Generate descriptions for each unique stream using LLM."""
         # Only generate if we don't have cached descriptions
         if self.use_cached_descriptions and hasattr(self, 'streams_catalog') and self.streams_catalog:
             self.logger.info("Using existing cached stream descriptions")
             return
 
-        # If no LLM is set up or caching prevented setup, skip generation
-        if not hasattr(self, "llm"):
+        # If no LLM is set up, skip generation
+        if not hasattr(self, "llm") or self.llm is None:
             self.logger.info("No language model configured - creating empty catalog")
             self.streams_catalog = {}
             return
 
         try:
             self.logger.info("Generating new stream descriptions using language model")
-            
-            # Initialize streams_catalog if not exists
-            if not hasattr(self, 'streams_catalog'):
-                self.streams_catalog = {}
+            self.streams_catalog = {}
             
             for stream in self.unique_streams:
-                # FIXED: Ensure stream is lowercase before processing
-                normalized_stream = stream.lower().strip()
+                prompt = f"""
+                Provide a brief description (2-3 sentences) for the following conference stream: "{stream}"
                 
-                if normalized_stream not in self.streams_catalog:
-                    prompt = f"""
-                    Provide a brief description (2-3 sentences) for the following conference stream: "{normalized_stream}"
-                    
-                    Focus on what topics and sessions would typically be covered in this stream.
-                    Keep the description professional and informative.
-                    """
+                Focus on what topics and sessions would typically be covered in this stream.
+                Keep the description professional and informative.
+                """
 
-                    response = self.llm.invoke(prompt)
-                    
-                    # Store in internal new format with lowercase stream name
-                    self.streams_catalog[normalized_stream] = {
-                        "stream": normalized_stream,
-                        "description": response.content.strip(),
-                    }
+                response = self.llm.invoke(prompt)
+                
+                # Store as simple dictionary (old format) - NO LOWERCASE
+                self.streams_catalog[stream] = response.content.strip()
+                self.logger.debug(f"Generated description for stream: {stream}")
 
-                    # Log normalization if different
-                    if stream != normalized_stream:
-                        self.logger.info(f"Generated description for normalized stream: '{stream}' → '{normalized_stream}'")
-                    else:
-                        self.logger.debug(f"Generated description for stream: {normalized_stream}")
-
-            self.logger.info(f"Generated descriptions for {len(self.streams_catalog)} streams (all lowercase)")
+            self.logger.info(f"Generated descriptions for {len(self.streams_catalog)} streams")
             
-            # Save the newly generated descriptions to cache (in old format)
+            # Save the newly generated descriptions to cache
             self.save_cached_descriptions()
 
         except Exception as e:
             self.logger.error(f"Error generating stream catalog: {e}", exc_info=True)
-            # Create empty catalog as fallback
             self.streams_catalog = {}
             raise
 
-    def save_streams_catalog(self) -> None:
-        """
-        Save the streams catalog to JSON file in OLD PROCESSOR COMPATIBLE FORMAT.
-        FIXED: Ensures all stream names are lowercase in the final JSON file.
-        """
-        try:
-            streams_output_file = self.output_files.get("streams_catalog", "streams.json")
-            output_path = os.path.join(self.output_dir, "output", streams_output_file)
-            
-            # FIXED: Convert to old processor format (dictionary with stream names as keys) with lowercase normalization
-            # Old format: {"stream_name": "description", ...}
-            # New format was: [{"stream": "name", "description": "desc"}, ...]
-            
-            old_format_streams = {}
-            if hasattr(self, 'streams_catalog') and self.streams_catalog:
-                for stream_data in self.streams_catalog.values():
-                    if isinstance(stream_data, dict) and 'stream' in stream_data and 'description' in stream_data:
-                        # Convert from new format to old format with lowercase normalization
-                        stream_name = stream_data['stream'].lower().strip()  # FIXED: Ensure lowercase
-                        description = stream_data['description']
-                        old_format_streams[stream_name] = description
-                    else:
-                        # Handle case where stream_data might already be in old format
-                        self.logger.warning(f"Unexpected stream data format: {stream_data}")
-            
-            # If streams_catalog is empty, create simple dictionary from unique_streams (lowercase)
-            if not old_format_streams and hasattr(self, 'unique_streams'):
-                for stream in self.unique_streams:
-                    normalized_stream = stream.lower().strip()  # FIXED: Ensure lowercase
-                    old_format_streams[normalized_stream] = f"Conference stream for {normalized_stream} related sessions and topics."
-            
-            # Save in OLD PROCESSOR COMPATIBLE FORMAT (dictionary) with lowercase keys
-            with open(output_path, "w") as f:
-                json.dump(old_format_streams, f, indent=2)
+    def generate_stream_catalog(self) -> None:
+        """Generate or load the stream catalog."""
+        # This method is kept for compatibility but most logic is in generate_stream_descriptions
+        if not hasattr(self, 'streams_catalog'):
+            self.streams_catalog = {}
+        
+        self.logger.info(f"Stream catalog ready with {len(self.streams_catalog)} entries")
 
-            self.logger.info(f"Saved streams catalog to {output_path} in old processor compatible format (all lowercase)")
-            self.logger.info(f"Streams saved: {list(old_format_streams.keys())}")
+    def save_streams_catalog(self) -> None:
+        """Save the streams catalog to JSON file."""
+        try:
+            output_path = os.path.join(self.output_dir, "output", "streams.json")
+
+            with open(output_path, "w") as json_file:
+                json.dump(self.streams_catalog, json_file, indent=4)
+
+            self.logger.info(f"Saved stream catalog to {output_path}")
 
         except Exception as e:
-            self.logger.error(f"Error saving streams catalog: {e}", exc_info=True)
+            self.logger.error(f"Error saving stream catalog: {e}", exc_info=True)
             raise
 
-    def find_short_labels(self, input_set: Set[str]) -> List[str]:
+    @staticmethod
+    def find_short_labels(input_set: Set[str]) -> List[str]:
         """
-        Find labels with length of 5 characters or less.
+        Finds a list of labels in a set that have 5 characters or less.
 
         Args:
           input_set: A set of strings (labels).
@@ -595,91 +408,97 @@ class SessionProcessor:
         Returns:
           A list containing the labels from the input set with a length of 5 or less.
         """
-        return [label for label in input_set if len(label) <= 5]
+        short_labels = [
+            label for label in input_set if isinstance(label, str) and len(label) <= 5
+        ]
+        return short_labels
 
     def expand_sponsor_abbreviations(self) -> None:
-        """Expand sponsor abbreviations in session data using map_vets configuration."""
+        """Expand sponsor abbreviations to full names."""
         try:
-            if not self.map_vets:
-                self.logger.info("No sponsor abbreviation mapping configured - skipping expansion")
-                return
+            # Get all unique sponsor values
+            list_bva_this = set(
+                list(self.session_this_filtered_valid_cols.sponsored_by.unique())
+            )
+            list_lva_last = set(
+                list(self.session_last_filtered_valid_cols_lva.sponsored_by.unique())
+            )
+            list_bva_last = set(
+                list(self.session_last_filtered_valid_cols_bva.sponsored_by.unique())
+            )
 
-            def expand_abbreviations(sponsor_value):
-                if pd.isna(sponsor_value) or not sponsor_value:
-                    return sponsor_value
-                return self.map_vets.get(str(sponsor_value), str(sponsor_value))
+            # Combine all sponsor values
+            full_list_sponsors = list_bva_this.union(list_lva_last, list_bva_last)
 
-            # Apply expansion to all datasets
+            # Find abbreviations (short labels)
+            list_abbreviations = set(self.find_short_labels(full_list_sponsors))
+
+            # Check for any missing abbreviations in our mapping
+            map_keys = set(list(self.map_vets.keys()))
+            missing_abbrevs = list_abbreviations.difference(map_keys)
+
+            if missing_abbrevs:
+                self.logger.warning(f"Found unmapped abbreviations: {missing_abbrevs}")
+
+            # Replace abbreviations with full names using pandas replace method
+            self.session_last_filtered_valid_cols_lva["sponsored_by"] = (
+                self.session_last_filtered_valid_cols_lva["sponsored_by"].replace(
+                    self.map_vets
+                )
+            )
+            self.session_last_filtered_valid_cols_bva["sponsored_by"] = (
+                self.session_last_filtered_valid_cols_bva["sponsored_by"].replace(
+                    self.map_vets
+                )
+            )
             self.session_this_filtered_valid_cols["sponsored_by"] = (
-                self.session_this_filtered_valid_cols["sponsored_by"].apply(
-                    expand_abbreviations
+                self.session_this_filtered_valid_cols["sponsored_by"].replace(
+                    self.map_vets
                 )
             )
-            self.session_last_filtered_valid_cols_main["sponsored_by"] = (
-                self.session_last_filtered_valid_cols_main["sponsored_by"].apply(
-                    expand_abbreviations
-                )
-            )
-            self.session_last_filtered_valid_cols_secondary["sponsored_by"] = (
-                self.session_last_filtered_valid_cols_secondary["sponsored_by"].apply(
-                    expand_abbreviations
-                )
-            )
-            
-            # Update aliases
-            self.session_last_filtered_valid_cols_bva = self.session_last_filtered_valid_cols_main
-            self.session_last_filtered_valid_cols_lva = self.session_last_filtered_valid_cols_secondary
 
-            self.logger.info(f"Expanded sponsor abbreviations using {len(self.map_vets)} mappings")
+            self.logger.info("Expanded sponsor abbreviations to full names")
 
         except Exception as e:
-            self.logger.error(f"Error expanding sponsor abbreviations: {e}", exc_info=True)
+            self.logger.error(
+                f"Error expanding sponsor abbreviations: {e}", exc_info=True
+            )
             raise
 
     def save_processed_session_data(self) -> None:
-        """
-        Save processed session data to CSV files.
-        FIXED: Normalizes stream fields before saving.
-        """
+        """Save processed session data to CSV files."""
         try:
-            # Get output file names from config
-            processed_files = self.output_files.get("processed_sessions", {})
-            
-            # Define output paths using configuration
-            main_last_output_path = os.path.join(
-                self.output_dir, "output", 
-                processed_files.get("last_year_main", "session_last_filtered_valid_cols_bva.csv")
+            # Define output paths
+            bva_last_output_path = os.path.join(
+                self.output_dir, "output", "session_last_filtered_valid_cols_bva.csv"
             )
-            secondary_last_output_path = os.path.join(
-                self.output_dir, "output", 
-                processed_files.get("last_year_secondary", "session_last_filtered_valid_cols_lva.csv")
+            lva_last_output_path = os.path.join(
+                self.output_dir, "output", "session_last_filtered_valid_cols_lva.csv"
             )
             this_output_path = os.path.join(
-                self.output_dir, "output", 
-                processed_files.get("this_year", "session_this_filtered_valid_cols.csv")
+                self.output_dir, "output", "session_this_filtered_valid_cols.csv"
             )
 
-            # FIXED: Normalize streams before saving
-            normalized_this = self.normalize_session_streams(self.session_this_filtered_valid_cols)
-            normalized_main = self.normalize_session_streams(self.session_last_filtered_valid_cols_main)
-            normalized_secondary = self.normalize_session_streams(self.session_last_filtered_valid_cols_secondary)
+            # Save to CSV - NO NORMALIZATION
+            self.session_last_filtered_valid_cols_bva.to_csv(
+                bva_last_output_path, index=False
+            )
+            self.session_last_filtered_valid_cols_lva.to_csv(
+                lva_last_output_path, index=False
+            )
+            self.session_this_filtered_valid_cols.to_csv(this_output_path, index=False)
 
-            # Save to CSV with normalized streams
-            normalized_main.to_csv(main_last_output_path, index=False)
-            normalized_secondary.to_csv(secondary_last_output_path, index=False)
-            normalized_this.to_csv(this_output_path, index=False)
-
             self.logger.info(
-                f"Saved processed session data to {self.output_dir}/output/ with normalized lowercase streams"
+                f"Saved processed session data to {self.output_dir}/output/"
             )
             self.logger.info(
-                f"{self.main_event_name} last year sessions: {len(normalized_main)} records"
+                f"BVA last year sessions: {len(self.session_last_filtered_valid_cols_bva)} records"
             )
             self.logger.info(
-                f"{self.secondary_event_name} last year sessions: {len(normalized_secondary)} records"
+                f"LVA last year sessions: {len(self.session_last_filtered_valid_cols_lva)} records"
             )
             self.logger.info(
-                f"This year sessions: {len(normalized_this)} records"
+                f"This year sessions: {len(self.session_this_filtered_valid_cols)} records"
             )
 
         except Exception as e:
@@ -690,7 +509,7 @@ class SessionProcessor:
 
     def process(self) -> None:
         """Execute the full session data processing workflow."""
-        self.logger.info("Starting session data processing workflow with consistent lowercase stream handling")
+        self.logger.info("Starting session data processing workflow")
 
         self.load_session_data()
         self.filter_session_data()

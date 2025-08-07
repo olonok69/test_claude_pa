@@ -43,15 +43,18 @@ session_files:
 
 # Stream processing configuration
 stream_processing:
-  use_cached_descriptions: true   # Set to true to use cached descriptions when available
+  use_cached_descriptions: false   # Set to true to use cached descriptions when available
 
 # Session processing configuration
 # Moved map_vets and titles_to_remove here
-titles_to_remove: 
+titles_to_remove:
   - "exhibitor showcase"
   - "tbc session"
   - "-"
-  - "bva's president's welcome"
+  - "session tba"
+  - "Session title to be confirmed"
+  - "session title to be confirm"
+  - "session details to follow"
 
 map_vets:
   "RCVS": "Royal College of Veterinary Surgeons"

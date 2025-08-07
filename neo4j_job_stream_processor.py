@@ -198,7 +198,7 @@ class Neo4jJobStreamProcessor:
             return stream_name, False
 
         # First normalize to lowercase
-        normalized_name = stream_name.lower().strip()
+        normalized_name = stream_name.strip()
         
         # Apply any additional mapping rules here if needed
         mapping_applied = False
