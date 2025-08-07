@@ -5,7 +5,9 @@
 
 # Authentication and security files
 keys/
-
+*.yaml
+*.yml
+config.yaml
 config.yml
 
 # SSL certificates and private keys
@@ -94,3 +96,4 @@ coverage.xml
 
 # Jupyter Notebook
 .ipynb_checkpoints
+outputs/

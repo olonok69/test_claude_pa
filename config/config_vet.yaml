@@ -91,7 +91,7 @@ pipeline_steps:
   neo4j_session_processing: true
   neo4j_job_stream_processing: true
   neo4j_specialization_stream_processing: true
-  neo4j_visitor_relationship_processing: false
+  neo4j_visitor_relationship_processing: true
   session_embedding_processing: false
   session_recommendation_processing: false
 
@@ -102,7 +102,10 @@ input_files:
   main_event_demographic: "data/bva/20250609_demographics_BVA24_BVA25.json"
   secondary_event_demographic: "data/bva/20250428_demographics_LVS24.json"
   practices: "data/bva/practices_missing.csv"
-
+  # main_event_scan: "data/bva/20240723_scan_data_BVA25.json"
+  # secondary_event_scan: "data/bva/20240724_scan_data_LVS25.json"
+  # main_event_sessions: "data/bva/20240725_sessions_BVA25.json"
+  # secondary_event_sessions: "data/bva/20240726_sessions_LVS25.json"
 
 # Scan data configuration
 scan_files:
@@ -126,7 +129,7 @@ session_files:
   session_this: "data/bva/BVA25_session_export.csv"
   session_past_bva: "data/bva/BVA24_session_export.csv"
   session_past_lva: "data/bva/LVA24_session_export.csv"
-  
+
 # Session processing configuration
 # BVA-specific titles to remove during session filtering
 titles_to_remove:

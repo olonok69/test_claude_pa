@@ -8,7 +8,7 @@ import inspect
 
 class Neo4jVisitorRelationshipProcessor:
     """
-    A class to create relationships between visitors from this year and past events.
+    A generic class to create relationships between visitors from this year and past events.
     This processor creates Same_Visitor relationships and attended_session relationships.
     """
 
@@ -27,6 +27,14 @@ class Neo4jVisitorRelationshipProcessor:
         self.config = config
         self.output_dir = os.path.join(config["output_dir"], "output")
 
+        # Extract Neo4j configuration
+        neo4j_config = config.get("neo4j", {})
+        self.show_name = neo4j_config.get("show_name", "unknown")
+        self.node_labels = neo4j_config.get("node_labels", {})
+        self.relationships = neo4j_config.get("relationships", {})
+        self.unique_identifiers = neo4j_config.get("unique_identifiers", {})
+        self.visitor_relationship_config = neo4j_config.get("visitor_relationship", {})
+
         # Load the environment variables to get Neo4j credentials
         load_dotenv(config["env_file"])
         self.uri = os.getenv("NEO4J_URI")
@@ -39,29 +47,25 @@ class Neo4jVisitorRelationshipProcessor:
             )
             raise ValueError("Missing Neo4j credentials in .env file")
 
+        # Initialize statistics with generic structure
+        same_visitor_properties = self.visitor_relationship_config.get("same_visitor_properties", {})
         self.statistics = {
-            "relationships_created": {
-                "same_visitor_bva": 0,
-                "same_visitor_lva": 0,
-                "attended_session_bva": 0,
-                "attended_session_lva": 0,
-            },
-            "relationships_skipped": {
-                "same_visitor_bva": 0,
-                "same_visitor_lva": 0,
-                "attended_session_bva": 0,
-                "attended_session_lva": 0,
-            },
-            "relationships_failed": {
-                "same_visitor_bva": 0,
-                "same_visitor_lva": 0,
-                "attended_session_bva": 0,
-                "attended_session_lva": 0,
-            },
+            "relationships_created": {},
+            "relationships_skipped": {},
+            "relationships_failed": {},
         }
+        
+        # Initialize statistics for each configured relationship type
+        for relationship_type in same_visitor_properties.keys():
+            self.statistics["relationships_created"][f"same_visitor_{relationship_type}"] = 0
+            self.statistics["relationships_created"][f"attended_session_{relationship_type}"] = 0
+            self.statistics["relationships_skipped"][f"same_visitor_{relationship_type}"] = 0
+            self.statistics["relationships_skipped"][f"attended_session_{relationship_type}"] = 0
+            self.statistics["relationships_failed"][f"same_visitor_{relationship_type}"] = 0
+            self.statistics["relationships_failed"][f"attended_session_{relationship_type}"] = 0
 
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j Visitor Relationship Processor initialized successfully"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j Visitor Relationship Processor initialized successfully for show: {self.show_name}"
         )
 
     def _test_connection(self):
@@ -76,7 +80,7 @@ class Neo4jVisitorRelationshipProcessor:
                 result = session.run("MATCH (n) RETURN count(n) AS count")
                 count = result.single()["count"]
                 self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Successfully connected to Neo4j. Database contains {count} nodes"
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Successfully connected to Neo4j. Total nodes: {count}"
                 )
             driver.close()
             return True
@@ -86,809 +90,455 @@ class Neo4jVisitorRelationshipProcessor:
             )
             return False
 
-    def create_same_visitor_relationships_bva(self, create_only_new=True):
+    def process(self, create_only_new=False):
         """
-        Creates Same_Visitor relationships for all Visitor_this_year nodes to Visitor_last_year_bva nodes.
-        Tracks statistics about relationships created, skipped, and failed.
+        Main process method to create visitor relationships.
 
         Args:
-            create_only_new (bool): If True, only create relationships that don't exist in the database.
-
-        Returns:
-            tuple: (relationships_created, relationships_skipped, relationships_failed)
+            create_only_new (bool): If True, only create new relationships (skip if already exists)
         """
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating Same_Visitor relationships for BVA"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Starting Neo4j visitor relationship processing for show: {self.show_name}"
         )
 
-        relationship_count = 0
-        skipped_count = 0
-        failed_count = 0
-
-        driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
-
-        try:
-            # First, count existing relationships
-            with driver.session() as session:
-                initial_count_result = session.run(
-                    """
-                    MATCH (this_year:Visitor_this_year)-[r:Same_Visitor {type: 'bva'}]->(last_year:Visitor_last_year_bva)
-                    RETURN COUNT(r) AS initial_count
-                    """
-                )
-                initial_count = initial_count_result.single()["initial_count"]
-                self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initial BVA Same_Visitor relationship count: {initial_count}"
-                )
-
-            # Check if relationships already exist and we only want to create new ones
-            if create_only_new and initial_count > 0:
-                self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Found {initial_count} existing Same_Visitor relationships for BVA. Skipping creation as create_only_new=True."
-                )
-                skipped_count = initial_count
-                return relationship_count, skipped_count, failed_count
-
-            # Get all Visitor_this_year nodes with valid BadgeId_last_year_bva
-            # When create_only_new is True, only process visitors without recommendations
-            additional_filter = ""
-            if create_only_new:
-                additional_filter = ' AND (this_year.has_recommendation IS NULL OR this_year.has_recommendation = "0")'
-
-            with driver.session() as session:
-                visitors_result = session.run(
-                    f"""
-                    MATCH (this_year:Visitor_this_year)
-                    WHERE this_year.BadgeId_last_year_bva IS NOT NULL AND this_year.BadgeId_last_year_bva <> "NA"
-                    {additional_filter}
-                    RETURN this_year.BadgeId as this_year_id, this_year.BadgeId_last_year_bva as last_year_id
-                    """
-                )
-
-                for record in visitors_result:
-                    this_year_id = record["this_year_id"]
-                    last_year_id = record["last_year_id"]
-
-                    # Check if the relationship already exists
-                    relationship_exists = session.run(
-                        """
-                        MATCH (this_year:Visitor_this_year {BadgeId: $this_year_id})-[:Same_Visitor {type: 'bva'}]->
-                              (last_year:Visitor_last_year_bva {BadgeId: $last_year_id})
-                        RETURN count(*) > 0 AS exists
-                        """,
-                        this_year_id=this_year_id,
-                        last_year_id=last_year_id,
-                    ).single()["exists"]
-
-                    if not relationship_exists:
-                        # Check if both nodes exist before creating relationship
-                        nodes_exist = session.run(
-                            """
-                            MATCH (this_year:Visitor_this_year {BadgeId: $this_year_id})
-                            MATCH (last_year:Visitor_last_year_bva {BadgeId: $last_year_id})
-                            RETURN count(*) > 0 AS exists
-                            """,
-                            this_year_id=this_year_id,
-                            last_year_id=last_year_id,
-                        ).single()["exists"]
-
-                        if nodes_exist:
-                            try:
-                                session.run(
-                                    """
-                                    MATCH (this_year:Visitor_this_year {BadgeId: $this_year_id})
-                                    MATCH (last_year:Visitor_last_year_bva {BadgeId: $last_year_id})
-                                    CREATE (this_year)-[:Same_Visitor {type: 'bva'}]->(last_year)
-                                    """,
-                                    this_year_id=this_year_id,
-                                    last_year_id=last_year_id,
-                                )
-                                relationship_count += 1
-                            except Exception as e:
-                                failed_count += 1
-                                self.logger.error(
-                                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationship for {this_year_id} -> {last_year_id}: {str(e)}"
-                                )
-                        else:
-                            failed_count += 1
-                            self.logger.warning(
-                                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Could not create Same_Visitor relationship for {this_year_id} -> {last_year_id} - one or both nodes not found"
-                            )
-                    else:
-                        skipped_count += 1
-
-            # After creation, count final relationships to verify
-            with driver.session() as session:
-                final_count_result = session.run(
-                    """
-                    MATCH (this_year:Visitor_this_year)-[r:Same_Visitor {type: 'bva'}]->(last_year:Visitor_last_year_bva)
-                    RETURN COUNT(r) AS final_count
-                    """
-                )
-                final_count = final_count_result.single()["final_count"]
-
-                # Calculate actual created count
-                actual_created = final_count - initial_count
-
-                if actual_created != relationship_count:
-                    self.logger.warning(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - WARNING: Discrepancy detected! Database shows {actual_created} new relationships, but code tracked {relationship_count}."
-                    )
-
-        except Exception as e:
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationships for BVA: {str(e)}"
-            )
-            raise
-        finally:
-            driver.close()
-
-        # Log summary statistics
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - BVA Same_Visitor Relationship Summary:"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships created: {relationship_count}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships skipped: {skipped_count}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships failed: {failed_count}"
-        )
-
-        return relationship_count, skipped_count, failed_count
-
-    def create_same_visitor_relationships_lva(self, create_only_new=True):
-        """
-        Creates Same_Visitor relationships for all Visitor_this_year nodes to Visitor_last_year_lva nodes.
-        Tracks statistics about relationships created, skipped, and failed.
-
-        Args:
-            create_only_new (bool): If True, only create relationships that don't exist in the database.
-
-        Returns:
-            tuple: (relationships_created, relationships_skipped, relationships_failed)
-        """
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating Same_Visitor relationships for LVA"
-        )
-
-        relationship_count = 0
-        skipped_count = 0
-        failed_count = 0
-
-        driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
-
-        try:
-            # First, count existing relationships
-            with driver.session() as session:
-                initial_count_result = session.run(
-                    """
-                    MATCH (this_year:Visitor_this_year)-[r:Same_Visitor {type: 'lva'}]->(last_year:Visitor_last_year_lva)
-                    RETURN COUNT(r) AS initial_count
-                    """
-                )
-                initial_count = initial_count_result.single()["initial_count"]
-                self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initial LVA Same_Visitor relationship count: {initial_count}"
-                )
-
-            # Check if relationships already exist and we only want to create new ones
-            if create_only_new and initial_count > 0:
-                self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Found {initial_count} existing Same_Visitor relationships for LVA. Skipping creation as create_only_new=True."
-                )
-                skipped_count = initial_count
-                return relationship_count, skipped_count, failed_count
-
-            # Get all Visitor_this_year nodes with valid BadgeId_last_year_lva
-            with driver.session() as session:
-                visitors_result = session.run(
-                    """
-                    MATCH (this_year:Visitor_this_year)
-                    WHERE this_year.BadgeId_last_year_lva IS NOT NULL AND this_year.BadgeId_last_year_lva <> "NA"
-                    RETURN this_year.BadgeId as this_year_id, this_year.BadgeId_last_year_lva as last_year_id
-                    """
-                )
-
-                for record in visitors_result:
-                    this_year_id = record["this_year_id"]
-                    last_year_id = record["last_year_id"]
-
-                    # Check if the relationship already exists
-                    relationship_exists = session.run(
-                        """
-                        MATCH (this_year:Visitor_this_year {BadgeId: $this_year_id})-[:Same_Visitor {type: 'lva'}]->
-                              (last_year:Visitor_last_year_lva {BadgeId: $last_year_id})
-                        RETURN count(*) > 0 AS exists
-                        """,
-                        this_year_id=this_year_id,
-                        last_year_id=last_year_id,
-                    ).single()["exists"]
-
-                    if not relationship_exists:
-                        # Check if both nodes exist before creating relationship
-                        nodes_exist = session.run(
-                            """
-                            MATCH (this_year:Visitor_this_year {BadgeId: $this_year_id})
-                            MATCH (last_year:Visitor_last_year_lva {BadgeId: $last_year_id})
-                            RETURN count(*) > 0 AS exists
-                            """,
-                            this_year_id=this_year_id,
-                            last_year_id=last_year_id,
-                        ).single()["exists"]
-
-                        if nodes_exist:
-                            try:
-                                session.run(
-                                    """
-                                    MATCH (this_year:Visitor_this_year {BadgeId: $this_year_id})
-                                    MATCH (last_year:Visitor_last_year_lva {BadgeId: $last_year_id})
-                                    CREATE (this_year)-[:Same_Visitor {type: 'lva'}]->(last_year)
-                                    """,
-                                    this_year_id=this_year_id,
-                                    last_year_id=last_year_id,
-                                )
-                                relationship_count += 1
-                            except Exception as e:
-                                failed_count += 1
-                                self.logger.error(
-                                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationship for {this_year_id} -> {last_year_id}: {str(e)}"
-                                )
-                        else:
-                            failed_count += 1
-                            self.logger.warning(
-                                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Could not create Same_Visitor relationship for {this_year_id} -> {last_year_id} - one or both nodes not found"
-                            )
-                    else:
-                        skipped_count += 1
-
-            # After creation, count final relationships to verify
-            with driver.session() as session:
-                final_count_result = session.run(
-                    """
-                    MATCH (this_year:Visitor_this_year)-[r:Same_Visitor {type: 'lva'}]->(last_year:Visitor_last_year_lva)
-                    RETURN COUNT(r) AS final_count
-                    """
-                )
-                final_count = final_count_result.single()["final_count"]
-
-                # Calculate actual created count
-                actual_created = final_count - initial_count
-
-                if actual_created != relationship_count:
-                    self.logger.warning(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - WARNING: Discrepancy detected! Database shows {actual_created} new relationships, but code tracked {relationship_count}."
-                    )
-
-        except Exception as e:
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationships for LVA: {str(e)}"
-            )
-            raise
-        finally:
-            driver.close()
-
-        # Log summary statistics
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - LVA Same_Visitor Relationship Summary:"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships created: {relationship_count}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships skipped: {skipped_count}"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships failed: {failed_count}"
-        )
-
-        return relationship_count, skipped_count, failed_count
-
-    def create_attended_session_relationships_bva(self, create_only_new=True):
-        """
-        Creates attended_session relationships between Visitor_last_year_bva nodes
-        and Sessions_past_year nodes. Tracks statistics about relationships created, skipped, and failed.
-
-        Args:
-            create_only_new (bool): If True, only create relationships that don't exist in the database.
-
-        Returns:
-            tuple: (relationships_created, relationships_skipped, relationships_failed)
-        """
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating attended_session relationships for BVA"
-        )
-
-        relationship_count = 0
-        skipped_count = 0
-        failed_count = 0
-
-        # Load scan data for BVA from the previous year
-        scan_file_path = os.path.join(self.output_dir, "scan_bva_past.csv")
-        if not os.path.exists(scan_file_path):
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Scan file not found: {scan_file_path}"
-            )
-            return relationship_count, skipped_count, failed_count
-
-        # Load the badge IDs of visitors that attended both years
-        filter_file_path = os.path.join(self.output_dir, "df_reg_demo_last_bva.csv")
-        if not os.path.exists(filter_file_path):
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Filter file not found: {filter_file_path}"
-            )
-            return relationship_count, skipped_count, failed_count
-
-        try:
-            # Load data
-            scan_data = pd.read_csv(scan_file_path)
-            filter_data = pd.read_csv(filter_file_path)
-
-            # Get list of badge IDs to filter by
-            badge_ids = list(filter_data["BadgeId"].unique())
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Loaded {len(badge_ids)} badge IDs for filtering scan data"
-            )
-
-            # Filter scan data to only include visitors in the filter list
-            scan_data = scan_data[scan_data["Badge Id"].isin(badge_ids)]
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Filtered scan data contains {len(scan_data)} records"
-            )
-
-            if len(scan_data) == 0:
-                self.logger.warning(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No scan data records found after filtering"
-                )
-                return relationship_count, skipped_count, failed_count
-
-            # Create relationships in Neo4j
-            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
-
-            try:
-                # First, count existing relationships
-                with driver.session() as session:
-                    initial_count_result = session.run(
-                        """
-                        MATCH (v:Visitor_last_year_bva)-[r:attended_session]->(s:Sessions_past_year)
-                        RETURN COUNT(r) AS initial_count
-                        """
-                    )
-                    initial_count = initial_count_result.single()["initial_count"]
-                    self.logger.info(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initial BVA attended_session relationship count: {initial_count}"
-                    )
-
-                # Check if relationships already exist and we only want to create new ones
-                if create_only_new and initial_count > 0:
-                    self.logger.info(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Found {initial_count} existing attended_session relationships for BVA. Skipping creation as create_only_new=True."
-                    )
-                    skipped_count = initial_count
-                    return relationship_count, skipped_count, failed_count
-
-                # Process each row in the DataFrame
-                with driver.session() as session:
-                    for _, row in scan_data.iterrows():
-                        visitor_badge_id = row["Badge Id"]
-                        session_key_text = row["key_text"]
-                        scan_date = str(row["Scan Date"])
-                        file = row["File"]
-                        seminar_name = row["Seminar Name"]
-
-                        # Check if the relationship already exists
-                        relationship_exists = session.run(
-                            """
-                            MATCH (v:Visitor_last_year_bva {BadgeId: $visitor_badge_id})-[:attended_session]->
-                                  (s:Sessions_past_year {key_text: $session_key_text})
-                            RETURN count(*) > 0 AS exists
-                            """,
-                            visitor_badge_id=visitor_badge_id,
-                            session_key_text=session_key_text,
-                        ).single()["exists"]
-
-                        if not relationship_exists:
-                            # Check if both nodes exist before creating relationship
-                            nodes_exist = session.run(
-                                """
-                                MATCH (v:Visitor_last_year_bva {BadgeId: $visitor_badge_id})
-                                MATCH (s:Sessions_past_year {key_text: $session_key_text})
-                                RETURN count(*) > 0 AS exists
-                                """,
-                                visitor_badge_id=visitor_badge_id,
-                                session_key_text=session_key_text,
-                            ).single()["exists"]
-
-                            if nodes_exist:
-                                try:
-                                    session.run(
-                                        """
-                                        MATCH (v:Visitor_last_year_bva {BadgeId: $visitor_badge_id})
-                                        MATCH (s:Sessions_past_year {key_text: $session_key_text})
-                                        CREATE (v)-[:attended_session {
-                                            scan_date: $scan_date, 
-                                            file: $file, 
-                                            seminar_name: $seminar_name
-                                        }]->(s)
-                                        """,
-                                        visitor_badge_id=visitor_badge_id,
-                                        session_key_text=session_key_text,
-                                        scan_date=scan_date,
-                                        file=file,
-                                        seminar_name=seminar_name,
-                                    )
-                                    relationship_count += 1
-                                except Exception as e:
-                                    failed_count += 1
-                                    self.logger.error(
-                                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationship for {visitor_badge_id} -> {session_key_text}: {str(e)}"
-                                    )
-                            else:
-                                failed_count += 1
-                                self.logger.warning(
-                                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Could not create attended_session relationship for {visitor_badge_id} -> {session_key_text} - one or both nodes not found"
-                                )
-                        else:
-                            skipped_count += 1
-
-                # After creation, count final relationships to verify
-                with driver.session() as session:
-                    final_count_result = session.run(
-                        """
-                        MATCH (v:Visitor_last_year_bva)-[r:attended_session]->(s:Sessions_past_year)
-                        RETURN COUNT(r) AS final_count
-                        """
-                    )
-                    final_count = final_count_result.single()["final_count"]
-
-                    # Calculate actual created count
-                    actual_created = final_count - initial_count
-
-                    if actual_created != relationship_count:
-                        self.logger.warning(
-                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - WARNING: Discrepancy detected! Database shows {actual_created} new relationships, but code tracked {relationship_count}."
-                        )
-
-            finally:
-                driver.close()
-
-            # Log summary statistics
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - BVA Attended Session Relationship Summary:"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships created: {relationship_count}"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships skipped: {skipped_count}"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships failed: {failed_count}"
-            )
-
-        except Exception as e:
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationships for BVA: {str(e)}"
-            )
-            raise
-
-        return relationship_count, skipped_count, failed_count
-
-    def create_attended_session_relationships_lva(self, create_only_new=True):
-        """
-        Creates attended_session relationships between Visitor_last_year_lva nodes
-        and Sessions_past_year nodes. Tracks statistics about relationships created, skipped, and failed.
-
-        Args:
-            create_only_new (bool): If True, only create relationships that don't exist in the database.
-
-        Returns:
-            tuple: (relationships_created, relationships_skipped, relationships_failed)
-        """
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating attended_session relationships for LVA"
-        )
-
-        relationship_count = 0
-        skipped_count = 0
-        failed_count = 0
-
-        # Load scan data for LVA from the previous year
-        scan_file_path = os.path.join(self.output_dir, "scan_lva_past.csv")
-        if not os.path.exists(scan_file_path):
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Scan file not found: {scan_file_path}"
-            )
-            return relationship_count, skipped_count, failed_count
-
-        # Load the badge IDs of visitors that attended both years
-        filter_file_path = os.path.join(self.output_dir, "df_reg_demo_last_lva.csv")
-        if not os.path.exists(filter_file_path):
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Filter file not found: {filter_file_path}"
-            )
-            return relationship_count, skipped_count, failed_count
-
-        try:
-            # Load data
-            scan_data = pd.read_csv(scan_file_path)
-            filter_data = pd.read_csv(filter_file_path)
-
-            # Get list of badge IDs to filter by
-            badge_ids = list(filter_data["BadgeId"].unique())
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Loaded {len(badge_ids)} badge IDs for filtering scan data"
-            )
-
-            # Filter scan data to only include visitors in the filter list
-            scan_data = scan_data[scan_data["Badge Id"].isin(badge_ids)]
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Filtered scan data contains {len(scan_data)} records"
-            )
-
-            if len(scan_data) == 0:
-                self.logger.warning(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No scan data records found after filtering"
-                )
-                return relationship_count, skipped_count, failed_count
-
-            # Create relationships in Neo4j
-            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
-
-            try:
-                # First, count existing relationships
-                with driver.session() as session:
-                    initial_count_result = session.run(
-                        """
-                        MATCH (v:Visitor_last_year_lva)-[r:attended_session]->(s:Sessions_past_year)
-                        RETURN COUNT(r) AS initial_count
-                        """
-                    )
-                    initial_count = initial_count_result.single()["initial_count"]
-                    self.logger.info(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initial LVA attended_session relationship count: {initial_count}"
-                    )
-
-                # Check if relationships already exist and we only want to create new ones
-                if create_only_new and initial_count > 0:
-                    self.logger.info(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Found {initial_count} existing attended_session relationships for LVA. Skipping creation as create_only_new=True."
-                    )
-                    skipped_count = initial_count
-                    return relationship_count, skipped_count, failed_count
-
-                # Process each row in the DataFrame
-                with driver.session() as session:
-                    for _, row in scan_data.iterrows():
-                        visitor_badge_id = row["Badge Id"]
-                        session_key_text = row["key_text"]
-                        scan_date = str(row["Scan Date"])
-                        file = row["File"]
-                        seminar_name = row["Seminar Name"]
-
-                        # Check if the relationship already exists
-                        relationship_exists = session.run(
-                            """
-                            MATCH (v:Visitor_last_year_lva {BadgeId: $visitor_badge_id})-[:attended_session]->
-                                  (s:Sessions_past_year {key_text: $session_key_text})
-                            RETURN count(*) > 0 AS exists
-                            """,
-                            visitor_badge_id=visitor_badge_id,
-                            session_key_text=session_key_text,
-                        ).single()["exists"]
-
-                        if not relationship_exists:
-                            # Check if both nodes exist before creating relationship
-                            nodes_exist = session.run(
-                                """
-                                MATCH (v:Visitor_last_year_lva {BadgeId: $visitor_badge_id})
-                                MATCH (s:Sessions_past_year {key_text: $session_key_text})
-                                RETURN count(*) > 0 AS exists
-                                """,
-                                visitor_badge_id=visitor_badge_id,
-                                session_key_text=session_key_text,
-                            ).single()["exists"]
-
-                            if nodes_exist:
-                                try:
-                                    session.run(
-                                        """
-                                        MATCH (v:Visitor_last_year_lva {BadgeId: $visitor_badge_id})
-                                        MATCH (s:Sessions_past_year {key_text: $session_key_text})
-                                        CREATE (v)-[:attended_session {
-                                            scan_date: $scan_date, 
-                                            file: $file, 
-                                            seminar_name: $seminar_name
-                                        }]->(s)
-                                        """,
-                                        visitor_badge_id=visitor_badge_id,
-                                        session_key_text=session_key_text,
-                                        scan_date=scan_date,
-                                        file=file,
-                                        seminar_name=seminar_name,
-                                    )
-                                    relationship_count += 1
-                                except Exception as e:
-                                    failed_count += 1
-                                    self.logger.error(
-                                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationship for {visitor_badge_id} -> {session_key_text}: {str(e)}"
-                                    )
-                            else:
-                                failed_count += 1
-                                self.logger.warning(
-                                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Could not create attended_session relationship for {visitor_badge_id} -> {session_key_text} - one or both nodes not found"
-                                )
-                        else:
-                            skipped_count += 1
-
-                # After creation, count final relationships to verify
-                with driver.session() as session:
-                    final_count_result = session.run(
-                        """
-                        MATCH (v:Visitor_last_year_lva)-[r:attended_session]->(s:Sessions_past_year)
-                        RETURN COUNT(r) AS final_count
-                        """
-                    )
-                    final_count = final_count_result.single()["final_count"]
-
-                    # Calculate actual created count
-                    actual_created = final_count - initial_count
-
-                    if actual_created != relationship_count:
-                        self.logger.warning(
-                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - WARNING: Discrepancy detected! Database shows {actual_created} new relationships, but code tracked {relationship_count}."
-                        )
-
-            finally:
-                driver.close()
-
-            # Log summary statistics
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - LVA Attended Session Relationship Summary:"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships created: {relationship_count}"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships skipped: {skipped_count}"
-            )
-            self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships failed: {failed_count}"
-            )
-
-        except Exception as e:
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationships for LVA: {str(e)}"
-            )
-            raise
-
-        return relationship_count, skipped_count, failed_count
-
-    def process(self, create_only_new=True):
-        """
-        Process visitor relationship data and upload to Neo4j.
-
-        Args:
-            create_only_new (bool): If True, only create relationships that don't exist in the database.
-        """
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Starting Neo4j visitor relationship processing"
-        )
-
-        # Test the connection first
+        # Test connection first
         if not self._test_connection():
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Cannot proceed with Neo4j upload due to connection failure"
+            raise Exception("Cannot connect to Neo4j database")
+
+        # Get configured relationship types
+        same_visitor_properties = self.visitor_relationship_config.get("same_visitor_properties", {})
+        
+        if not same_visitor_properties:
+            self.logger.warning(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No visitor relationship configuration found, skipping processing"
             )
             return
 
-        # Create Same_Visitor relationships for BVA
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating Same_Visitor relationships for BVA"
-        )
-        try:
-            relationships_created, relationships_skipped, relationships_failed = (
-                self.create_same_visitor_relationships_bva(create_only_new)
-            )
-            self.statistics["relationships_created"][
-                "same_visitor_bva"
-            ] = relationships_created
-            self.statistics["relationships_skipped"][
-                "same_visitor_bva"
-            ] = relationships_skipped
-            self.statistics["relationships_failed"][
-                "same_visitor_bva"
-            ] = relationships_failed
-        except Exception as e:
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationships for BVA: {str(e)}"
+        # Process each relationship type configured
+        for relationship_type, properties in same_visitor_properties.items():
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing relationships for {relationship_type}"
             )
 
-        # Create Same_Visitor relationships for LVA
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating Same_Visitor relationships for LVA"
-        )
-        try:
-            relationships_created, relationships_skipped, relationships_failed = (
-                self.create_same_visitor_relationships_lva(create_only_new)
-            )
-            self.statistics["relationships_created"][
-                "same_visitor_lva"
-            ] = relationships_created
-            self.statistics["relationships_skipped"][
-                "same_visitor_lva"
-            ] = relationships_skipped
-            self.statistics["relationships_failed"][
-                "same_visitor_lva"
-            ] = relationships_failed
-        except Exception as e:
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationships for LVA: {str(e)}"
-            )
+            # Create Same_Visitor relationships
+            try:
+                self._create_same_visitor_relationships(relationship_type, properties, create_only_new)
+            except Exception as e:
+                self.logger.error(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationships for {relationship_type}: {str(e)}"
+                )
 
-        # Create attended_session relationships for BVA
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating attended_session relationships for BVA"
-        )
-        try:
-            relationships_created, relationships_skipped, relationships_failed = (
-                self.create_attended_session_relationships_bva(create_only_new)
-            )
-            self.statistics["relationships_created"][
-                "attended_session_bva"
-            ] = relationships_created
-            self.statistics["relationships_skipped"][
-                "attended_session_bva"
-            ] = relationships_skipped
-            self.statistics["relationships_failed"][
-                "attended_session_bva"
-            ] = relationships_failed
-        except Exception as e:
-            self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationships for BVA: {str(e)}"
-            )
+            # Create attended_session relationships
+            try:
+                self._create_attended_session_relationships(relationship_type, properties, create_only_new)
+            except Exception as e:
+                self.logger.error(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationships for {relationship_type}: {str(e)}"
+                )
 
-        # Create attended_session relationships for LVA
+        # Log summary statistics
+        self._log_summary()
+
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating attended_session relationships for LVA"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j visitor relationship processing completed for show: {self.show_name}"
         )
+
+    def _create_same_visitor_relationships(self, relationship_type, properties, create_only_new):
+        """
+        Create Same_Visitor relationships for a specific relationship type.
+
+        Args:
+            relationship_type (str): Type of relationship (e.g., 'bva', 'lva')
+            properties (dict): Properties to attach to the relationship
+            create_only_new (bool): If True, only create new relationships
+        """
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating Same_Visitor relationships for {relationship_type}"
+        )
+
+        # Get node labels
+        visitor_this_year_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
+        visitor_last_year_label = self.node_labels.get(f"visitor_last_year_{relationship_type}", f"Visitor_last_year_{relationship_type}")
+        
+        # Get relationship name
+        same_visitor_relationship = self.relationships.get("same_visitor", "Same_Visitor")
+        
+        # Get unique identifier
+        visitor_id_field = self.unique_identifiers.get("visitor", "BadgeId")
+
+        relationship_count = 0
+        skipped_count = 0
+        failed_count = 0
+
         try:
-            relationships_created, relationships_skipped, relationships_failed = (
-                self.create_attended_session_relationships_lva(create_only_new)
-            )
-            self.statistics["relationships_created"][
-                "attended_session_lva"
-            ] = relationships_created
-            self.statistics["relationships_skipped"][
-                "attended_session_lva"
-            ] = relationships_skipped
-            self.statistics["relationships_failed"][
-                "attended_session_lva"
-            ] = relationships_failed
+            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+
+            # Get initial count of existing relationships
+            with driver.session() as session:
+                initial_count_result = session.run(
+                    f"""
+                    MATCH (this_year:{visitor_this_year_label})-[r:{same_visitor_relationship}]->(last_year:{visitor_last_year_label})
+                    WHERE this_year.show = $show_name AND last_year.show = $show_name
+                    AND r.type = $relationship_type
+                    RETURN COUNT(r) AS count
+                    """,
+                    show_name=self.show_name,
+                    relationship_type=properties.get('type', relationship_type)
+                )
+                initial_count = initial_count_result.single()["count"]
+
+                self.logger.info(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Found {initial_count} existing {relationship_type} Same_Visitor relationships"
+                )
+
+                if create_only_new and initial_count > 0:
+                    self.logger.info(
+                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Skipping creation as create_only_new=True."
+                    )
+                    skipped_count = initial_count
+                    self.statistics["relationships_skipped"][f"same_visitor_{relationship_type}"] = skipped_count
+                    return
+
+                # Get all visitor nodes with matching last year IDs (including NA for compatibility)
+                badge_id_field = f"{visitor_id_field}_last_year_{relationship_type}"
+                visitors_result = session.run(
+                    f"""
+                    MATCH (this_year:{visitor_this_year_label})
+                    WHERE this_year.show = $show_name
+                    AND this_year.{badge_id_field} IS NOT NULL
+                    RETURN this_year.{visitor_id_field} as this_year_id, this_year.{badge_id_field} as last_year_id
+                    """,
+                    show_name=self.show_name
+                )
+
+                for record in visitors_result:
+                    this_year_id = record["this_year_id"]
+                    last_year_id = record["last_year_id"]
+
+                    # Skip "NA" values without logging warnings (they are placeholders)
+                    if last_year_id == "NA":
+                        failed_count += 1
+                        continue
+
+                    # Check if the relationship already exists
+                    relationship_exists = session.run(
+                        f"""
+                        MATCH (this_year:{visitor_this_year_label} {{{visitor_id_field}: $this_year_id}})-[:{same_visitor_relationship} {{type: $relationship_type}}]->
+                              (last_year:{visitor_last_year_label} {{{visitor_id_field}: $last_year_id}})
+                        WHERE this_year.show = $show_name AND last_year.show = $show_name
+                        RETURN count(*) > 0 AS exists
+                        """,
+                        this_year_id=this_year_id,
+                        last_year_id=last_year_id,
+                        show_name=self.show_name,
+                        relationship_type=properties.get('type', relationship_type)
+                    ).single()["exists"]
+
+                    if not relationship_exists:
+                        # Check if both nodes exist before creating relationship
+                        nodes_exist = session.run(
+                            f"""
+                            MATCH (this_year:{visitor_this_year_label} {{{visitor_id_field}: $this_year_id}})
+                            MATCH (last_year:{visitor_last_year_label} {{{visitor_id_field}: $last_year_id}})
+                            WHERE this_year.show = $show_name AND last_year.show = $show_name
+                            RETURN count(*) > 0 AS exists
+                            """,
+                            this_year_id=this_year_id,
+                            last_year_id=last_year_id,
+                            show_name=self.show_name
+                        ).single()["exists"]
+
+                        if nodes_exist:
+                            try:
+                                # Create relationship with properties
+                                property_params = ", ".join([f"{k}: ${k}" for k in properties.keys()])
+                                session.run(
+                                    f"""
+                                    MATCH (this_year:{visitor_this_year_label} {{{visitor_id_field}: $this_year_id}})
+                                    MATCH (last_year:{visitor_last_year_label} {{{visitor_id_field}: $last_year_id}})
+                                    WHERE this_year.show = $show_name AND last_year.show = $show_name
+                                    CREATE (this_year)-[:{same_visitor_relationship} {{{property_params}}}]->(last_year)
+                                    """,
+                                    this_year_id=this_year_id,
+                                    last_year_id=last_year_id,
+                                    show_name=self.show_name,
+                                    **properties
+                                )
+                                relationship_count += 1
+                            except Exception as e:
+                                failed_count += 1
+                                self.logger.error(
+                                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationship for {this_year_id} -> {last_year_id}: {str(e)}"
+                                )
+                        else:
+                            failed_count += 1
+                            # Note: Not logging warning for missing nodes as they may be legitimately absent
+                    else:
+                        skipped_count += 1
+
         except Exception as e:
             self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationships for LVA: {str(e)}"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationships for {relationship_type}: {str(e)}"
             )
+            raise
+        finally:
+            driver.close()
+
+        # Update statistics
+        self.statistics["relationships_created"][f"same_visitor_{relationship_type}"] = relationship_count
+        self.statistics["relationships_skipped"][f"same_visitor_{relationship_type}"] = skipped_count
+        self.statistics["relationships_failed"][f"same_visitor_{relationship_type}"] = failed_count
 
         # Log summary statistics
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j visitor relationship processing summary:"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {relationship_type} Same_Visitor Relationship Summary:"
         )
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Same_Visitor relationships for BVA: {self.statistics['relationships_created']['same_visitor_bva']} created, {self.statistics['relationships_skipped']['same_visitor_bva']} skipped, {self.statistics['relationships_failed']['same_visitor_bva']} failed"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships created: {relationship_count}"
         )
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Same_Visitor relationships for LVA: {self.statistics['relationships_created']['same_visitor_lva']} created, {self.statistics['relationships_skipped']['same_visitor_lva']} skipped, {self.statistics['relationships_failed']['same_visitor_lva']} failed"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships skipped: {skipped_count}"
         )
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - attended_session relationships for BVA: {self.statistics['relationships_created']['attended_session_bva']} created, {self.statistics['relationships_skipped']['attended_session_bva']} skipped, {self.statistics['relationships_failed']['attended_session_bva']} failed"
-        )
-        self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - attended_session relationships for LVA: {self.statistics['relationships_created']['attended_session_lva']} created, {self.statistics['relationships_skipped']['attended_session_lva']} skipped, {self.statistics['relationships_failed']['attended_session_lva']} failed"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships failed: {failed_count}"
         )
 
+    def _create_attended_session_relationships(self, relationship_type, properties, create_only_new):
+        """
+        Create attended_session relationships for a specific relationship type.
+
+        Args:
+            relationship_type (str): Type of relationship (e.g., 'bva', 'lva')
+            properties (dict): Properties to attach to the relationship
+            create_only_new (bool): If True, only create new relationships
+        """
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j visitor relationship processing completed"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Creating attended_session relationships for {relationship_type}"
         )
+
+        # Get node labels
+        visitor_last_year_label = self.node_labels.get(f"visitor_last_year_{relationship_type}", f"Visitor_last_year_{relationship_type}")
+        session_past_year_label = self.node_labels.get("session_past_year", "Sessions_past_year")
+        
+        # Get relationship name
+        attended_session_relationship = self.relationships.get("attended_session", "attended_session")
+        
+        # Get unique identifier
+        visitor_id_field = self.unique_identifiers.get("visitor", "BadgeId")
+
+        relationship_count = 0
+        skipped_count = 0
+        failed_count = 0
+
+        try:
+            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+
+            # Get initial count of existing relationships
+            with driver.session() as session:
+                initial_count_result = session.run(
+                    f"""
+                    MATCH (visitor:{visitor_last_year_label})-[r:{attended_session_relationship}]->(session:{session_past_year_label})
+                    WHERE visitor.show = $show_name AND session.show = $show_name
+                    RETURN COUNT(r) AS count
+                    """,
+                    show_name=self.show_name
+                )
+                initial_count = initial_count_result.single()["count"]
+
+                self.logger.info(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Found {initial_count} existing {relationship_type} attended_session relationships"
+                )
+
+                if create_only_new and initial_count > 0:
+                    self.logger.info(
+                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Skipping creation as create_only_new=True."
+                    )
+                    skipped_count = initial_count
+                    self.statistics["relationships_skipped"][f"attended_session_{relationship_type}"] = skipped_count
+                    return
+
+                # Load and process scan data
+                scan_files = self.config.get("scan_files", {})
+                scan_output_files = self.config.get("scan_output_files", {})
+                
+                if relationship_type == "bva":
+                    scan_file_key = "session_past_main"
+                    output_file_key = "last_year_main"
+                elif relationship_type == "lva":
+                    scan_file_key = "session_past_secondary"  
+                    output_file_key = "last_year_secondary"
+                else:
+                    # For other show types, skip attended_session processing
+                    self.logger.info(
+                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No scan file configuration for {relationship_type}, skipping attended_session relationships"
+                    )
+                    return
+
+                # Load and process scan data to match old processor behavior
+                if relationship_type == "bva":
+                    scan_filename = "scan_bva_past.csv"
+                    filter_filename = "df_reg_demo_last_bva.csv"
+                elif relationship_type == "lva":
+                    scan_filename = "scan_lva_past.csv"
+                    filter_filename = "df_reg_demo_last_lva.csv"
+                else:
+                    # For other show types, skip attended_session processing
+                    self.logger.info(
+                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No scan file configuration for {relationship_type}, skipping attended_session relationships"
+                    )
+                    return
+
+                # Load scan data file (matches old processor)
+                output_dir = os.path.join(self.config["output_dir"], "output")
+                scan_file_path = os.path.join(output_dir, scan_filename)
+                filter_file_path = os.path.join(output_dir, filter_filename)
+
+                if not os.path.exists(scan_file_path):
+                    self.logger.warning(
+                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Scan file not found: {scan_file_path}, skipping attended_session relationships for {relationship_type}"
+                    )
+                    return
+                    
+                if not os.path.exists(filter_file_path):
+                    self.logger.warning(
+                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Filter file not found: {filter_file_path}, skipping attended_session relationships for {relationship_type}"
+                    )
+                    return
+
+                try:
+                    # Load data (matches old processor logic)
+                    scan_df = pd.read_csv(scan_file_path)
+                    filter_df = pd.read_csv(filter_file_path)
+
+                    # Get list of badge IDs to filter by
+                    badge_ids = list(filter_df[visitor_id_field].unique())
+                    self.logger.info(
+                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Loaded {len(badge_ids)} badge IDs for filtering scan data"
+                    )
+
+                    # Filter scan data to only include visitors in the filter list
+                    scan_df = scan_df[scan_df["Badge Id"].isin(badge_ids)]
+                    self.logger.info(
+                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Filtered scan data contains {len(scan_df)} records for {relationship_type}"
+                    )
+
+                    if len(scan_df) == 0:
+                        self.logger.warning(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No scan data records found after filtering for {relationship_type}"
+                        )
+                        return
+                        
+                except Exception as e:
+                    self.logger.error(
+                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error loading scan data for {relationship_type}: {str(e)}"
+                    )
+                    return
+
+                # Process each scan record (matches old processor logic)
+                for _, row in scan_df.iterrows():
+                    visitor_badge_id = str(row.get("Badge Id", ""))
+                    session_key_text = str(row.get("key_text", ""))
+                    scan_date = str(row.get("Scan Date", ""))
+                    file = str(row.get("File", ""))
+                    seminar_name = str(row.get("Seminar Name", ""))
+
+                    if not visitor_badge_id or visitor_badge_id == "nan" or not session_key_text or session_key_text == "nan":
+                        continue
+
+                    # Check if the relationship already exists
+                    relationship_exists = session.run(
+                        f"""
+                        MATCH (v:{visitor_last_year_label} {{{visitor_id_field}: $visitor_badge_id}})-[:{attended_session_relationship}]->
+                              (s:{session_past_year_label} {{key_text: $session_key_text}})
+                        WHERE v.show = $show_name AND s.show = $show_name
+                        RETURN count(*) > 0 AS exists
+                        """,
+                        visitor_badge_id=visitor_badge_id,
+                        session_key_text=session_key_text,
+                        show_name=self.show_name
+                    ).single()["exists"]
+
+                    if not relationship_exists:
+                        # Check if both nodes exist before creating relationship
+                        nodes_exist = session.run(
+                            f"""
+                            MATCH (v:{visitor_last_year_label} {{{visitor_id_field}: $visitor_badge_id}})
+                            MATCH (s:{session_past_year_label} {{key_text: $session_key_text}})
+                            WHERE v.show = $show_name AND s.show = $show_name
+                            RETURN count(*) > 0 AS exists
+                            """,
+                            visitor_badge_id=visitor_badge_id,
+                            session_key_text=session_key_text,
+                            show_name=self.show_name
+                        ).single()["exists"]
+
+                        if nodes_exist:
+                            try:
+                                session.run(
+                                    f"""
+                                    MATCH (v:{visitor_last_year_label} {{{visitor_id_field}: $visitor_badge_id}})
+                                    MATCH (s:{session_past_year_label} {{key_text: $session_key_text}})
+                                    WHERE v.show = $show_name AND s.show = $show_name
+                                    CREATE (v)-[:{attended_session_relationship} {{
+                                        scan_date: $scan_date, 
+                                        file: $file, 
+                                        seminar_name: $seminar_name
+                                    }}]->(s)
+                                    """,
+                                    visitor_badge_id=visitor_badge_id,
+                                    session_key_text=session_key_text,
+                                    scan_date=scan_date,
+                                    file=file,
+                                    seminar_name=seminar_name,
+                                    show_name=self.show_name
+                                )
+                                relationship_count += 1
+                            except Exception as e:
+                                failed_count += 1
+                                self.logger.error(
+                                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationship: {str(e)}"
+                                )
+                        else:
+                            failed_count += 1
+                    else:
+                        skipped_count += 1
+
+        except Exception as e:
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationships for {relationship_type}: {str(e)}"
+            )
+            raise
+        finally:
+            driver.close()
+
+        # Update statistics
+        self.statistics["relationships_created"][f"attended_session_{relationship_type}"] = relationship_count
+        self.statistics["relationships_skipped"][f"attended_session_{relationship_type}"] = skipped_count
+        self.statistics["relationships_failed"][f"attended_session_{relationship_type}"] = failed_count
+
+        # Log summary statistics
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {relationship_type} attended_session Relationship Summary:"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships created: {relationship_count}"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships skipped: {skipped_count}"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Relationships failed: {failed_count}"
+        )
+
+    def _log_summary(self):
+        """Log summary statistics for all relationship types"""
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Visitor Relationship Processing Summary for show: {self.show_name}:"
+        )
+        
+        for key, value in self.statistics["relationships_created"].items():
+            skipped = self.statistics["relationships_skipped"].get(key, 0)
+            failed = self.statistics["relationships_failed"].get(key, 0)
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {key}: {value} created, {skipped} skipped, {failed} failed"
+            )

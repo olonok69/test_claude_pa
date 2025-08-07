@@ -84,7 +84,7 @@ pipeline_steps:
   neo4j_session_processing: true  # ENABLED: Added Neo4j session processing
   neo4j_job_stream_processing: true  # ENABLED but will be skipped via config
   neo4j_specialization_stream_processing: true  # ENABLED but will be skipped via config
-  neo4j_visitor_relationship_processing: false
+  neo4j_visitor_relationship_processing: true
   session_embedding_processing: false
   session_recommendation_processing: false  # Enable session recommendation processing
 
@@ -94,7 +94,11 @@ input_files:
   secondary_event_registration: "data/ecomm/20250722_registration_TFM24.json"  # CHANGED
   main_event_demographic: "data/ecomm/20250721_demographics_ECE24_ECE25.json"  # CHANGED
   secondary_event_demographic: "data/ecomm/20250722_demographics_TFM24.json"  # CHANGED
-
+  # practices: "data/ecomm/practices_missing.csv"  # CHANGED
+  # main_event_scan: "data/ecomm/20250723_scan_data_ECE25.json"  # CHANGED
+  # secondary_event_scan: "data/ecomm/20250724_scan_data_TFM25.json"  # CHANGED
+  # main_event_sessions: "data/ecomm/20250725_sessions_ECE25.json"  # CHANGED
+  # secondary_event_sessions: "data/ecomm/20250726_sessions_TFM25.json"  # CHANGED
 
 # Scan data configuration - CHANGED FOR ECOMM
 scan_files:

@@ -134,6 +134,7 @@ class SessionProcessor:
 
     def filter_session_data(self) -> None:
         """Filter and clean session data."""
+        # Convert titles_to_remove to lowercase for case-insensitive comparison
         titles_to_remove_lower = [title.lower() for title in self.titles_to_remove]
         try:
             # Apply filters for each dataset
@@ -196,11 +197,11 @@ class SessionProcessor:
     def select_relevant_columns(self) -> None:
         """Select and clean relevant columns from session data."""
         try:
-            # Define columns to keep
+            # Define the columns we want to keep - maintain consistent order
             cols_to_keep = [
                 "session_id",
                 "date",
-                "start_time",
+                "start_time", 
                 "end_time",
                 "theatre__name",
                 "title",
@@ -211,176 +212,77 @@ class SessionProcessor:
                 "key_text",
             ]
 
-            # Select columns
-            self.session_last_filtered_valid_cols_bva = self.session_last_filtered_bva[
-                cols_to_keep
-            ]
-            self.session_last_filtered_valid_cols_lva = self.session_last_filtered_lva[
-                cols_to_keep
-            ]
+            # Filter columns for each dataset
             self.session_this_filtered_valid_cols = self.session_this_filtered[
                 cols_to_keep
-            ]
+            ].copy()
+            self.session_last_filtered_valid_cols_bva = self.session_last_filtered_bva[
+                cols_to_keep
+            ].copy()
+            self.session_last_filtered_valid_cols_lva = self.session_last_filtered_lva[
+                cols_to_keep
+            ].copy()
 
-            # Fill NaN values
-            self.session_last_filtered_valid_cols_bva = (
-                self.session_last_filtered_valid_cols_bva.fillna("No Data")
-            )
-            self.session_last_filtered_valid_cols_lva = (
-                self.session_last_filtered_valid_cols_lva.fillna("No Data")
-            )
+            # Fill NaN values with empty strings
             self.session_this_filtered_valid_cols = (
-                self.session_this_filtered_valid_cols.fillna("No Data")
-            )
-
-            # Remove rows with "-" in title
-            self.session_this_filtered_valid_cols = (
-                self.session_this_filtered_valid_cols[
-                    ~(self.session_this_filtered_valid_cols.title == "-")
-                ]
+                self.session_this_filtered_valid_cols.fillna("")
             )
             self.session_last_filtered_valid_cols_bva = (
-                self.session_last_filtered_valid_cols_bva[
-                    ~(self.session_last_filtered_valid_cols_bva.title == "-")
-                ]
+                self.session_last_filtered_valid_cols_bva.fillna("")
             )
             self.session_last_filtered_valid_cols_lva = (
-                self.session_last_filtered_valid_cols_lva[
-                    ~(self.session_last_filtered_valid_cols_lva.title == "-")
-                ]
+                self.session_last_filtered_valid_cols_lva.fillna("")
             )
 
-            self.logger.info(
-                f"Selected relevant columns: {len(self.session_this_filtered_valid_cols)} records this year, "
-                f"{len(self.session_last_filtered_valid_cols_bva)} BVA records last year, "
-                f"{len(self.session_last_filtered_valid_cols_lva)} LVA records last year"
-            )
-
-            # Concatenate all sessions
-            self.total_sessions = pd.concat(
-                [
-                    self.session_last_filtered_valid_cols_bva,
-                    self.session_last_filtered_valid_cols_lva,
-                    self.session_this_filtered_valid_cols,
-                ],
-                ignore_index=True,
-            )
-
-            self.logger.info(
-                f"Created combined dataset with {len(self.total_sessions)} total sessions"
-            )
+            self.logger.info("Selected relevant columns and cleaned data")
 
         except Exception as e:
             self.logger.error(f"Error selecting relevant columns: {e}", exc_info=True)
             raise
 
     def extract_unique_streams(self) -> None:
-        """Extract and generate a set of unique session streams."""
+        """Extract unique stream values from all session datasets."""
         try:
-            # Get lists of streams from each dataset
-            list_stream_this = list(
-                self.session_this_filtered_valid_cols.stream.unique()
-            )
-            list_stream_last_bva = list(
-                self.session_last_filtered_valid_cols_bva.stream.unique()
-            )
-            list_stream_last_lva = list(
-                self.session_last_filtered_valid_cols_lva.stream.unique()
-            )
+            # Collect all stream values
+            all_streams = set()
 
-            # Initialize streams set
-            self.streams = set()
+            # Extract streams from each dataset
+            for df in [
+                self.session_this_filtered_valid_cols,
+                self.session_last_filtered_valid_cols_bva,
+                self.session_last_filtered_valid_cols_lva,
+            ]:
+                for stream_cell in df["stream"]:
+                    if pd.notna(stream_cell) and stream_cell:
+                        # Split by ';' and clean each stream
+                        streams = [s.strip() for s in str(stream_cell).split(";")]
+                        all_streams.update(streams)
 
-            # Add streams from each dataset
-            self.streams = self.generate_streams(self.streams, list_stream_this)
-            self.streams = self.generate_streams(self.streams, list_stream_last_bva)
-            self.streams = self.generate_streams(self.streams, list_stream_last_lva)
+            # Remove empty strings and sort
+            self.unique_streams = sorted([s for s in all_streams if s])
+            
+            # Also create 'streams' attribute for backward compatibility
+            self.streams = self.unique_streams
 
-            # Remove "no data" if present
-            if "no data" in self.streams:
-                self.streams.remove("no data")
-
-            self.logger.info(f"Extracted {len(self.streams)} unique streams")
+            self.logger.info(f"Extracted {len(self.unique_streams)} unique streams")
 
         except Exception as e:
             self.logger.error(f"Error extracting unique streams: {e}", exc_info=True)
             raise
 
-    @staticmethod
-    def generate_streams(streams: Set[str], list_streams: List[str]) -> Set[str]:
-        """
-        Extract individual streams from semicolon-separated lists.
-
-        Args:
-            streams: Set of already identified streams
-            list_streams: List of stream strings that may contain multiple streams
-
-        Returns:
-            Updated set of streams
-        """
-        for ele in list_streams:
-            if not isinstance(ele, str):
-                continue
-
-            for sub_ele in ele.split(";"):
-                stream = sub_ele.lower().strip()
-                streams.add(stream)
-        return streams
-
-    def generate_stream_descriptions(self) -> None:
-        """Generate descriptions for each unique stream based on session data."""
-        try:
-            self.stream_descriptions = {}
-
-            # Initialize the dictionary to hold descriptions for each stream
-            self.stream_descriptions = {stream: "" for stream in self.streams}
-
-            # Iterate over each row in the dataframe
-            for _, row in self.total_sessions.iterrows():
-                if not isinstance(row["stream"], str):
-                    continue
-
-                # Split the stream column for current row and process each sub-stream
-                session_streams = [s.lower().strip() for s in row["stream"].split(";")]
-
-                # Remove duplicates while preserving order
-                unique_streams = []
-                [
-                    unique_streams.append(s)
-                    for s in session_streams
-                    if s not in unique_streams
-                ]
-
-                # Concatenate title and synopsis_stripped
-                session_description = f"Title: {row['title']}.\nDescription: {row['synopsis_stripped']} \n\n "
-
-                # Add session description to relevant streams
-                for stream in unique_streams:
-                    if stream in self.stream_descriptions:
-                        self.stream_descriptions[stream] += session_description
-
-            self.logger.info(
-                f"Generated descriptions for {len(self.stream_descriptions)} streams"
-            )
-
-        except Exception as e:
-            self.logger.error(
-                f"Error generating stream descriptions: {e}", exc_info=True
-            )
-            raise
-
     def setup_language_model(self) -> None:
-        """Set up language model for generating stream descriptions."""
+        """Set up the language model for generating stream descriptions."""
         try:
-            # Check which API credentials are available and initialize the appropriate LLM
-            model_name = self.config.get("language_model", {}).get(
-                "model", "gpt-4.1-mini"
-            )
-            temperature = self.config.get("language_model", {}).get("temperature", 0.5)
-            top_p = self.config.get("language_model", {}).get("top_p", 0.9)
-
-            # Check if we should use Azure OpenAI
-            if all(
+            # Check if we have OpenAI credentials
+            if "OPENAI_API_KEY" in self.env_config:
+                self.llm = ChatOpenAI(
+                    api_key=self.env_config["OPENAI_API_KEY"],
+                    model="gpt-4o-mini",
+                    temperature=0.3,
+                )
+                self.logger.info("Initialized OpenAI language model")
+            # Check if we have Azure OpenAI credentials
+            elif all(
                 key in self.env_config
                 for key in [
                     "AZURE_API_KEY",
@@ -389,107 +291,35 @@ class SessionProcessor:
                     "AZURE_API_VERSION",
                 ]
             ):
-                self.logger.info("Setting up Azure OpenAI language model")
                 self.llm = AzureChatOpenAI(
                     azure_endpoint=self.env_config["AZURE_ENDPOINT"],
+                    azure_api_key=self.env_config["AZURE_API_KEY"],
                     azure_deployment=self.env_config["AZURE_DEPLOYMENT"],
-                    api_key=self.env_config["AZURE_API_KEY"],
                     api_version=self.env_config["AZURE_API_VERSION"],
-                    temperature=temperature,
-                    top_p=top_p,
+                    temperature=0.3,
                 )
-            # Otherwise use regular OpenAI
-            elif "OPENAI_API_KEY" in self.env_config:
-                self.logger.info("Setting up OpenAI language model")
-                self.llm = ChatOpenAI(
-                    model=model_name,
-                    openai_api_key=self.env_config["OPENAI_API_KEY"],
-                    temperature=temperature,
-                    top_p=top_p,
-                )
+                self.logger.info("Initialized Azure OpenAI language model")
             else:
-                raise ValueError(
-                    "No valid API credentials found in environment variables"
-                )
-
-            # Create prompt template
-            self.system_prompt = """
-            you are an assistant specialized in create a definition from a given category label. You will receive the title and sinopsip of diferent session of an event under that category
-            and based on that information you will prepare a description of the category label
-            """
-
-            self.logger.info("Language model setup completed")
+                raise ValueError("No valid API credentials found for language model")
 
         except Exception as e:
             self.logger.error(f"Error setting up language model: {e}", exc_info=True)
             raise
 
-    def generate_description(
-        self, key: str, text: str, force_regenerate: bool = False
-    ) -> str:
-        """
-        Generate a description for a stream using the language model.
-
-        Args:
-            key: Stream name
-            text: Text containing session descriptions for the stream
-            force_regenerate: Force regeneration of description even if cached (default: False)
-
-        Returns:
-            Generated description
-        """
-        try:
-            if self.use_cached_descriptions and not force_regenerate:
-                # Try to load from cache first
-                if (
-                    hasattr(self, "cached_descriptions")
-                    and key in self.cached_descriptions
-                ):
-                    # Log using cached description
-                    self.logger.info(f"Using cached description for stream '{key}'")
-                    return self.cached_descriptions[key]
-
-            # If not using cache or description not found in cache, generate new one
-            from langchain_core.prompts import PromptTemplate
-
-            prompt = PromptTemplate(
-                input_variables=["key", "text"],
-                template=self.system_prompt
-                + """Produce a description of the category: {key} based on the title and descriptions of the folowing session events {text}.\n Produce a description in 3 or 4 sentences of that category""",
-            )
-            chain = prompt | self.llm
-            ai_msg = chain.invoke({"key": key, "text": text})
-
-            # Log summary of the description (first 50 chars)
-            description = ai_msg.content
-            summary = description[:50] + "..." if len(description) > 50 else description
-            self.logger.info(f"Generated description for stream '{key}': {summary}")
-
-            return description
-
-        except Exception as e:
-            self.logger.error(
-                f"Error generating description for stream '{key}': {e}", exc_info=True
-            )
-            return f"Description generation failed for stream: {key}"
-
     def load_cached_descriptions(self) -> bool:
-        """
-        Load cached stream descriptions from file if they exist.
-
-        Returns:
-            True if cache was loaded successfully, False otherwise
-        """
+        """Load cached stream descriptions from file."""
         try:
             if os.path.exists(self.cache_file_path):
                 with open(self.cache_file_path, "r") as cache_file:
-                    self.cached_descriptions = json.load(cache_file)
-                    self.logger.info(
-                        f"Loaded {len(self.cached_descriptions)} stream descriptions from cache"
-                    )
-                    return True
+                    self.streams_catalog = json.load(cache_file)
+                self.logger.info(
+                    f"Loaded {len(self.streams_catalog)} cached stream descriptions"
+                )
+                return True
             else:
-                self.logger.info("No cache file found. Will generate new descriptions.")
+                self.logger.info(
+                    "No cached descriptions found. Will generate new descriptions."
+                )
                 self.cached_descriptions = {}
                 return False
         except Exception as e:
@@ -508,82 +338,67 @@ class SessionProcessor:
         except Exception as e:
             self.logger.error(f"Error saving cached descriptions: {e}", exc_info=True)
 
-    def generate_stream_catalog(self) -> None:
-        """Generate descriptions for all streams using the language model."""
+    def generate_stream_descriptions(self) -> None:
+        """Generate or load descriptions for streams."""
         try:
-            # Initialize the catalog
+            if self.use_cached_descriptions and self.load_cached_descriptions():
+                self.logger.info("Using cached stream descriptions")
+                return
+
+            self.logger.info("Generating new stream descriptions")
             self.streams_catalog = {}
 
-            # If using cache, try to load it first
-            if self.use_cached_descriptions:
-                cache_loaded = self.load_cached_descriptions()
+        except Exception as e:
+            self.logger.error(f"Error in generate_stream_descriptions: {e}", exc_info=True)
+            raise
 
-                # If cache was loaded and we want to use it without generating new descriptions
-                if cache_loaded:
-                    # Find streams that are not in the cache
-                    missing_streams = set(self.stream_descriptions.keys()) - set(
-                        self.cached_descriptions.keys()
-                    )
+    def generate_stream_catalog(self) -> None:
+        """Generate descriptions for all streams using the language model."""
+        if not hasattr(self, "llm") or self.use_cached_descriptions:
+            return
 
-                    # Copy existing descriptions from cache
-                    self.streams_catalog = self.cached_descriptions.copy()
+        try:
+            for stream in self.unique_streams:
+                if stream not in self.streams_catalog:
+                    prompt = f"""
+                    Provide a brief description (2-3 sentences) for the following conference stream: "{stream}"
+                    
+                    Focus on what topics and sessions would typically be covered in this stream.
+                    Keep the description professional and informative.
+                    """
 
-                    # Only generate descriptions for missing streams
-                    for stream in missing_streams:
-                        self.logger.info(
-                            f"Generating description for new stream: {stream}"
-                        )
-                        self.streams_catalog[stream] = self.generate_description(
-                            key=stream,
-                            text=self.stream_descriptions[stream],
-                        )
+                    response = self.llm.invoke(prompt)
+                    self.streams_catalog[stream] = {
+                        "stream": stream,
+                        "description": response.content.strip(),
+                    }
 
-                    self.logger.info(
-                        f"Generated catalog with {len(self.streams_catalog)} stream descriptions "
-                        f"({len(self.streams_catalog) - len(missing_streams)} from cache, {len(missing_streams)} newly generated)"
-                    )
-
-                    # Save the updated catalog to cache
-                    self.save_cached_descriptions()
-                    return
-
-            # If not using cache or cache loading failed, generate all descriptions
-            for stream in self.stream_descriptions.keys():
-                self.logger.info(f"Generating description for stream: {stream}")
-                self.streams_catalog[stream] = self.generate_description(
-                    key=stream,
-                    text=self.stream_descriptions[stream],
-                )
+                    self.logger.debug(f"Generated description for stream: {stream}")
 
             self.logger.info(
-                f"Generated catalog with {len(self.streams_catalog)} stream descriptions"
+                f"Generated descriptions for {len(self.streams_catalog)} streams"
             )
-
-            # Save the newly generated catalog to cache
-            self.save_cached_descriptions()
 
         except Exception as e:
             self.logger.error(f"Error generating stream catalog: {e}", exc_info=True)
             raise
 
     def save_streams_catalog(self) -> None:
-        """Save the generated stream catalog to a JSON file."""
+        """Save the streams catalog to JSON file."""
         try:
             output_path = os.path.join(self.output_dir, "output", "streams.json")
+            with open(output_path, "w") as f:
+                json.dump(list(self.streams_catalog.values()), f, indent=2)
 
-            with open(output_path, "w") as json_file:
-                json.dump(self.streams_catalog, json_file, indent=4)
-
-            self.logger.info(f"Saved stream catalog to {output_path}")
+            self.logger.info(f"Saved streams catalog to {output_path}")
 
         except Exception as e:
-            self.logger.error(f"Error saving stream catalog: {e}", exc_info=True)
+            self.logger.error(f"Error saving streams catalog: {e}", exc_info=True)
             raise
 
-    @staticmethod
-    def find_short_labels(input_set: Set[str]) -> List[str]:
+    def find_short_labels(self, input_set: Set[str]) -> List[str]:
         """
-        Finds a list of labels in a set that have 5 characters or less.
+        Find labels with length of 5 characters or less.
 
         Args:
           input_set: A set of strings (labels).
@@ -698,8 +513,8 @@ class SessionProcessor:
         self.filter_session_data()
         self.select_relevant_columns()
         self.extract_unique_streams()
-        self.generate_stream_descriptions()
         self.setup_language_model()
+        self.generate_stream_descriptions()
         self.generate_stream_catalog()
         self.save_streams_catalog()
         self.expand_sponsor_abbreviations()
