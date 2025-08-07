@@ -181,18 +181,27 @@ embeddings:
   batch_size: 100               # Batch size for processing embeddings
   include_stream_descriptions: false  # Whether to include stream descriptions in embeddings
 
-# Session recommendation configuration
 recommendation:
-  min_similarity_score: 0.3   # Minimum similarity score (0.0-1.0) for recommendations
-  max_recommendations: 10     # Maximum number of recommendations per visitor
-  similar_visitors_count: 3   # Number of similar visitors to consider for new visitors
-  use_langchain: false        # Whether to use LangChain for filtering (requires LangChain)
-  rules_config:               # Rules configuration for filtering
+  min_similarity_score: 0.3       # Minimum similarity score (0.0-1.0) for recommendations
+  max_recommendations: 10         # Maximum number of recommendations per visitor
+  similar_visitors_count: 3       # Number of similar visitors to consider for new visitors
+  use_langchain: false            # Whether to use LangChain for filtering (requires LangChain)
+  enable_filtering: true          # Enable/disable filtering rules (true for vet shows)
+  
+  # Similarity attributes for finding similar visitors (vet-specific)
+  similarity_attributes:
+    job_role: 1.0                                         # Weight for job role matching
+    what_type_does_your_practice_specialise_in: 1.0      # Weight for practice type
+    organisation_type: 0.5                                # Weight for organization type
+    Country: 0.5                                          # Weight for country
+  
+  # Filtering rules configuration (vet-specific)
+  rules_config:
     equine_mixed_exclusions: ["exotics", "feline", "exotic animal", "farm", "small animal"]
     small_animal_exclusions: ["equine", "farm animal", "farm", "large animal"]
     vet_exclusions: ["nursing"]
     nurse_streams: ["nursing", "wellbeing", "welfare"]
-    rule_priority: ["practice_type", "role"]
+    rule_priority: ["practice_type", "role"]  # Order of rule application
 
 # Neo4j configuration
 neo4j:
