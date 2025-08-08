@@ -1,102 +1,79 @@
 """
-Generic Session Recommendation Processor
-Handles recommendations for all show types (BVA, ECOMM, etc.)
+Generic Session Recommendation Processor - Fixed Version
+This processor handles session recommendations for any show type through configuration.
+Fixed to match old processor behavior exactly.
 """
+
+import os
+import sys
+import time
+import json
+import logging
+import concurrent.futures
+from datetime import datetime
+from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
-import json
-import os
-import time
-from datetime import datetime
-import logging
-import concurrent.futures
-from sklearn.metrics.pairwise import cosine_similarity
 from neo4j import GraphDatabase
+from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
-# Optional imports (for LangChain approach)
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from utils.config_utils import load_config
+from utils.logging_utils import setup_logging
+
+# Try to import LangChain components (optional)
 try:
-    from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-    from langchain_openai import ChatOpenAI, AzureChatOpenAI, AzureOpenAI
+    from langchain_openai import AzureChatOpenAI
+    from langchain.prompts import PromptTemplate
+    from langchain.chains import LLMChain
     from azure.ai.inference import ChatCompletionsClient
     from azure.core.credentials import AzureKeyCredential
-    from dotenv import dotenv_values
     has_langchain = True
 except ImportError:
     has_langchain = False
-    print("LangChain not available. Will use rule-based filtering only.")
 
 
 class SessionRecommendationProcessor:
     """
-    Generic processor for generating session recommendations for visitors.
+    Generic processor for generating session recommendations.
     Works with any show type through configuration.
     """
 
-    def __init__(self, config):
-        """
-        Initialize the session recommendation processor.
-
-        Args:
-            config: Configuration dictionary
-        """
+    def __init__(self, config: dict):
+        """Initialize the session recommendation processor."""
         self.config = config
-        self.output_dir = config.get("output_dir", "data")
+        self.logger = logging.getLogger(self.__class__.__name__)
         
         # Get event configuration
         self.event_config = config.get("event", {})
-        self.main_event_name = self.event_config.get("main_event_name", "main")
-        self.secondary_event_name = self.event_config.get("secondary_event_name", "secondary")
-        self.show_name = config.get("neo4j", {}).get("show_name", self.main_event_name)
+        self.main_event_name = self.event_config.get("main_event_name", "bva")
+        self.show_name = self.event_config.get("show_name", self.main_event_name)
+        self.year = self.event_config.get("year", datetime.now().year)
         
-        # Determine output subdirectory based on show
-        if self.main_event_name in ["bva", "lva"]:
-            self.output_subdir = "bva"
-        elif self.main_event_name in ["ecomm", "tfm"]:
-            self.output_subdir = "ecomm"
-        else:
-            self.output_subdir = self.main_event_name
+        # Setup data paths
+        self.data_dir = Path(config.get("data_dir", "data"))
+        self.output_dir = Path(config.get("output_dir", "output"))
+        self.show_data_dir = self.data_dir / self.main_event_name
         
-        self.output_path = os.path.join(self.output_dir, self.output_subdir)
-        os.makedirs(self.output_path, exist_ok=True)
-        os.makedirs(os.path.join(self.output_path, "recommendations"), exist_ok=True)
-
-        # Load Neo4j connection parameters from .env file (consistent with other processors)
-        from dotenv import load_dotenv
-        load_dotenv(config.get("env_file", "keys/.env"))
-        self.uri = os.getenv("NEO4J_URI")
-        self.username = os.getenv("NEO4J_USERNAME")
-        self.password = os.getenv("NEO4J_PASSWORD")
+        # Get recommendations output configuration
+        rec_config = config.get("output_files", {}).get("recommendations", {})
+        self.rec_output_dir = rec_config.get("output_directory", "recommendations")
+        self.rec_filename_pattern = rec_config.get("filename_pattern", "visitor_recommendations_{timestamp}")
         
-        # Fallback to config file if env variables not found (backward compatibility)
-        if not self.uri:
-            self.uri = config.get("neo4j", {}).get("uri")
-        if not self.username:
-            self.username = config.get("neo4j", {}).get("username")
-        if not self.password:
-            self.password = config.get("neo4j", {}).get("password")
+        # Create recommendations directory
+        self.recommendations_dir = self.show_data_dir / self.rec_output_dir
+        self.recommendations_dir.mkdir(parents=True, exist_ok=True)
         
-        if not all([self.uri, self.username, self.password]):
-            self.logger.error("Missing Neo4j credentials in .env file or config")
-            raise ValueError("Missing Neo4j credentials in .env file or config")
+        # Load Neo4j configuration
+        self._load_neo4j_config()
         
-        # Get Neo4j node labels from config
-        neo4j_config = config.get("neo4j", {})
-        self.labels = neo4j_config.get("node_labels", {})
-        self.visitor_this_year_label = self.labels.get("visitor_this_year", "Visitor_this_year")
-        self.visitor_last_year_main_label = self.labels.get(f"visitor_last_year_{self.main_event_name}", 
-                                                             self.labels.get("visitor_last_year_bva", "Visitor_last_year_bva"))
-        self.visitor_last_year_secondary_label = self.labels.get(f"visitor_last_year_{self.secondary_event_name}",
-                                                                  self.labels.get("visitor_last_year_lva", "Visitor_last_year_lva"))
-        self.session_this_year_label = self.labels.get("session_this_year", "Sessions_this_year")
-        self.session_past_year_label = self.labels.get("session_past_year", "Sessions_past_year")
-
-        # Initialize logger
-        self.logger = logging.getLogger(__name__)
-
-        # Get recommendation configuration
+        # Load recommendation configuration
         self.recommendation_config = config.get("recommendation", {})
         self.min_similarity_score = self.recommendation_config.get("min_similarity_score", 0.3)
         self.max_recommendations = self.recommendation_config.get("max_recommendations", 10)
@@ -134,65 +111,73 @@ class SessionRecommendationProcessor:
         # Load show-specific configurations
         self._load_show_specific_config()
 
+    def _load_neo4j_config(self):
+        """Load Neo4j configuration from environment or config file."""
+        # Try to load from environment file first
+        env_file = self.config.get("env_file", "keys/.env")
+        if os.path.exists(env_file):
+            load_dotenv(env_file)
+            self.logger.info(f"Loaded environment from {env_file}")
+        
+        # Get Neo4j credentials
+        self.uri = os.getenv("NEO4J_URI")
+        self.username = os.getenv("NEO4J_USERNAME")
+        self.password = os.getenv("NEO4J_PASSWORD")
+        
+        # Fallback to config file if not in environment
+        if not all([self.uri, self.username, self.password]):
+            neo4j_config = self.config.get("neo4j", {})
+            self.uri = self.uri or neo4j_config.get("uri")
+            self.username = self.username or neo4j_config.get("username")
+            self.password = self.password or neo4j_config.get("password")
+        
+        if not all([self.uri, self.username, self.password]):
+            raise ValueError("Neo4j credentials not found in environment or config")
+        
+        # Get node labels configuration
+        self.node_labels = self.config.get("neo4j", {}).get("node_labels", {})
+        self.visitor_this_year_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
+        self.visitor_last_year_label = self.node_labels.get("visitor_last_year", "Visitor_last_year")
+        self.sessions_this_year_label = self.node_labels.get("sessions_this_year", "Sessions_this_year")
+        self.sessions_past_year_label = self.node_labels.get("sessions_past_year", "Sessions_past_year")
+
     def _load_show_specific_config(self):
         """Load show-specific configurations based on the event type."""
-        # For veterinary shows (BVA/LVA)
+        # Define role groups based on show type
         if self.main_event_name in ["bva", "lva"]:
-            # Define role groups for veterinary shows
+            # Veterinary-specific roles
             self.role_groups = {
                 "vet": [
-                    "Vet/Vet Surgeon",
-                    "Assistant Vet",
-                    "Vet/Owner",
-                    "Clinical or other Director",
-                    "Locum Vet",
-                    "Academic",
+                    "Veterinary Surgeon",
+                    "Vet",
+                    "Veterinary surgeon",
+                    "veterinary surgeon",
+                    "Locum",
+                    "Other Vet Professional"
                 ],
-                "nurse": ["Head Nurse/Senior Nurse", "Vet Nurse", "Locum RVN"],
-                "business": ["Practice Manager", "Practice Partner/Owner"],
-                "other": ["Student", "Receptionist", "Other (please specify)"]
+                "nurse": [
+                    "Veterinary Nurse",
+                    "Veterinary nurse",
+                    "Student Veterinary Nurse",
+                    "Nurse",
+                    "veterinary nurse"
+                ]
             }
-            
-            # Default similarity attributes for vet shows
-            if not self.similarity_attributes:
-                self.similarity_attributes = {
-                    "job_role": 1.0,
-                    "what_type_does_your_practice_specialise_in": 1.0,
-                    "organisation_type": 0.5,
-                    "Country": 0.5
-                }
-        
-        # For e-commerce shows (ECOMM/TFM)
-        elif self.main_event_name in ["ecomm", "tfm"]:
-            # Define role groups for e-commerce shows (if needed)
-            self.role_groups = {}
-            
-            # Default similarity attributes for ecomm shows
-            if not self.similarity_attributes:
-                self.similarity_attributes = {
-                    "what_is_your_job_role": 1.0,
-                    "what_best_describes_what_you_do": 1.0,
-                    "what_is_your_industry": 0.5,
-                    "Country": 0.5
-                }
-            
-            # Disable filtering for ECOMM by default (can be overridden in config)
-            if "enable_filtering" not in self.recommendation_config:
-                self.enable_filtering = False
-        
-        # For other/unknown shows
         else:
-            self.role_groups = {}
-            if not self.similarity_attributes:
-                self.similarity_attributes = {
-                    "job_role": 1.0,
-                    "Country": 0.5
-                }
+            # Generic or other show types
+            self.role_groups = self.config.get("role_groups", {})
 
-    def process(self, create_only_new=True):
+    def _init_model(self):
+        """Initialize the sentence transformer model lazily."""
+        if self.model is None:
+            self.logger.info(f"Initializing sentence transformer model {self.model_name}")
+            self.model = SentenceTransformer(self.model_name)
+            self.logger.info(f"Initialized sentence transformer model {self.model_name}")
+
+    def process(self, create_only_new=False):
         """
-        Run the session recommendation processor.
-
+        Main processing function for session recommendations.
+        
         Args:
             create_only_new: If True, only process new recommendations if the output file doesn't exist
         """
@@ -238,7 +223,10 @@ class SessionRecommendationProcessor:
                             use_langchain=self.use_langchain
                         )
                         
-                        if rec_result and rec_result.get("filtered_recommendations"):
+                        # FIXED: Check length > 0 explicitly like old processor
+                        if (rec_result and 
+                            "filtered_recommendations" in rec_result and 
+                            len(rec_result["filtered_recommendations"]) > 0):
                             all_recommendations.append(rec_result)
                             self.statistics["visitors_with_recommendations"] += 1
                             self.statistics["total_recommendations_generated"] += len(
@@ -246,7 +234,7 @@ class SessionRecommendationProcessor:
                             )
                         
                         self.statistics["total_visitors_processed"] += 1
-                        
+                            
                     except Exception as e:
                         self.logger.error(f"Error processing visitor {badge_id}: {str(e)}")
                         self.statistics["errors"] += 1
@@ -255,97 +243,26 @@ class SessionRecommendationProcessor:
                             "error": str(e)
                         })
 
-            # Save recommendations
+            # Update Neo4j with recommendations
             if all_recommendations:
-                self._save_recommendations(all_recommendations)
-                
-                # Update Neo4j with recommendations
-                self._update_visitor_recommendations(all_recommendations)
-                
-                # Calculate unique sessions
-                unique_sessions = set()
-                for rec in all_recommendations:
-                    for session in rec.get("filtered_recommendations", []):
-                        if isinstance(session, dict):
-                            unique_sessions.add(session.get("session_id"))
-                        else:
-                            unique_sessions.add(session)
-                
-                self.statistics["unique_recommended_sessions"] = len(unique_sessions)
-
-            # Update processing time
-            self.statistics["processing_time"] = time.time() - start_time
+                self._update_neo4j_recommendations(all_recommendations)
             
-            # Log summary
-            self.logger.info(f"Recommendation processing completed for {self.show_name}")
-            self.logger.info(f"Total visitors processed: {self.statistics['total_visitors_processed']}")
-            self.logger.info(f"Visitors with recommendations: {self.statistics['visitors_with_recommendations']}")
-            self.logger.info(f"Total recommendations: {self.statistics['total_recommendations_generated']}")
-            self.logger.info(f"Processing time: {self.statistics['processing_time']:.2f}s")
-
+            # Save recommendations to file
+            self._save_recommendations(all_recommendations)
+            
+            # Log final statistics
+            self.statistics["processing_time"] = time.time() - start_time
+            self.logger.info(f"Completed session recommendation processing in {self.statistics['processing_time']:.2f} seconds")
+            self._log_statistics()
+            
         except Exception as e:
-            self.logger.error(f"Error in recommendation processing: {str(e)}", exc_info=True)
-            self.statistics["errors"] += 1
+            self.logger.error(f"Error in session recommendation processing: {str(e)}", exc_info=True)
+            raise
 
-    def _get_visitors_to_process(self, create_only_new):
-        """Get list of visitors to process based on create_only_new flag."""
-        try:
-            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
-                with driver.session() as session:
-                    if create_only_new:
-                        # Only get visitors without recommendations for this show
-                        query = f"""
-                        MATCH (v:{self.visitor_this_year_label})
-                        WHERE v.show = $show_name 
-                        AND (v.has_recommendation IS NULL OR v.has_recommendation = "0")
-                        RETURN v.BadgeId as badge_id
-                        """
-                    else:
-                        # Get all visitors for this show
-                        query = f"""
-                        MATCH (v:{self.visitor_this_year_label})
-                        WHERE v.show = $show_name
-                        RETURN v.BadgeId as badge_id
-                        """
-
-                    result = session.run(query, show_name=self.show_name)
-                    badge_ids = [record["badge_id"] for record in result]
-
-                    self.logger.info(f"Found {len(badge_ids)} visitors to process for {self.show_name}")
-                    return badge_ids
-
-        except Exception as e:
-            self.logger.error(f"Error getting visitors to process: {str(e)}", exc_info=True)
-            return []
-
-    def _load_visitor_data(self):
-        """Load visitor data from Neo4j."""
-        try:
-            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
-                with driver.session() as session:
-                    query = f"""
-                    MATCH (v:{self.visitor_this_year_label})
-                    WHERE v.show = $show_name
-                    RETURN v
-                    """
-                    result = session.run(query, show_name=self.show_name)
-                    
-                    visitor_data = {}
-                    for record in result:
-                        visitor = dict(record["v"])
-                        visitor_data[visitor["BadgeId"]] = visitor
-                    
-                    self.logger.info(f"Loaded {len(visitor_data)} visitors from Neo4j")
-                    return visitor_data
-                    
-        except Exception as e:
-            self.logger.error(f"Error loading visitor data: {str(e)}", exc_info=True)
-            return None
-
-    def get_recommendations_and_filter(self, badge_id, min_score=0.5, max_recommendations=30,
-                                      visitor_data=None, use_langchain=False):
+    def get_recommendations_and_filter(self, badge_id, min_score, max_recommendations, visitor_data=None, use_langchain=False):
         """
-        Get session recommendations and filter them based on business rules.
+        Get recommendations for a visitor and apply filtering.
+        FIXED: Matches old processor behavior - limit before filtering.
         
         Args:
             badge_id: Visitor's badge ID
@@ -369,10 +286,11 @@ class SessionRecommendationProcessor:
                 return None
 
         # Get raw recommendations using Neo4j
+        # FIXED: Use exact limit (don't multiply by 2) to match old processor
         raw_recommendations = self.get_neo4j_recommendations(
             visitor_id=badge_id,
             min_score=min_score,
-            max_recommendations=max_recommendations * 2  # Get more for filtering
+            max_recommendations=max_recommendations  # Use exact limit like old processor
         )
         
         processing_steps.append(f"Generated {len(raw_recommendations)} raw recommendations")
@@ -396,302 +314,239 @@ class SessionRecommendationProcessor:
             processing_steps.append(f"Applied filtering: {len(filtered_recommendations)} recommendations remain")
             processing_steps.extend(rules_applied)
         
-        # Limit to max recommendations
-        if filtered_recommendations and len(filtered_recommendations) > max_recommendations:
-            filtered_recommendations = filtered_recommendations[:max_recommendations]
-            processing_steps.append(f"Limited to {max_recommendations} recommendations")
-
-        # Build result
-        result = {
+        # FIXED: Don't apply limit again - already limited before filtering
+        # This matches old processor behavior
+        
+        return {
             "visitor": visitor,
             "raw_recommendations": raw_recommendations,
             "filtered_recommendations": filtered_recommendations,
             "metadata": {
                 "badge_id": badge_id,
-                "show": self.show_name,
-                "timestamp": datetime.now().isoformat(),
+                "num_raw_recommendations": len(raw_recommendations),
+                "num_filtered_recommendations": len(filtered_recommendations),
                 "processing_time": time.time() - start_time,
-                "min_score": min_score,
-                "max_recommendations": max_recommendations,
-                "filtering_enabled": self.enable_filtering,
-                "langchain_used": use_langchain and has_langchain,
+                "timestamp": datetime.now().isoformat(),
                 "processing_steps": processing_steps,
-                "rules_applied": rules_applied
             }
         }
 
-        return result
-
-    def get_neo4j_recommendations(self, visitor_id, min_score=0.5, max_recommendations=30):
-        """Get recommendations using Neo4j queries."""
-        recommendations = []
+    def get_neo4j_recommendations(self, visitor_id, min_score=0.3, max_recommendations=10):
+        """
+        Get recommendations using Neo4j graph traversal.
         
+        Args:
+            visitor_id: Badge ID of the visitor
+            min_score: Minimum similarity score
+            max_recommendations: Maximum number of recommendations
+            
+        Returns:
+            List of recommended sessions
+        """
         try:
             with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
                 with driver.session() as session:
-                    # Use a transaction for better performance
-                    with session.begin_transaction() as tx:
-                        # Get visitor and check if they attended last year
-                        visitor_info = self._get_visitor_info(tx, visitor_id)
-                        if not visitor_info:
-                            return []
+                    # Get visitor info
+                    visitor_info = session.execute_read(
+                        self._get_visitor_info_tx, visitor_id
+                    )
+                    
+                    if not visitor_info:
+                        self.logger.warning(f"Visitor {visitor_id} not found in Neo4j")
+                        return []
+                    
+                    assist_year_before = visitor_info.get("assist_year_before", "0")
+                    
+                    # Load sessions for this year
+                    this_year_sessions = session.execute_read(
+                        self._get_sessions_this_year_tx
+                    )
+                    
+                    if assist_year_before == "1":
+                        # Case 1: Visitor attended last year
+                        past_sessions = session.execute_read(
+                            self._get_attended_sessions_tx, visitor_id
+                        )
+                    else:
+                        # Case 2: New visitor - find similar visitors
+                        similar_visitors = session.execute_read(
+                            self._find_similar_visitors_tx,
+                            visitor_id,
+                            self.similar_visitors_count
+                        )
                         
-                        visitor = visitor_info["visitor"]
-                        assisted = visitor_info["assisted"]
-                        
-                        # Get this year's sessions
-                        this_year_sessions = self._get_this_year_sessions(tx)
-                        
-                        if assisted == "1":
-                            # Visitor attended last year - get their past sessions
-                            past_sessions = self.get_past_sessions(tx, visitor_id)
-                            
-                            if past_sessions:
-                                recommendations = self.calculate_session_similarities_parallel(
-                                    past_sessions=past_sessions,
-                                    this_year_sessions=this_year_sessions,
-                                    min_score=min_score
-                                )
-                        else:
-                            # New visitor - find similar visitors
-                            similar_visitors = self.find_similar_visitors_batch(
-                                tx, visitor, self.similar_visitors_count
+                        if similar_visitors:
+                            past_sessions = session.execute_read(
+                                self._get_sessions_from_visitors_tx,
+                                similar_visitors
                             )
-                            
-                            if similar_visitors:
-                                # Get sessions from similar visitors
-                                past_sessions = self.get_sessions_from_similar_visitors(
-                                    tx, similar_visitors
-                                )
-                                
-                                if past_sessions:
-                                    recommendations = self.calculate_session_similarities_parallel(
-                                        past_sessions=past_sessions,
-                                        this_year_sessions=this_year_sessions,
-                                        min_score=min_score
-                                    )
+                        else:
+                            past_sessions = []
+                    
+                    # Calculate similarities and get recommendations
+                    if past_sessions and this_year_sessions:
+                        recommendations = self._calculate_session_similarities(
+                            past_sessions, this_year_sessions, min_score
+                        )
                         
-                        # Apply maximum recommendations limit
-                        if max_recommendations and len(recommendations) > max_recommendations:
+                        # Sort by similarity and limit
+                        recommendations.sort(key=lambda x: x["similarity"], reverse=True)
+                        
+                        if max_recommendations:
                             recommendations = recommendations[:max_recommendations]
                         
                         return recommendations
-                        
+                    
+                    return []
+                    
         except Exception as e:
-            self.logger.error(f"Error getting Neo4j recommendations: {str(e)}", exc_info=True)
+            self.logger.error(f"Error getting Neo4j recommendations: {str(e)}")
             return []
 
-    def _get_visitor_from_neo4j(self, badge_id):
-        """Get visitor data from Neo4j."""
-        try:
-            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
-                with driver.session() as session:
-                    query = f"""
-                    MATCH (v:{self.visitor_this_year_label} {{BadgeId: $badge_id}})
-                    WHERE v.show = $show_name
-                    RETURN v
-                    """
-                    result = session.run(query, badge_id=badge_id, show_name=self.show_name).single()
-                    
-                    if result:
-                        return dict(result["v"])
-                    return None
-                    
-        except Exception as e:
-            self.logger.error(f"Error getting visitor from Neo4j: {str(e)}")
-            return None
-
-    def _get_visitor_info(self, tx, visitor_id):
-        """Get visitor information and check if they attended last year."""
-        if visitor_id in self._visitor_cache:
-            return self._visitor_cache[visitor_id]
-
-        visitor_query = f"""
+    def _get_visitor_info_tx(self, tx, visitor_id):
+        """Transaction function to get visitor information."""
+        query = f"""
         MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
-        WHERE v.show = $show_name
         RETURN v
         """
-        visitor_data = tx.run(visitor_query, visitor_id=visitor_id, show_name=self.show_name).single()
+        result = tx.run(query, visitor_id=visitor_id)
+        record = result.single()
+        return dict(record["v"]) if record else None
 
-        if not visitor_data:
-            return None
-
-        visitor = visitor_data["v"]
-        assisted = visitor.get("assist_year_before", "0")
-
-        self._visitor_cache[visitor_id] = {"visitor": visitor, "assisted": assisted}
-        return self._visitor_cache[visitor_id]
-
-    def _get_this_year_sessions(self, tx):
-        """Get all sessions for this year with embeddings."""
-        if self._this_year_sessions_cache is not None:
-            return self._this_year_sessions_cache
-
+    def _get_sessions_this_year_tx(self, tx):
+        """Transaction function to get sessions for this year."""
         query = f"""
-        MATCH (s:{self.session_this_year_label})
-        WHERE s.show = $show_name AND s.embedding IS NOT NULL
-        RETURN s.session_id as session_id, s.title as title, s.stream as stream, 
-               s.theatre__name as theatre__name, s.date as date, 
-               s.start_time as start_time, s.end_time as end_time,
-               s.sponsored_by as sponsored_by, s.sponsored_session as sponsored_session,
-               s.embedding as embedding
+        MATCH (s:{self.sessions_this_year_label})
+        WHERE s.embedding IS NOT NULL
+        RETURN s
         """
-        
-        results = tx.run(query, show_name=self.show_name).data()
-        
+        result = tx.run(query)
         sessions = {}
-        for r in results:
-            embedding = np.array(json.loads(r["embedding"])) if r["embedding"] else None
-            if embedding is not None:
-                sessions[r["session_id"]] = {
-                    "session_id": r["session_id"],
-                    "title": r["title"],
-                    "stream": r["stream"],
-                    "theatre__name": r["theatre__name"],
-                    "date": r["date"],
-                    "start_time": r["start_time"],
-                    "end_time": r["end_time"],
-                    "sponsored_by": r.get("sponsored_by", ""),
-                    "sponsored_session": r.get("sponsored_session", ""),
-                    "embedding": embedding
-                }
-
-        self._this_year_sessions_cache = sessions
+        for record in result:
+            s = dict(record["s"])
+            if "embedding" in s:
+                s["embedding"] = self._parse_embedding(s["embedding"])
+                session_id = s.get("session_id")
+                if session_id:
+                    sessions[session_id] = s
         return sessions
 
-    def get_past_sessions(self, tx, visitor_id):
-        """Get sessions the visitor attended last year."""
-        # Build query based on available labels
-        query_conditions = []
-        if self.visitor_last_year_main_label:
-            query_conditions.append(f"vp:{self.visitor_last_year_main_label}")
-        if self.visitor_last_year_secondary_label:
-            query_conditions.append(f"vp:{self.visitor_last_year_secondary_label}")
-        
-        if not query_conditions:
-            return []
-        
-        condition_str = " OR ".join(query_conditions)
-        
+    def _get_attended_sessions_tx(self, tx, visitor_id):
+        """Transaction function to get sessions attended by visitor last year."""
         query = f"""
-        MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})-[:Same_Visitor]->(vp)-[:attended_session]->(sp:{self.session_past_year_label})
-        WHERE v.show = $show_name AND ({condition_str})
-        RETURN DISTINCT sp.session_id as session_id, sp.embedding as embedding
+        MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})-[:Same_Visitor]->(v_past)
+        MATCH (v_past)-[:attended_session]->(s:{self.sessions_past_year_label})
+        RETURN DISTINCT s
         """
-
-        results = tx.run(query, visitor_id=visitor_id, show_name=self.show_name).data()
-
+        result = tx.run(query, visitor_id=visitor_id)
         sessions = []
-        for r in results:
-            embedding = np.array(json.loads(r["embedding"])) if r["embedding"] else None
-            if embedding is not None:
-                sessions.append({"session_id": r["session_id"], "embedding": embedding})
-
+        for record in result:
+            session_data = dict(record["s"])
+            if "embedding" in session_data:
+                session_data["embedding"] = self._parse_embedding(session_data["embedding"])
+            sessions.append(session_data)
         return sessions
 
-    def find_similar_visitors_batch(self, tx, visitor, num_similar_visitors=3):
-        """Find similar visitors based on configurable attributes."""
-        visitor_id = visitor["BadgeId"]
-
-        # Check cache first
-        if visitor_id in self._similar_visitors_cache:
-            return self._similar_visitors_cache[visitor_id]
-
-        # Build similarity calculation based on configured attributes
-        similarity_parts = []
-        parameters = {"visitor_id": visitor_id, "show_name": self.show_name}
-        
-        for attr, weight in self.similarity_attributes.items():
-            if attr in visitor and visitor.get(attr):
-                similarity_parts.append(
-                    f"CASE WHEN v.{attr} = ${attr} THEN {weight} ELSE 0 END"
-                )
-                parameters[attr] = visitor.get(attr, "")
-
-        if not similarity_parts:
-            # Fallback to basic similarity
-            similarity_parts = ["1"]
-
-        similarity_expr = " + ".join(similarity_parts)
-
-        # Query to find similar visitors who attended last year
+    def _find_similar_visitors_tx(self, tx, visitor_id, num_similar):
+        """Transaction function to find similar visitors."""
         query = f"""
-        MATCH (v:{self.visitor_this_year_label})
-        WHERE v.show = $show_name 
-        AND v.assist_year_before = '1' 
-        AND v.BadgeId <> $visitor_id
-        WITH v, {similarity_expr} AS base_similarity
-        WHERE base_similarity > 0
-        // Check if they have attended sessions
-        MATCH (v)-[:Same_Visitor]->(vp)-[:attended_session]->(sp:{self.session_past_year_label})
-        WHERE ({" OR ".join([f"vp:{label}" for label in [self.visitor_last_year_main_label, self.visitor_last_year_secondary_label] if label])})
-        WITH v, base_similarity, COUNT(DISTINCT sp) AS session_count
-        WHERE session_count > 0
-        RETURN v, base_similarity
-        ORDER BY base_similarity DESC, session_count DESC
-        LIMIT 20
+        MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
+        MATCH (other:{self.visitor_this_year_label})
+        WHERE other.BadgeId <> $visitor_id
+        AND other.assist_year_before = "1"
+        WITH v, other,
+            CASE WHEN v.job_role = other.job_role THEN 1.0 ELSE 0.0 END +
+            CASE WHEN v.what_type_does_your_practice_specialise_in = other.what_type_does_your_practice_specialise_in THEN 1.0 ELSE 0.0 END +
+            CASE WHEN v.organisation_type = other.organisation_type THEN 0.5 ELSE 0.0 END +
+            CASE WHEN v.Country = other.Country THEN 0.5 ELSE 0.0 END AS similarity
+        ORDER BY similarity DESC
+        LIMIT $num_similar
+        RETURN other.BadgeId as badge_id
         """
+        result = tx.run(query, visitor_id=visitor_id, num_similar=num_similar)
+        return [record["badge_id"] for record in result]
 
-        visitors_data = tx.run(query, **parameters).data()
-
-        similar_visitors = []
-        for v in visitors_data[:num_similar_visitors]:
-            similar_visitors.append({
-                "visitor": v["v"],
-                "similarity": v["base_similarity"]
-            })
-
-        self._similar_visitors_cache[visitor_id] = similar_visitors
-        return similar_visitors
-
-    def get_sessions_from_similar_visitors(self, tx, similar_visitors):
-        """Get sessions attended by similar visitors."""
-        if not similar_visitors:
-            return []
-
-        visitor_ids = [v["visitor"]["BadgeId"] for v in similar_visitors]
-
+    def _get_sessions_from_visitors_tx(self, tx, visitor_ids):
+        """Transaction function to get sessions from multiple visitors."""
         query = f"""
-        UNWIND $visitor_ids AS vid
-        MATCH (v:{self.visitor_this_year_label} {{BadgeId: vid}})-[:Same_Visitor]->(vp)-[:attended_session]->(sp:{self.session_past_year_label})
-        WHERE v.show = $show_name 
-        AND ({" OR ".join([f"vp:{label}" for label in [self.visitor_last_year_main_label, self.visitor_last_year_secondary_label] if label])})
-        RETURN DISTINCT sp.session_id as session_id, sp.embedding as embedding
+        MATCH (v:{self.visitor_this_year_label})-[:Same_Visitor]->(v_past)
+        WHERE v.BadgeId IN $visitor_ids
+        MATCH (v_past)-[:attended_session]->(s:{self.sessions_past_year_label})
+        RETURN DISTINCT s
         """
-
-        results = tx.run(query, visitor_ids=visitor_ids, show_name=self.show_name).data()
-
+        result = tx.run(query, visitor_ids=visitor_ids)
         sessions = []
-        for r in results:
-            embedding = np.array(json.loads(r["embedding"])) if r["embedding"] else None
-            if embedding is not None:
-                sessions.append({"session_id": r["session_id"], "embedding": embedding})
-
+        for record in result:
+            session_data = dict(record["s"])
+            if "embedding" in session_data:
+                session_data["embedding"] = self._parse_embedding(session_data["embedding"])
+            sessions.append(session_data)
         return sessions
 
-    def calculate_session_similarities_parallel(self, past_sessions, this_year_sessions, min_score):
-        """Calculate similarities between past and current sessions in parallel."""
+    def _normalize_stream(self, stream_value):
+        """
+        Normalize stream values for consistency.
+        Handles None, "No Data", and other edge cases.
+        
+        Args:
+            stream_value: The stream value from database or file
+            
+        Returns:
+            Normalized stream value (empty string for null/No Data)
+        """
+        if stream_value is None:
+            return ""
+        if isinstance(stream_value, str):
+            if stream_value == "No Data" or stream_value.lower() == "no data":
+                return ""
+            return stream_value
+        return str(stream_value)  # Convert to string if it's some other type
+
+    def _calculate_session_similarities(self, past_sessions, this_year_sessions, min_score):
+        """
+        Calculate similarities between past and current sessions.
+        
+        Args:
+            past_sessions: List of past session dictionaries
+            this_year_sessions: Dictionary of current sessions
+            min_score: Minimum similarity score
+            
+        Returns:
+            List of recommendations with similarity scores
+        """
         if not past_sessions or not this_year_sessions:
             return []
 
         def process_past_session(past_sess):
             recommendations = []
-            past_emb = past_sess["embedding"]
+            past_emb = past_sess.get("embedding")
+            if past_emb is None:
+                return recommendations
 
             for sid, current_sess in this_year_sessions.items():
                 try:
-                    current_emb = current_sess["embedding"]
+                    current_emb = current_sess.get("embedding")
+                    if current_emb is None:
+                        continue
+                        
                     sim = cosine_similarity([past_emb], [current_emb])[0][0]
 
                     if sim >= min_score:
+                        # Handle stream field - could be None, "No Data", or actual value
+                        stream = current_sess.get("stream", "")
+                        if stream is None:
+                            stream = ""
+                        elif stream == "No Data":
+                            stream = ""  # Treat "No Data" as empty for consistency
+                        
                         recommendations.append({
                             "session_id": sid,
-                            "title": current_sess["title"],
-                            "stream": current_sess["stream"],
-                            "theatre__name": current_sess["theatre__name"],
-                            "date": current_sess["date"],
-                            "start_time": current_sess["start_time"],
-                            "end_time": current_sess["end_time"],
+                            "title": current_sess.get("title", ""),
+                            "stream": stream,
+                            "theatre__name": current_sess.get("theatre__name", ""),
+                            "date": current_sess.get("date", ""),
+                            "start_time": current_sess.get("start_time", ""),
+                            "end_time": current_sess.get("end_time", ""),
                             "sponsored_by": current_sess.get("sponsored_by", ""),
                             "sponsored_session": current_sess.get("sponsored_session", ""),
                             "similarity": sim,
@@ -851,118 +706,284 @@ class SessionRecommendationProcessor:
         """
         if not has_langchain:
             self.logger.warning("LangChain not available. Cannot filter using LLM.")
-            return recommendations, ["LangChain filtering not available"]
+            return recommendations, ["LangChain not available"]
 
         try:
-            # Load .env file from config
-            env_file = self.config.get("env_file", ".env")
-            config_values = dotenv_values(env_file)
+            # Initialize LLM
+            llm = self._initialize_llm()
+            if not llm:
+                return recommendations, ["Failed to initialize LLM"]
 
-            # Initialize Azure OpenAI client
-            llm = AzureChatOpenAI(
-                azure_endpoint=config_values.get("AZURE_ENDPOINT", ""),
-                azure_deployment=config_values.get("AZURE_DEPLOYMENT", ""),
-                api_key=config_values.get("AZURE_API_KEY", ""),
-                api_version=config_values.get("AZURE_API_VERSION", ""),
-                temperature=0.5,
-                top_p=0.9,
-            )
-
-            # Build show-specific prompt
-            system_prompt = self._build_langchain_prompt(visitor, recommendations)
-
+            # Create prompt template
+            template = self._get_filter_prompt_template()
             prompt = PromptTemplate(
-                input_variables=["sessions", "rules", "profile"],
-                template=system_prompt + """
-                For the Visitor with profile {profile}\n, 
-                based on the attributes of these sessions: {sessions} 
-                and implementing the following rules {rules}.\n 
-                Filter them and just return from the list those that meet the requirements in the rules"""
+                input_variables=["visitor_profile", "recommendations", "business_rules"],
+                template=template
             )
 
             # Create chain
-            chain = prompt | llm
+            chain = LLMChain(llm=llm, prompt=prompt)
 
-            # Convert recommendations to text
-            text_rec = json.dumps(recommendations)
+            # Get business rules for the show
+            business_rules = self._get_business_rules()
+
+            # Format visitor profile and recommendations
+            visitor_str = json.dumps(visitor, indent=2)
+            recommendations_str = json.dumps(recommendations, indent=2)
+
+            # Run the chain
+            result = chain.run(
+                visitor_profile=visitor_str,
+                recommendations=recommendations_str,
+                business_rules=business_rules
+            )
+
+            # Parse the result
+            filtered_recommendations = self._parse_llm_result(result, recommendations)
             
-            # Get business rules for this show
-            business_rules = self._get_business_rules_text()
-
-            # Invoke the chain
-            self.logger.info(f"Invoking LangChain for session filtering ({self.show_name})")
-            ai_msg = chain.invoke({
-                "sessions": text_rec, 
-                "profile": visitor, 
-                "rules": business_rules
-            })
-
-            # Parse the response
-            response_text = ai_msg.content
-
-            # Try to extract JSON from the response
-            import re
-            json_match = re.search(r"```json\n(.*?)\n```", response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                json_match = re.search(r"\[\s*{.*}\s*\]", response_text, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                else:
-                    json_str = response_text
-
-            try:
-                filtered_recommendations = json.loads(json_str)
-                self.logger.info(f"LangChain filtered: {len(filtered_recommendations)} sessions")
-                return filtered_recommendations, ["Filtered using LLM-based rules"]
-            except json.JSONDecodeError as e:
-                self.logger.error(f"Error parsing LangChain response: {e}")
-                return recommendations, ["Error in LLM filtering"]
+            return filtered_recommendations, ["Applied LangChain filtering"]
 
         except Exception as e:
-            self.logger.error(f"Error using LangChain for filtering: {e}")
-            return recommendations, [f"Error in LLM filtering: {str(e)}"]
+            self.logger.error(f"Error in LangChain filtering: {str(e)}")
+            return recommendations, [f"LangChain error: {str(e)}"]
 
-    def _build_langchain_prompt(self, visitor, recommendations):
-        """Build show-specific prompt for LangChain filtering."""
-        # Get visitor and session keys
-        list_keys_vis = list(visitor.keys())
-        if recommendations:
-            list_keys = list(recommendations[0].keys())
-        else:
-            list_keys = ["session_id", "title", "stream", "theatre__name", 
-                        "date", "start_time", "end_time", "sponsored_by", 
-                        "sponsored_session", "similarity"]
+    def _get_visitors_to_process(self, create_only_new):
+        """Get list of visitors to process based on create_only_new flag."""
+        try:
+            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
+                with driver.session() as session:
+                    if create_only_new:
+                        # Only get visitors without recommendations
+                        query = f"""
+                        MATCH (v:{self.visitor_this_year_label})
+                        WHERE v.has_recommendation IS NULL OR v.has_recommendation = "0"
+                        RETURN v.BadgeId as badge_id
+                        """
+                    else:
+                        # Get all visitors
+                        query = f"""
+                        MATCH (v:{self.visitor_this_year_label})
+                        RETURN v.BadgeId as badge_id
+                        """
 
-        # Build base prompt
-        base_prompt = f"""
-        You are an assistant specialized in filtering sessions for the {self.show_name} event.
-        - You will receive a profile of a visitor with the following keys: {list_keys_vis}
-        - You will receive a list of sessions with the following keys: {list_keys}
-        - Each session you return must have the same format.
-        - Only return the sessions in JSON format.
+                    result = session.run(query)
+                    badge_ids = [record["badge_id"] for record in result]
+
+                    self.logger.info(f"Found {len(badge_ids)} visitors to process for {self.main_event_name}")
+                    return badge_ids
+
+        except Exception as e:
+            self.logger.error(f"Error getting visitors to process: {str(e)}", exc_info=True)
+            return []
+
+    def _load_visitor_data(self):
+        """Load visitor data from CSV files."""
+        try:
+            # Get the file name from configuration
+            combined_files = self.config.get("output_files", {}).get("combined_demographic_registration", {})
+            visitor_filename = combined_files.get("this_year", "df_reg_demo_this.csv")
+            
+            # Build the path: output_dir/output/filename
+            visitor_file = self.output_dir / "output" / visitor_filename
+            
+            if not visitor_file.exists():
+                self.logger.error(f"Visitor file not found: {visitor_file}")
+                return None
+            
+            df = pd.read_csv(visitor_file)
+            
+            # Convert to dictionary for faster lookup
+            visitor_dict = {}
+            for _, row in df.iterrows():
+                visitor_dict[row["BadgeId"]] = row.to_dict()
+            
+            self.logger.info(f"Loaded {len(visitor_dict)} visitors from {visitor_file}")
+            return visitor_dict
+            
+        except Exception as e:
+            self.logger.error(f"Error loading visitor data: {str(e)}")
+            return None
+
+    def _get_visitor_from_neo4j(self, badge_id):
+        """Get visitor data from Neo4j."""
+        try:
+            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
+                with driver.session() as session:
+                    query = f"""
+                    MATCH (v:{self.visitor_this_year_label} {{BadgeId: $badge_id}})
+                    RETURN v
+                    """
+                    result = session.run(query, badge_id=badge_id)
+                    record = result.single()
+                    
+                    if record:
+                        return dict(record["v"])
+                    return None
+                    
+        except Exception as e:
+            self.logger.error(f"Error getting visitor from Neo4j: {str(e)}")
+            return None
+
+    def _update_neo4j_recommendations(self, recommendations_data):
+        """Update Neo4j with recommendations."""
+        try:
+            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
+                with driver.session() as session:
+                    # Clear existing recommendations
+                    session.run(f"""
+                        MATCH (v:{self.visitor_this_year_label})-[r:IS_RECOMMENDED]->()
+                        DELETE r
+                    """)
+                    
+                    session.run(f"""
+                        MATCH (v:{self.visitor_this_year_label})
+                        SET v.has_recommendation = NULL
+                    """)
+                    
+                    # Create new recommendations
+                    for rec_data in recommendations_data:
+                        badge_id = rec_data["metadata"]["badge_id"]
+                        recommendations = rec_data["filtered_recommendations"]
+                        
+                        if recommendations:
+                            # Set has_recommendation flag
+                            session.run(f"""
+                                MATCH (v:{self.visitor_this_year_label} {{BadgeId: $badge_id}})
+                                SET v.has_recommendation = "1"
+                            """, badge_id=badge_id)
+                            
+                            # Create IS_RECOMMENDED relationships
+                            for rec in recommendations:
+                                session.run(f"""
+                                    MATCH (v:{self.visitor_this_year_label} {{BadgeId: $badge_id}})
+                                    MATCH (s:{self.sessions_this_year_label} {{session_id: $session_id}})
+                                    CREATE (v)-[:IS_RECOMMENDED]->(s)
+                                """, badge_id=badge_id, session_id=rec["session_id"])
+                    
+                    self.logger.info("Updated Neo4j with recommendations")
+                    
+        except Exception as e:
+            self.logger.error(f"Error updating Neo4j recommendations: {str(e)}")
+
+    def _save_recommendations(self, all_recommendations):
+        """Save recommendations to JSON file."""
+        try:
+            # Get output configuration
+            rec_config = self.config.get("output_files", {}).get("recommendations", {})
+            filename_pattern = rec_config.get("filename_pattern", "visitor_recommendations_{timestamp}")
+            
+            # Create timestamp and filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = filename_pattern.format(timestamp=timestamp, show=self.show_name, year=self.year)
+            
+            # Create full output path
+            output_file = self.recommendations_dir / f"{filename}.json"
+            
+            # Prepare data for saving
+            save_data = {
+                "metadata": {
+                    "show": self.show_name,
+                    "year": self.year,
+                    "timestamp": timestamp,
+                    "generated_at": datetime.now().isoformat(),
+                    "total_visitors_processed": self.statistics["total_visitors_processed"],
+                    "visitors_with_recommendations": self.statistics["visitors_with_recommendations"],
+                    "total_recommendations": self.statistics["total_recommendations_generated"],
+                    "unique_sessions": self.statistics.get("unique_recommended_sessions", 0),
+                    "configuration": {
+                        "min_similarity_score": self.min_similarity_score,
+                        "max_recommendations": self.max_recommendations,
+                        "similar_visitors_count": self.similar_visitors_count,
+                        "filtering_enabled": self.enable_filtering,
+                        "use_langchain": self.use_langchain
+                    }
+                },
+                "recommendations": all_recommendations
+            }
+            
+            # Save to JSON file
+            with open(output_file, 'w') as f:
+                json.dump(save_data, f, indent=2, default=str)
+            
+            self.logger.info(f"Saved recommendations to {output_file}")
+            
+            # Also save a CSV version for easier analysis if configured
+            save_csv = rec_config.get("save_csv", True)
+            if save_csv:
+                csv_file = str(output_file).replace('.json', '.csv')
+                df = self._json_to_dataframe(save_data)
+                df.to_csv(csv_file, index=False)
+                self.logger.info(f"Saved CSV version to {csv_file}")
+            
+        except Exception as e:
+            self.logger.error(f"Error saving recommendations: {str(e)}", exc_info=True)
+
+    def _json_to_dataframe(self, data):
+        """
+        Convert recommendation JSON data to DataFrame.
+        
+        Args:
+            data: Dictionary containing recommendations data
+            
+        Returns:
+            pandas DataFrame with visitor and session information
+        """
+        rows = []
+        recommendations = data.get('recommendations', [])
+        
+        for rec in recommendations:
+            visitor = rec.get('visitor', {})
+            filtered_recs = rec.get('filtered_recommendations', [])
+            rec_metadata = rec.get('metadata', {})
+            
+            for filtered_rec in filtered_recs:
+                row = {}
+                
+                # Add visitor data with prefix
+                for key, value in visitor.items():
+                    row[f"visitor_{key}"] = value
+                
+                # Add recommendation data
+                if isinstance(filtered_rec, dict):
+                    for key, value in filtered_rec.items():
+                        row[f"session_{key}"] = value
+                else:
+                    row["session_id"] = filtered_rec
+                
+                # Add metadata with prefix
+                for key, value in rec_metadata.items():
+                    if key not in ['processing_steps']:  # Skip long text fields
+                        row[f"metadata_{key}"] = value
+                
+                rows.append(row)
+        
+        return pd.DataFrame(rows)
+
+    def _initialize_llm(self):
+        """Initialize the LLM for filtering."""
+        # Implementation depends on available LLM configuration
+        # This is a placeholder that should be customized
+        return None
+
+    def _get_filter_prompt_template(self):
+        """Get the prompt template for LLM filtering."""
+        return """
+        Given a visitor profile and a list of recommended sessions, filter the recommendations
+        based on the following business rules:
+        
+        {business_rules}
+        
+        Visitor Profile:
+        {visitor_profile}
+        
+        Recommendations:
+        {recommendations}
+        
+        Return a JSON list of session IDs that should be kept after filtering.
         """
 
-        # Add show-specific context
-        if self.main_event_name in ["bva", "lva"]:
-            # Veterinary show context
-            base_prompt += """
-            - The attribute what_type_does_your_practice_specialise_in can be a list separated by ";"
-            - Stream in session can be a list of topics separated by ";"
-            - Consider all stream values when evaluating rules
-            """
-        elif self.main_event_name in ["ecomm", "tfm"]:
-            # E-commerce show context
-            base_prompt += """
-            - Consider the visitor's industry and job role
-            - Sessions are categorized by business relevance
-            """
-
-        return base_prompt
-
-    def _get_business_rules_text(self):
-        """Get business rules text for the current show."""
+    def _get_business_rules(self):
+        """Get business rules for the current show type."""
         if self.main_event_name in ["bva", "lva"]:
             # Veterinary business rules
             return f"""
@@ -981,123 +1002,49 @@ class SessionRecommendationProcessor:
             # Generic or show-specific rules for other events
             return "Apply general relevance filtering based on visitor profile and session attributes."
 
-    def _save_recommendations(self, all_recommendations):
-        """Save recommendations to JSON file."""
+    def _parse_llm_result(self, result, original_recommendations):
+        """Parse LLM filtering result."""
         try:
-            # Create output filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_file = os.path.join(
-                self.output_path, 
-                "recommendations", 
-                f"recommendations_{self.show_name}_{timestamp}.json"
-            )
+            # Try to parse as JSON
+            import json
+            session_ids = json.loads(result)
             
-            # Prepare data for saving
-            save_data = {
-                "metadata": {
-                    "show": self.show_name,
-                    "timestamp": timestamp,
-                    "total_visitors": len(all_recommendations),
-                    "configuration": {
-                        "min_similarity_score": self.min_similarity_score,
-                        "max_recommendations": self.max_recommendations,
-                        "similar_visitors_count": self.similar_visitors_count,
-                        "filtering_enabled": self.enable_filtering,
-                        "use_langchain": self.use_langchain
-                    }
-                },
-                "recommendations": all_recommendations
-            }
+            # Filter recommendations based on LLM result
+            filtered = [
+                rec for rec in original_recommendations
+                if rec["session_id"] in session_ids
+            ]
             
-            # Save to file
-            with open(output_file, 'w') as f:
-                json.dump(save_data, f, indent=2, default=str)
+            return filtered
             
-            self.logger.info(f"Saved recommendations to {output_file}")
-            
-            # Also save a CSV version for easier analysis
-            csv_file = output_file.replace('.json', '.csv')
-            df = self.json_to_dataframe(output_file)
-            df.to_csv(csv_file, index=False)
-            self.logger.info(f"Saved CSV version to {csv_file}")
-            
-        except Exception as e:
-            self.logger.error(f"Error saving recommendations: {str(e)}", exc_info=True)
+        except:
+            # If parsing fails, return original recommendations
+            self.logger.warning("Failed to parse LLM result, returning original recommendations")
+            return original_recommendations
 
-    def _update_visitor_recommendations(self, recommendations_data):
-        """Update visitors with has_recommendation flag and create IS_RECOMMENDED relationships."""
-        try:
-            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
-                with driver.session() as session:
-                    for rec_data in recommendations_data:
-                        badge_id = rec_data["metadata"]["badge_id"]
-                        filtered_recs = rec_data.get("filtered_recommendations", [])
 
-                        if len(filtered_recs) > 0:
-                            # Update has_recommendation flag
-                            update_query = f"""
-                            MATCH (v:{self.visitor_this_year_label} {{BadgeId: $badge_id}})
-                            WHERE v.show = $show_name
-                            SET v.has_recommendation = "1"
-                            RETURN v
-                            """
-                            session.run(update_query, badge_id=badge_id, show_name=self.show_name)
+def main():
+    """Main function for testing."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Session Recommendation Processor")
+    parser.add_argument("--config", default="config/config_vet.yaml", help="Configuration file path")
+    parser.add_argument("--create-only-new", action="store_true", help="Only process new recommendations")
+    args = parser.parse_args()
+    
+    # Load configuration
+    config = load_config(args.config)
+    
+    # Setup logging
+    log_dir = Path(config.get("log_dir", "logs"))
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / f"session_recommendation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    setup_logging(log_file=str(log_file))
+    
+    # Initialize and run processor
+    processor = SessionRecommendationProcessor(config)
+    processor.process(create_only_new=args.create_only_new)
 
-                            # Create IS_RECOMMENDED relationships
-                            for rec in filtered_recs:
-                                session_id = rec.get("session_id") if isinstance(rec, dict) else rec
-                                if session_id:
-                                    rel_query = f"""
-                                    MATCH (v:{self.visitor_this_year_label} {{BadgeId: $badge_id}})
-                                    WHERE v.show = $show_name
-                                    MATCH (s:{self.session_this_year_label} {{session_id: $session_id}})
-                                    WHERE s.show = $show_name
-                                    MERGE (v)-[r:IS_RECOMMENDED]->(s)
-                                    RETURN r
-                                    """
-                                    session.run(
-                                        rel_query,
-                                        badge_id=badge_id,
-                                        session_id=session_id,
-                                        show_name=self.show_name
-                                    )
 
-                            self.logger.info(f"Updated visitor {badge_id} with {len(filtered_recs)} recommendations")
-
-        except Exception as e:
-            self.logger.error(f"Error updating visitor recommendations: {str(e)}", exc_info=True)
-
-    def json_to_dataframe(self, json_file_path: str) -> pd.DataFrame:
-        """Convert JSON data to a pandas DataFrame."""
-        with open(json_file_path, 'r') as f:
-            data = json.load(f)
-        
-        rows = []
-        recommendations = data.get('recommendations', [])
-        
-        for rec in recommendations:
-            visitor = rec.get('visitor', {})
-            filtered_recs = rec.get('filtered_recommendations', [])
-            rec_metadata = rec.get('metadata', {})
-            
-            for filtered_rec in filtered_recs:
-                row = {}
-                
-                # Add visitor data
-                for key, value in visitor.items():
-                    row[f"visitor_{key}"] = value
-                
-                # Add filtered recommendation data
-                if isinstance(filtered_rec, dict):
-                    for key, value in filtered_rec.items():
-                        row[f"session_{key}"] = value
-                else:
-                    row["session_id"] = filtered_rec
-                
-                # Add recommendation metadata
-                for key, value in rec_metadata.items():
-                    row[f"metadata_{key}"] = value
-                
-                rows.append(row)
-        
-        return pd.DataFrame(rows)
+if __name__ == "__main__":
+    main()

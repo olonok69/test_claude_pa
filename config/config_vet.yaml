@@ -71,6 +71,10 @@ output_files:
     this_year: "df_reg_demo_this.csv"
     last_year_main: "df_reg_demo_last_bva.csv"
     last_year_secondary: "df_reg_demo_last_lva.csv"
+  recommendations:
+    output_directory: "recommendations"  # Subdirectory for recommendations
+    filename_pattern: "visitor_recommendations_{timestamp}"  # Pattern for output files
+    save_csv: true
 
 # Scan processor output files configuration
 scan_output_files:
