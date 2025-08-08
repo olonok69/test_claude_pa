@@ -3,6 +3,8 @@
 
 # Event configuration - CHANGED FOR ECOMM
 event:
+  name: "ecomm"
+  main_event: "ecomm"
   main_event_name: "ecomm"  # CHANGED: "bva" -> "ecomm" (will NOT trigger vet-specific functions)
   secondary_event_name: "tfm"  # CHANGED: "lva" -> "tfm"
   shows_this_year:
@@ -95,10 +97,6 @@ input_files:
   main_event_demographic: "data/ecomm/20250721_demographics_ECE24_ECE25.json"  # CHANGED
   secondary_event_demographic: "data/ecomm/20250722_demographics_TFM24.json"  # CHANGED
   # practices: "data/ecomm/practices_missing.csv"  # CHANGED
-  # main_event_scan: "data/ecomm/20250723_scan_data_ECE25.json"  # CHANGED
-  # secondary_event_scan: "data/ecomm/20250724_scan_data_TFM25.json"  # CHANGED
-  # main_event_sessions: "data/ecomm/20250725_sessions_ECE25.json"  # CHANGED
-  # secondary_event_sessions: "data/ecomm/20250726_sessions_TFM25.json"  # CHANGED
 
 # Scan data configuration - CHANGED FOR ECOMM
 scan_files:
@@ -159,18 +157,24 @@ embeddings:
   batch_size: 100               # Batch size for processing embeddings
   include_stream_descriptions: false  # Whether to include stream descriptions in embeddings
 
-# Session recommendation configuration (SAME AS VET)
+# Session recommendation configuration
+
 recommendation:
-  min_similarity_score: 0.3   # Minimum similarity score (0.0-1.0) for recommendations
-  max_recommendations: 10     # Maximum number of recommendations per visitor
-  similar_visitors_count: 3   # Number of similar visitors to consider for new visitors
-  use_langchain: false        # Whether to use LangChain for filtering (requires LangChain)
-  rules_config:               # Rules configuration for filtering
-    equine_mixed_exclusions: ["exotics", "feline", "exotic animal", "farm", "small animal"]
-    small_animal_exclusions: ["equine", "farm animal", "farm", "large animal"]
-    vet_exclusions: ["nursing"]
-    nurse_streams: ["nursing", "wellbeing", "welfare"]
-    rule_priority: ["practice_type", "role"]
+  min_similarity_score: 0.3       # Minimum similarity score (0.0-1.0) for recommendations
+  max_recommendations: 10         # Maximum number of recommendations per visitor
+  similar_visitors_count: 3       # Number of similar visitors to consider for new visitors
+  use_langchain: false            # Whether to use LangChain for filtering
+  enable_filtering: false         # Disable filtering for ECOMM shows
+  
+  # Similarity attributes for finding similar visitors (ecomm-specific)
+  similarity_attributes:
+    what_is_your_job_role: 1.0           # Weight for job role matching
+    what_best_describes_what_you_do: 1.0 # Weight for what they do
+    what_is_your_industry: 0.5           # Weight for industry
+    Country: 0.5                          # Weight for country
+  
+  # No filtering rules for ECOMM (can be added later if needed)
+  rules_config: {}
 
 # Neo4j configuration (SAME STRUCTURE - different database)
 neo4j:

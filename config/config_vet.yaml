@@ -3,6 +3,8 @@
 
 # Event configuration 
 event:
+  name: "bva"
+  main_event: "bva"
   main_event_name: "bva"  # This will trigger vet-specific functions
   secondary_event_name: "lva"
   shows_this_year:
@@ -92,7 +94,7 @@ pipeline_steps:
   neo4j_job_stream_processing: true
   neo4j_specialization_stream_processing: true
   neo4j_visitor_relationship_processing: true
-  session_embedding_processing: false
+  session_embedding_processing: true
   session_recommendation_processing: false
 
 # Input file paths
@@ -181,6 +183,8 @@ embeddings:
   batch_size: 100               # Batch size for processing embeddings
   include_stream_descriptions: false  # Whether to include stream descriptions in embeddings
 
+# Session recommendation configuration
+
 recommendation:
   min_similarity_score: 0.3       # Minimum similarity score (0.0-1.0) for recommendations
   max_recommendations: 10         # Maximum number of recommendations per visitor
@@ -268,7 +272,7 @@ default_visitor_properties:
   what_type_does_your_practice_specialise_in: "NA"
   organisation_type: "NA"
   JobTitle: "NA"
-  show: "NA"
+  show: "bva"
 
 # Environment file path
 env_file: "keys/.env"
