@@ -418,9 +418,10 @@ class Neo4jSessionProcessor:
                     # Delete all Sessions_this_year nodes and their relationships
                     delete_query = """
                     MATCH (s:Sessions_this_year)
+                    WHERE s.show = $show
                     DETACH DELETE s
                     """
-                    session.run(delete_query)
+                    session.run(delete_query, show=self.show_name)
                     self.logger.info("Deleted all existing Sessions_this_year nodes")
             finally:
                 driver.close()
