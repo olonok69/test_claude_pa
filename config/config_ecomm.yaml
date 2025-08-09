@@ -7,6 +7,7 @@ event:
   main_event: "ecomm"
   main_event_name: "ecomm"  # CHANGED: "bva" -> "ecomm" (will NOT trigger vet-specific functions)
   secondary_event_name: "tfm"  # CHANGED: "lva" -> "tfm"
+  year: 2025
   shows_this_year:
     - "ECE25"  # CHANGED: "BVA2025" -> "ECE25"
   shows_last_year_main:
