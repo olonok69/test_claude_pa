@@ -172,10 +172,12 @@ recommendation:
   
   # Similarity attributes for finding similar visitors (ecomm-specific)
   similarity_attributes:
-    what_is_your_job_role: 1.0           # Weight for job role matching
-    what_best_describes_what_you_do: 1.0 # Weight for what they do
-    what_is_your_industry: 0.5           # Weight for industry
-    Country: 0.5                          # Weight for country
+    what_is_your_job_role: 1.0
+    what_best_describes_what_you_do: 1.0
+    what_is_your_industry: 0.5
+    what_is_the_main__solution_you_are_most_excited_to_discover_at_the_show: 0.5
+    Country: 0.5
+    why_are_you_attending: 0.3
   
   # No filtering rules for ECOMM (can be added later if needed)
   rules_config: {}

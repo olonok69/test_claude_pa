@@ -68,6 +68,8 @@ class SessionRecommendationProcessor:
         
         # Filtering rules configuration (show-specific)
         self.rules_config = self.recommendation_config.get("rules_config", {})
+        # recommendation
+        self.similarity_attributes = config.get('recommendation', {}).get('similarity_attributes', {})
         
         # Node labels from config
         self.visitor_this_year_label = self.neo4j_config.get("node_labels", {}).get(
@@ -230,34 +232,81 @@ class SessionRecommendationProcessor:
 
     def find_similar_visitors_batch(self, tx, visitor, num_similar_visitors=3):
         """
-        Find similar visitors with batch processing.
-        Uses the EXACT SAME hybrid approach as the old processor:
-        1. SQL-based pre-filtering with attribute matching
+        Find similar visitors with batch processing - GENERIC CONFIGURATION-DRIVEN VERSION.
+        
+        This function is fully configuration-driven and works with any show type
+        based on the similarity_attributes defined in the configuration YAML.
+        
+        Uses a hybrid approach:
+        1. SQL-based pre-filtering with attribute matching from config
         2. Text embedding similarity calculation
-        3. Combined scoring: (embedding_sim * 0.7) + (base_similarity * 0.3 / 4)
+        3. Combined scoring: (embedding_sim * 0.7) + (normalized_similarity * 0.3)
+        
+        Required configuration:
+        recommendation:
+        similarity_attributes:
+            attribute_name: weight  # e.g., job_role: 1.0
         """
         visitor_id = visitor["BadgeId"]
 
         # Check cache first
         if visitor_id in self._similar_visitors_cache:
             return self._similar_visitors_cache[visitor_id]
-
-        # Get all visitors with sessions in one query
-        # Note: We always look at ALL visitors who attended last year, not just new ones
+        
+        # Get show name from visitor for filtering
+        show_name = visitor.get('show', '')
+        
+        # Get similarity attributes from config
+        similarity_attributes = getattr(self, 'similarity_attributes', {})
+        if not similarity_attributes and hasattr(self, 'config') and self.config:
+            similarity_attributes = self.config.get('recommendation', {}).get('similarity_attributes', {})
+        
+        if not similarity_attributes:
+            self.logger.warning("No similarity_attributes configured - using default Country only")
+            similarity_attributes = {'Country': 1.0}  # Minimal default
+        
+        # Build dynamic query parameters
+        query_params = {'visitor_id': visitor_id}
+        
+        # Add show filter to avoid cross-contamination between shows
+        show_filter = ""
+        if show_name:
+            show_filter = f" AND v.show = $show_name"
+            query_params['show_name'] = show_name
+        
+        # Build dynamic CASE statements from configured attributes
+        case_statements = []
+        for attr_name, weight in similarity_attributes.items():
+            # Clean parameter name for Neo4j
+            param_name = f"param_{attr_name.replace(' ', '_').replace('.', '_').replace('-', '_')}"
+            query_params[param_name] = visitor.get(attr_name, "")
+            
+            # Build CASE statement with weight (use backticks for attribute names with special chars)
+            case_statements.append(
+                f"CASE WHEN v.`{attr_name}` = ${param_name} THEN {weight} ELSE 0 END"
+            )
+        
+        similarity_calc = " + ".join(case_statements)
+        max_similarity = sum(similarity_attributes.values())
+        
+        # Get labels (with defaults if not configured)
+        visitor_label = getattr(self, 'visitor_this_year_label', 'Visitor_this_year')
+        session_label = getattr(self, 'session_past_year_label', 'Sessions_past_year')
+        visitor_last_bva = getattr(self, 'visitor_last_year_bva_label', 'Visitor_last_year_bva')
+        visitor_last_lva = getattr(self, 'visitor_last_year_lva_label', 'Visitor_last_year_lva')
+        
+        # Main query with dynamic attribute matching and show filtering
         query = f"""
-        MATCH (v:{self.visitor_this_year_label})
-        WHERE v.assist_year_before = '1' AND v.BadgeId <> $visitor_id
+        MATCH (v:{visitor_label})
+        WHERE v.assist_year_before = '1' AND v.BadgeId <> $visitor_id{show_filter}
         // Pre-filter to avoid processing all visitors
         WITH v, 
-             CASE WHEN v.job_role = $job_role THEN 1 ELSE 0 END + 
-             CASE WHEN v.what_type_does_your_practice_specialise_in = $practice_type THEN 1 ELSE 0 END +
-             CASE WHEN v.organisation_type = $org_type THEN 1 ELSE 0 END +
-             CASE WHEN v.Country = $country THEN 1 ELSE 0 END AS base_similarity
+            {similarity_calc} AS base_similarity
         // Only process those with some similarity
         WHERE base_similarity > 0
-        // Check if they have attended sessions (to save processing visitors without sessions)
-        MATCH (v)-[:Same_Visitor]->(vp)-[:attended_session]->(sp:{self.session_past_year_label})
-        WHERE (vp:{self.visitor_last_year_bva_label} OR vp:{self.visitor_last_year_lva_label})
+        // Check if they have attended sessions
+        MATCH (v)-[:Same_Visitor]->(vp)-[:attended_session]->(sp:{session_label})
+        WHERE (vp:{visitor_last_bva} OR vp:{visitor_last_lva})
         WITH v, base_similarity, COUNT(DISTINCT sp) AS session_count
         WHERE session_count > 0
         RETURN v, base_similarity
@@ -265,48 +314,46 @@ class SessionRecommendationProcessor:
         LIMIT 20
         """
 
-        visitors_data = tx.run(
-            query,
-            visitor_id=visitor_id,
-            job_role=visitor.get("job_role", ""),
-            practice_type=visitor.get("what_type_does_your_practice_specialise_in", ""),
-            org_type=visitor.get("organisation_type", ""),
-            country=visitor.get("Country", ""),
-        ).data()
+        visitors_data = tx.run(query, **query_params).data()
 
-        # If we can't find enough similar visitors with the pre-filtering,
-        # try a more general query
+        # If we can't find enough similar visitors, try a more general query
         if len(visitors_data) < num_similar_visitors:
+            fallback_params = {'visitor_id': visitor_id}
+            if show_name:
+                fallback_params['show_name'] = show_name
+            
             query = f"""
-            MATCH (v:{self.visitor_this_year_label})
-            WHERE v.assist_year_before = '1' AND v.BadgeId <> $visitor_id
+            MATCH (v:{visitor_label})
+            WHERE v.assist_year_before = '1' AND v.BadgeId <> $visitor_id{show_filter}
             // Check if they have attended sessions
-            MATCH (v)-[:Same_Visitor]->(vp)-[:attended_session]->(sp:{self.session_past_year_label})
-            WHERE (vp:{self.visitor_last_year_bva_label} OR vp:{self.visitor_last_year_lva_label})
+            MATCH (v)-[:Same_Visitor]->(vp)-[:attended_session]->(sp:{session_label})
+            WHERE (vp:{visitor_last_bva} OR vp:{visitor_last_lva})
             WITH v, COUNT(DISTINCT sp) AS session_count
             WHERE session_count > 0
             RETURN v, 0 AS base_similarity
             ORDER BY session_count DESC
             LIMIT 20
             """
-            visitors_data = tx.run(query, visitor_id=visitor_id).data()
+            visitors_data = tx.run(query, **fallback_params).data()
 
-        # Extract visitor features for comparison (EXACT SAME as old processor)
+        # Extract visitor features for comparison based on configured attributes
         def get_visitor_features(v):
-            attributes = [
-                v.get("what_type_does_your_practice_specialise_in", ""),
-                v.get("job_role", ""),
-                v.get("organisation_type", ""),
-                v.get("JobTitle", ""),
-                v.get("Country", ""),
-            ]
-            return " ".join(
-                [
-                    str(attr)
-                    for attr in attributes
-                    if attr and str(attr).strip() and str(attr) != "NA"
-                ]
-            )
+            attributes = []
+            
+            # Add configured similarity attributes
+            for attr_name in similarity_attributes.keys():
+                value = v.get(attr_name, "")
+                if value and str(value).strip() and str(value) != "NA":
+                    attributes.append(str(value))
+            
+            # Also add JobTitle and Company for additional context if not already included
+            for extra_attr in ["JobTitle", "Company", "Country"]:
+                if extra_attr not in similarity_attributes:
+                    value = v.get(extra_attr, "")
+                    if value and str(value).strip() and str(value) != "NA":
+                        attributes.append(str(value))
+            
+            return " ".join(attributes) if attributes else "default profile"
 
         # Get embedding for our visitor
         visitor_text = get_visitor_features(visitor)
@@ -331,8 +378,12 @@ class SessionRecommendationProcessor:
                 try:
                     compare_embedding = self.model.encode(compare_text)
                     sim = cosine_similarity([visitor_embedding], [compare_embedding])[0][0]
-                    # Combine neural and rule-based similarity (EXACT SAME formula)
-                    combined_sim = (sim * 0.7) + (base_similarity * 0.3 / 4)  # Max base_similarity is 4
+                    
+                    # Combine neural and rule-based similarity
+                    # Normalize base_similarity by max possible value
+                    normalized_base = base_similarity / max_similarity if max_similarity > 0 else 0
+                    combined_sim = (sim * 0.7) + (normalized_base * 0.3)
+                    
                     similarities.append((v_compare["BadgeId"], combined_sim))
                 except Exception as e:
                     self.logger.error(
@@ -346,6 +397,8 @@ class SessionRecommendationProcessor:
 
             # Cache for future use
             self._similar_visitors_cache[visitor_id] = similar_visitors
+            
+            self.logger.debug(f"Found {len(similar_visitors)} similar visitors for {visitor_id}: {similar_visitors}")
             return similar_visitors
 
         except Exception as e:
