@@ -100,7 +100,7 @@ pipeline_steps:
   neo4j_specialization_stream_processing: true
   neo4j_visitor_relationship_processing: true
   session_embedding_processing: true
-  session_recommendation_processing: false
+  session_recommendation_processing: true
 
 # Input file paths
 input_files:
@@ -203,6 +203,31 @@ recommendation:
     what_type_does_your_practice_specialise_in: 1.0      # Weight for practice type
     organisation_type: 1.0                               # Weight for organization type
     Country: 1.0                                          # Weight for country
+
+  role_groups:
+    vet_roles:
+      - "Vet/Vet Surgeon"
+      - "Assistant Vet"
+      - "Vet/Owner"
+      - "Clinical or other Director"
+      - "Locum Vet"
+      - "Academic"
+    nurse_roles:
+      - "Head Nurse/Senior Nurse"
+      - "Vet Nurse"
+      - "Locum RVN"
+    business_roles:
+      - "Practice Manager"
+      - "Practice Partner/Owner"
+    other_roles:
+      - "Student"
+      - "Receptionist"
+      - "Other (please specify)"
+  
+  # NEW: Add field mappings
+  field_mappings:
+    practice_type_field: "what_type_does_your_practice_specialise_in"
+    job_role_field: "job_role"
   
   # Filtering rules configuration (vet-specific)
   rules_config:

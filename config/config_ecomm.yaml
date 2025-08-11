@@ -92,7 +92,7 @@ pipeline_steps:
   neo4j_specialization_stream_processing: true  # ENABLED but will be skipped via config
   neo4j_visitor_relationship_processing: true
   session_embedding_processing: true
-  session_recommendation_processing: false  # Enable session recommendation processing
+  session_recommendation_processing: true  # Enable session recommendation processing
 
 # Input file paths - CHANGED FOR ECOMM
 input_files:
@@ -179,6 +179,14 @@ recommendation:
     Country: 0.5
     why_are_you_attending: 0.3
   
+
+  role_groups: {}
+  
+
+  field_mappings:
+    practice_type_field: "what_best_describes_what_you_do"
+    job_role_field: "what_is_your_job_role"
+
   # No filtering rules for ECOMM (can be added later if needed)
   rules_config: {}
 
