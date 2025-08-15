@@ -614,6 +614,11 @@ class SessionRecommendationProcessor:
         """
         Get the most popular sessions from last year as a fallback.
         
+        This method now:
+        - Filters sessions by show name for multi-show support
+        - Includes attendance from BOTH main (BVA) and secondary (LVA) events
+        - Treats both events as the same audience (which they are)
+        
         Args:
             limit: Maximum number of sessions to return
             
@@ -625,21 +630,47 @@ class SessionRecommendationProcessor:
                 self.uri, auth=(self.username, self.password)
             ) as driver:
                 with driver.session() as session:
+                    # Query that includes both BVA and LVA visitors for the specific show
                     query = f"""
-                    MATCH (v:{self.visitor_last_year_bva_label})-[:attended_session]->(s:{self.session_past_year_label})
-                    WITH s, COUNT(DISTINCT v) as attendance_count
-                    ORDER BY attendance_count DESC
+                    // Get sessions for this specific show
+                    MATCH (s:{self.session_past_year_label})
+                    WHERE s.show = $show_name
+                    
+                    // Count attendance from main event (BVA) visitors
+                    OPTIONAL MATCH (v_main:{self.visitor_last_year_bva_label})-[:attended_session]->(s)
+                    WITH s, COUNT(DISTINCT v_main) as main_event_count
+                    
+                    // Also count attendance from secondary event (LVA) visitors  
+                    OPTIONAL MATCH (v_secondary:{self.visitor_last_year_lva_label})-[:attended_session]->(s)
+                    WITH s, main_event_count, COUNT(DISTINCT v_secondary) as secondary_event_count
+                    
+                    // Combine counts from both events (same audience, different locations/dates)
+                    WITH s, (main_event_count + secondary_event_count) as total_attendance
+                    WHERE total_attendance > 0
+                    
+                    // Order by popularity and return top sessions
+                    ORDER BY total_attendance DESC
                     LIMIT $limit
                     RETURN s
                     """
-                    result = session.run(query, limit=limit)
+                    
+                    result = session.run(
+                        query,
+                        limit=limit,
+                        show_name=self.show_name
+                    )
+                    
                     sessions = [dict(record["s"]) for record in result]
                     
-                    self.logger.info(f"Retrieved {len(sessions)} popular sessions as fallback")
+                    self.logger.info(
+                        f"Retrieved {len(sessions)} popular sessions for show '{self.show_name}' as fallback "
+                        f"(combined attendance from main and secondary events)"
+                    )
+                    
                     return sessions
                     
         except Exception as e:
-            self.logger.error(f"Error getting popular sessions: {str(e)}")
+            self.logger.error(f"Error getting popular sessions for show '{self.show_name}': {str(e)}")
             return []
 
     def generate_recommendations_for_visitor(self, badge_id: str) -> Tuple[List[Dict], Dict]:

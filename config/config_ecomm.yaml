@@ -9,7 +9,9 @@ event:
   secondary_event_name: "tfm"  # CHANGED: "lva" -> "tfm"
   year: 2025
   shows_this_year:
-    - "ECE25"  # CHANGED: "BVA2025" -> "ECE25"
+    - ['ECE25','TFM25'] # CHANGED: "BVA2025" -> "ECE25"
+  shows_this_year_exclude:
+    - ["TFM24"] # CHANGED: "BVA2025" -> "ECE25"
   shows_last_year_main:
     - "ECE24"  # CHANGED: "BVA2024" -> "ECE24"
   shows_last_year_secondary:
@@ -83,20 +85,20 @@ create_only_new: false  # If true, only process new visitors without recommendat
 pipeline_steps:
   # Data processing steps
   registration_processing: true
-  scan_processing: true  
-  session_processing: true
+  scan_processing: false  
+  session_processing: false
   # Neo4j processing steps
-  neo4j_visitor_processing: true
-  neo4j_session_processing: true  # ENABLED: Added Neo4j session processing
-  neo4j_job_stream_processing: true  # ENABLED but will be skipped via config
-  neo4j_specialization_stream_processing: true  # ENABLED but will be skipped via config
-  neo4j_visitor_relationship_processing: true
-  session_embedding_processing: true
-  session_recommendation_processing: true  # Enable session recommendation processing
+  neo4j_visitor_processing: false
+  neo4j_session_processing: false  # ENABLED: Added Neo4j session processing
+  neo4j_job_stream_processing: false  # ENABLED but will be skipped via config
+  neo4j_specialization_stream_processing: false  # ENABLED but will be skipped via config
+  neo4j_visitor_relationship_processing: false
+  session_embedding_processing: false
+  session_recommendation_processing: false  # Enable session recommendation processing
 
 # Input file paths - CHANGED FOR ECOMM
 input_files:
-  main_event_registration: "data/ecomm/20250721_registration_ECE24_ECE25.json"  # CHANGED
+  main_event_registration: "data/ecomm/20250813_registration_ECE_TFM_24_25.json"  # CHANGED
   secondary_event_registration: "data/ecomm/20250722_registration_TFM24.json"  # CHANGED
   main_event_demographic: "data/ecomm/20250721_demographics_ECE24_ECE25.json"  # CHANGED
   secondary_event_demographic: "data/ecomm/20250722_demographics_TFM24.json"  # CHANGED
@@ -284,9 +286,11 @@ shows_this_year:
 questions_to_keep:
   current:
     - "What best describes what you do"
+    - "What best describes your what you do"
     - "What is your industry"
     - "What is your job role"
     - "Why are you attending"
+    - 'What is the main solution you are most excited to discover at the show'
     - "What is the main  solution you are most excited to discover at the show"
   past:
     - "What best describes your specialism"

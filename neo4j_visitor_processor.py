@@ -36,6 +36,17 @@ class Neo4jVisitorProcessor:
         # Get event names
         self.main_event_name = self.event_config.get("main_event_name", "bva")
         self.secondary_event_name = self.event_config.get("secondary_event_name", "lva")
+        # Get Neo4j configuration
+        neo4j_config = config.get("neo4j", {})
+        self.show_name = neo4j_config.get("show_name", "bva")
+        
+        # Keep event config for other purposes but use show_name for node properties
+        self.event_config = config.get("event", {})
+        self.main_event_name = self.event_config.get("main_event_name", self.show_name)
+        self.secondary_event_name = self.event_config.get("secondary_event_name", "lva")
+        
+        # Log the configuration being used
+        self.logger.info(f"Using show_name: {self.show_name} for node properties")
 
         # Load the environment variables to get Neo4j credentials
         load_dotenv(config["env_file"])
@@ -139,7 +150,7 @@ class Neo4jVisitorProcessor:
                             properties[neo4j_prop] = row[csv_col]
                     
                     # Add a 'show' attribute to group all nodes belonging to this show
-                    properties["show"] = self.main_event_name
+                    properties["show"] = self.show_name
 
                     # Check if the unique ID is present
                     if unique_id_field not in properties:

@@ -81,6 +81,7 @@ class RegistrationProcessor:
         self.main_event_name = self.event_config.get("main_event_name", "main")
         self.secondary_event_name = self.event_config.get("secondary_event_name", "secondary")
         self.shows_this_year = self.event_config.get("shows_this_year", [])
+        self.shows_this_year_exclude = self.event_config.get("shows_this_year_exclude", [])
         self.shows_last_year_main = self.event_config.get("shows_last_year_main", [])
         self.shows_last_year_secondary = self.event_config.get("shows_last_year_secondary", [])
 
@@ -356,14 +357,14 @@ class RegistrationProcessor:
 
         # Split registration data by year
         self.df_bva_this_year = self.df_bva[self.df_bva.ShowRef.isin(self.shows_this_year)]
-        self.df_bva_last_year = self.df_bva[~(self.df_bva.ShowRef.isin(self.shows_this_year))]
+        self.df_bva_last_year = self.df_bva[~(self.df_bva.ShowRef.isin(self.shows_this_year+ self.shows_this_year_exclude))]
 
         # Split demographic data by year
         self.df_bva_demo_this_year = self.df_bva_demo[
             self.df_bva_demo.showref.isin(self.shows_this_year)
         ]
         self.df_bva_demo_last_year = self.df_bva_demo[
-            ~(self.df_bva_demo.showref.isin(self.shows_this_year))
+            ~(self.df_bva_demo.showref.isin(self.shows_this_year+ self.shows_this_year_exclude))
         ]
 
         # Process secondary event data (only last year)
