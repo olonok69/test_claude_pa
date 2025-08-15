@@ -85,22 +85,22 @@ create_only_new: false  # If true, only process new visitors without recommendat
 pipeline_steps:
   # Data processing steps
   registration_processing: true
-  scan_processing: false  
-  session_processing: false
+  scan_processing: true  
+  session_processing: true
   # Neo4j processing steps
-  neo4j_visitor_processing: false
-  neo4j_session_processing: false  # ENABLED: Added Neo4j session processing
-  neo4j_job_stream_processing: false  # ENABLED but will be skipped via config
-  neo4j_specialization_stream_processing: false  # ENABLED but will be skipped via config
-  neo4j_visitor_relationship_processing: false
-  session_embedding_processing: false
-  session_recommendation_processing: false  # Enable session recommendation processing
+  neo4j_visitor_processing: true
+  neo4j_session_processing: true  # ENABLED: Added Neo4j session processing
+  neo4j_job_stream_processing: true  # ENABLED but will be skipped via config
+  neo4j_specialization_stream_processing: true  # ENABLED but will be skipped via config
+  neo4j_visitor_relationship_processing: true
+  session_embedding_processing: true
+  session_recommendation_processing: true  # Enable session recommendation processing
 
 # Input file paths - CHANGED FOR ECOMM
 input_files:
   main_event_registration: "data/ecomm/20250813_registration_ECE_TFM_24_25.json"  # CHANGED
   secondary_event_registration: "data/ecomm/20250722_registration_TFM24.json"  # CHANGED
-  main_event_demographic: "data/ecomm/20250721_demographics_ECE24_ECE25.json"  # CHANGED
+  main_event_demographic: "data/ecomm/20250813_demographics_ECE_TFM_24_25.json"  # CHANGED
   secondary_event_demographic: "data/ecomm/20250722_demographics_TFM24.json"  # CHANGED
   # practices: "data/ecomm/practices_missing.csv"  # CHANGED
 
@@ -122,7 +122,7 @@ session_files:
 
 # Stream processing configuration
 stream_processing:
-  use_cached_descriptions: true
+  use_cached_descriptions: false
 
 # Scan output files
 scan_output_files:
@@ -149,6 +149,7 @@ titles_to_remove:
   - "Session title to be confirmed"
   - "session title to be confirm"
   - "session details to follow"
+  - "session tbc"
 
 # ECOMM-specific sponsor mapping (equivalent to map_vets for BVA)
 # ECOMM-specific sponsor abbreviation mappings (renamed from map_sponsors to map_vets for compatibility)
@@ -176,8 +177,10 @@ recommendation:
   similarity_attributes:
     what_is_your_job_role: 1.0
     what_best_describes_what_you_do: 1.0
+    what_best_describes_your_what_you_do: 1.0
     what_is_your_industry: 0.5
     what_is_the_main__solution_you_are_most_excited_to_discover_at_the_show: 0.5
+    what_is_the_main_solution_you_are_most_excited_to_discover_at_the_show: 0.5
     Country: 0.5
     why_are_you_attending: 0.3
   
@@ -251,11 +254,15 @@ default_visitor_properties:
   Source: "ECOMM Key Stakeholders"  # CHANGED
   Email_domain: "company.com"  # CHANGED
   assist_year_before: "1"
-  job_role: "NA"
-  what_type_does_your_practice_specialise_in: "NA"  # Keep same for compatibility
-  organisation_type: "NA"
+  what_is_your_job_role: "NA"
+  what_best_describes_what_you_do: "NA"  # Keep same for compatibility
+  what_best_describes_your_what_you_do: "NA"
+  what_is_your_industry: "NA"
+  what_is_the_main_solution_you_are_most_excited_to_discover_at_the_show: "NA"
+  what_is_the_main_solution_you_are_most_excited_to_discover_at_the_show: "NA"
   JobTitle: "NA"
-  show: "NA"
+  show: "ecomm"
+
 
 # Environment file path
 env_file: "keys/.env"

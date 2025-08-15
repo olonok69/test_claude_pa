@@ -80,8 +80,15 @@ class RegistrationProcessor:
         # Get event names and shows configuration
         self.main_event_name = self.event_config.get("main_event_name", "main")
         self.secondary_event_name = self.event_config.get("secondary_event_name", "secondary")
-        self.shows_this_year = self.event_config.get("shows_this_year", [])
-        self.shows_this_year_exclude = self.event_config.get("shows_this_year_exclude", [])
+        
+        # Handle shows_this_year - flatten if it's a list of lists (for ecomm)
+        shows_this_year_raw = self.event_config.get("shows_this_year", [])
+        self.shows_this_year = self._flatten_show_list(shows_this_year_raw)
+        
+        # Handle shows_this_year_exclude - flatten if it's a list of lists (for ecomm)
+        shows_this_year_exclude_raw = self.event_config.get("shows_this_year_exclude", [])
+        self.shows_this_year_exclude = self._flatten_show_list(shows_this_year_exclude_raw)
+        
         self.shows_last_year_main = self.event_config.get("shows_last_year_main", [])
         self.shows_last_year_secondary = self.event_config.get("shows_last_year_secondary", [])
 
@@ -118,6 +125,30 @@ class RegistrationProcessor:
         self.logger.info(
             f"Initialized RegistrationProcessor for {self.main_event_name} event with output to {self.output_dir}"
         )
+
+    def _flatten_show_list(self, show_list: List) -> List[str]:
+        """
+        Flatten a list that might contain nested lists or strings.
+        
+        Args:
+            show_list: List that might contain strings or nested lists
+            
+        Returns:
+            Flattened list of strings
+        """
+        if not show_list:
+            return []
+            
+        flattened = []
+        for item in show_list:
+            if isinstance(item, list):
+                # If item is a list, extend with its contents
+                flattened.extend(item)
+            else:
+                # If item is a string, append it
+                flattened.append(item)
+        
+        return flattened
 
     def load_data(self) -> None:
         """Load all registration data files based on configuration."""
@@ -356,21 +387,43 @@ class RegistrationProcessor:
         )
 
         # Split registration data by year
+        # Use the flattened shows_this_year list
         self.df_bva_this_year = self.df_bva[self.df_bva.ShowRef.isin(self.shows_this_year)]
-        self.df_bva_last_year = self.df_bva[~(self.df_bva.ShowRef.isin(self.shows_this_year+ self.shows_this_year_exclude))]
+        
+        # For last year, exclude both this year's shows AND the exclude list
+        all_shows_to_exclude = self.shows_this_year + self.shows_this_year_exclude
+        self.df_bva_last_year = self.df_bva[~self.df_bva.ShowRef.isin(all_shows_to_exclude)]
 
         # Split demographic data by year
         self.df_bva_demo_this_year = self.df_bva_demo[
             self.df_bva_demo.showref.isin(self.shows_this_year)
         ]
         self.df_bva_demo_last_year = self.df_bva_demo[
-            ~(self.df_bva_demo.showref.isin(self.shows_this_year+ self.shows_this_year_exclude))
+            ~self.df_bva_demo.showref.isin(all_shows_to_exclude)
         ]
 
-        # Process secondary event data (only last year)
-        self.df_lvs_last_year = self.df_lvs[
-            self.df_lvs["BadgeType"].isin(valid_badge_types)
-        ]
+        # Process secondary event data
+        # For ecomm: df_lvs_last_year should contain shows from shows_this_year_exclude (like TFM24)
+        # For vet: df_lvs_last_year should contain shows from shows_last_year_secondary (like LVS2024)
+        if self.shows_this_year_exclude:
+            # For ecomm: get records from the exclude list (e.g., TFM24)
+            self.df_lvs_last_year = self.df_lvs[
+                self.df_lvs.ShowRef.isin(self.shows_this_year_exclude)
+            ]
+            # Filter by valid badge types
+            self.df_lvs_last_year = self.df_lvs_last_year[
+                self.df_lvs_last_year["BadgeType"].isin(valid_badge_types)
+            ]
+            
+            # Also update the demographic data for secondary event
+            self.df_lvs_demo = self.df_lvs_demo[
+                self.df_lvs_demo.showref.isin(self.shows_this_year_exclude)
+            ]
+        else:
+            # For vet: use the existing logic with valid badge types only
+            self.df_lvs_last_year = self.df_lvs[
+                self.df_lvs["BadgeType"].isin(valid_badge_types)
+            ]
 
         self.logger.info(
             f"Split {self.main_event_name} data: {len(self.df_bva_this_year)} records for this year, {len(self.df_bva_last_year)} records for last year"

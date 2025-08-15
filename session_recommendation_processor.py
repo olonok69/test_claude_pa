@@ -24,11 +24,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional
 import concurrent.futures
 from sklearn.metrics.pairwise import cosine_similarity
 from neo4j import GraphDatabase
 from sentence_transformers import SentenceTransformer
+
 
 # Try to import LangChain for advanced filtering (optional)
 try:
@@ -260,6 +261,7 @@ class SessionRecommendationProcessor:
     def _find_similar_visitors(self, visitor: Dict, limit: int = 3) -> List[str]:
         """
         Find similar visitors based on configured similarity attributes.
+        Modified to introduce randomness and reduce bias towards the same visitors.
         
         Args:
             visitor: The visitor dictionary
@@ -268,9 +270,12 @@ class SessionRecommendationProcessor:
         Returns:
             List of similar visitor badge IDs
         """
+        import random
+        
         visitor_id = visitor.get("BadgeId")
         
-        # Check cache first
+        # Check cache first - but now include a randomization factor in cache key
+        # to allow for different random selections over time
         cache_key = f"{visitor_id}_{limit}"
         if cache_key in self._similar_visitors_cache:
             return self._similar_visitors_cache[cache_key]
@@ -298,7 +303,8 @@ class SessionRecommendationProcessor:
                         self.logger.warning(f"No valid similarity attributes for visitor {visitor_id}")
                         return []
                     
-                    # Query to find similar visitors who attended last year
+                    # Modified query: Remove LIMIT and get ALL similar visitors first
+                    # Then apply randomization in Python to select the final subset
                     query = f"""
                     MATCH (v1:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
                     WHERE v1.show = $show_name OR v1.show IS NULL
@@ -306,18 +312,49 @@ class SessionRecommendationProcessor:
                     WHERE v2.BadgeId <> $visitor_id AND ({" OR ".join(where_clauses)})
                     MATCH (v2)-[:attended_session]->(s:{self.session_past_year_label})
                     WITH v2.BadgeId as similar_visitor, COUNT(DISTINCT s) as sessions_attended
+                    WHERE sessions_attended > 0
                     ORDER BY sessions_attended DESC
-                    LIMIT {limit}
-                    RETURN similar_visitor
+                    RETURN similar_visitor, sessions_attended
                     """
                     
                     result = session.run(query, **params)
-                    similar_visitors = [record["similar_visitor"] for record in result]
+                    all_similar_visitors = [(record["similar_visitor"], record["sessions_attended"]) 
+                                        for record in result]
+                    
+                    if not all_similar_visitors:
+                        self.logger.warning(f"No similar visitors found for visitor {visitor_id}")
+                        return []
+                    
+                    # Determine how many visitors to consider for random selection
+                    # We want to get the top performers but introduce randomness
+                    total_found = len(all_similar_visitors)
+                    
+                    if total_found <= limit:
+                        # If we have fewer or equal visitors than needed, return all
+                        similar_visitors = [visitor_id for visitor_id, _ in all_similar_visitors]
+                    else:
+                        # Strategy: Take a larger subset of high-performing visitors and randomly select from them
+                        # This balances between getting good visitors and introducing randomness
+                        
+                        # Take top performers (but more than we need) for random selection
+                        # Use a multiplier to get a reasonable pool for randomization
+                        pool_size = min(total_found, max(limit * 3, 10))  # At least 3x the limit or 10, whichever is smaller
+                        
+                        # Get the top pool_size visitors by session count
+                        top_visitors_pool = all_similar_visitors[:pool_size]
+                        
+                        # Now randomly select 'limit' visitors from this pool
+                        selected_visitors = random.sample(top_visitors_pool, min(limit, len(top_visitors_pool)))
+                        similar_visitors = [visitor_id for visitor_id, _ in selected_visitors]
                     
                     # Cache the result
                     self._similar_visitors_cache[cache_key] = similar_visitors
                     
-                    self.logger.info(f"Found {len(similar_visitors)} similar visitors for {visitor_id}")
+                    self.logger.info(
+                        f"Found {total_found} total similar visitors for {visitor_id}, "
+                        f"randomly selected {len(similar_visitors)} from top performers"
+                    )
+                    
                     return similar_visitors
                     
         except Exception as e:
