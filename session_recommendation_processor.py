@@ -655,18 +655,26 @@ class SessionRecommendationProcessor:
         - Filters sessions by show name for multi-show support
         - Includes attendance from BOTH main (BVA) and secondary (LVA) events
         - Treats both events as the same audience (which they are)
+        - Gets top N popular sessions then randomly selects max_recommendations from them
         
         Args:
-            limit: Maximum number of sessions to return
+            limit: Minimum number of popular sessions to retrieve before random selection
             
         Returns:
-            List of popular session dictionaries
+            List of randomly selected popular session dictionaries (up to max_recommendations)
         """
+        import random
+        
         try:
             with GraphDatabase.driver(
                 self.uri, auth=(self.username, self.password)
             ) as driver:
                 with driver.session() as session:
+                    # Determine how many sessions to fetch from the database
+                    # We want at least 'limit' sessions, but if max_recommendations is higher,
+                    # fetch more to have a good pool for random selection
+                    fetch_limit = max(limit, self.max_recommendations)
+                    
                     # Query that includes both BVA and LVA visitors for the specific show
                     query = f"""
                     // Get sessions for this specific show
@@ -688,23 +696,60 @@ class SessionRecommendationProcessor:
                     // Order by popularity and return top sessions
                     ORDER BY total_attendance DESC
                     LIMIT $limit
-                    RETURN s
+                    RETURN s, total_attendance
                     """
                     
                     result = session.run(
                         query,
-                        limit=limit,
+                        limit=fetch_limit,
                         show_name=self.show_name
                     )
                     
-                    sessions = [dict(record["s"]) for record in result]
+                    # Get all popular sessions with their attendance counts
+                    popular_sessions = []
+                    for record in result:
+                        session_dict = dict(record["s"])
+                        session_dict["_popularity_score"] = record["total_attendance"]
+                        popular_sessions.append(session_dict)
                     
-                    self.logger.info(
-                        f"Retrieved {len(sessions)} popular sessions for show '{self.show_name}' as fallback "
-                        f"(combined attendance from main and secondary events)"
-                    )
+                    if not popular_sessions:
+                        self.logger.warning(f"No popular sessions found for show '{self.show_name}'")
+                        return []
                     
-                    return sessions
+                    # Now randomly select max_recommendations sessions from the popular sessions
+                    num_sessions_to_return = min(self.max_recommendations, len(popular_sessions))
+                    
+                    if num_sessions_to_return < len(popular_sessions):
+                        # Randomly select from the pool of popular sessions
+                        selected_sessions = random.sample(popular_sessions, num_sessions_to_return)
+                        
+                        # Sort selected sessions by popularity to maintain some quality ordering
+                        # This helps if the recommendations are displayed in order
+                        selected_sessions.sort(key=lambda x: x.get("_popularity_score", 0), reverse=True)
+                        
+                        # Remove the temporary popularity score before returning
+                        for sess in selected_sessions:
+                            sess.pop("_popularity_score", None)
+                        
+                        self.logger.info(
+                            f"Retrieved {len(popular_sessions)} popular sessions for show '{self.show_name}', "
+                            f"randomly selected {num_sessions_to_return} as fallback "
+                            f"(combined attendance from main and secondary events)"
+                        )
+                    else:
+                        # Return all sessions if we have fewer than max_recommendations
+                        selected_sessions = popular_sessions
+                        
+                        # Remove the temporary popularity score before returning
+                        for sess in selected_sessions:
+                            sess.pop("_popularity_score", None)
+                        
+                        self.logger.info(
+                            f"Retrieved all {len(selected_sessions)} popular sessions for show '{self.show_name}' as fallback "
+                            f"(fewer than max_recommendations={self.max_recommendations} available)"
+                        )
+                    
+                    return selected_sessions
                     
         except Exception as e:
             self.logger.error(f"Error getting popular sessions for show '{self.show_name}': {str(e)}")
@@ -757,7 +802,7 @@ class SessionRecommendationProcessor:
                     else:
                         # No similar visitors found - use popular sessions as fallback
                         self.logger.warning(f"No similar visitors found for returning visitor {badge_id} - using popular sessions")
-                        past_sessions = self._get_popular_past_sessions(limit=20)
+                        past_sessions = self._get_popular_past_sessions(limit=self.max_recommendations*5)
                         if not past_sessions:
                             self.logger.error(f"No sessions available for recommendations for {badge_id}")
                             return [], visitor
@@ -770,7 +815,7 @@ class SessionRecommendationProcessor:
                 else:
                     # No similar visitors found - use popular sessions as fallback
                     self.logger.warning(f"No similar visitors found for {badge_id} - using popular sessions as fallback")
-                    past_sessions = self._get_popular_past_sessions(limit=20)
+                    past_sessions = self._get_popular_past_sessions(limit=self.max_recommendations*5)
                     if not past_sessions:
                         self.logger.error(f"No sessions available for recommendations for {badge_id}")
                         return [], visitor

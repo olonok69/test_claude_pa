@@ -203,6 +203,48 @@ class RegistrationProcessor:
 
         self.logger.info(f"Saved initial data to CSV files in {self.output_dir}/csv/")
 
+
+    def apply_question_text_corrections(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Apply question text corrections based on configuration mapping.
+        
+        Args:
+            df: DataFrame containing QuestionText column to correct
+            
+        Returns:
+            DataFrame with corrected QuestionText values
+        """
+        # Check if question_text_corrections section exists in config
+        corrections = self.config.get("question_text_corrections", {})
+        
+        if not corrections:
+            # No corrections configured, return dataframe unchanged
+            return df
+        
+        # Create a copy to avoid modifying the original
+        df = df.copy()
+        
+        # Apply each correction
+        corrections_applied = 0
+        for incorrect_text, correct_text in corrections.items():
+            # Count how many rows will be affected
+            affected_rows = df['QuestionText'] == incorrect_text
+            num_affected = affected_rows.sum()
+            
+            if num_affected > 0:
+                df.loc[affected_rows, 'QuestionText'] = correct_text
+                corrections_applied += 1
+                self.logger.info(
+                    f"Corrected question text: '{incorrect_text}' -> '{correct_text}' ({num_affected} rows affected)"
+                )
+        
+        if corrections_applied > 0:
+            self.logger.info(f"Applied {corrections_applied} question text corrections")
+        else:
+            self.logger.info("No question text corrections were needed")
+        
+        return df
+
     def preprocess_data(self) -> None:
         """Preprocess the registration data."""
         # Clean email and name fields - create copies to avoid warnings
@@ -230,6 +272,10 @@ class RegistrationProcessor:
         self.df_lvs_demo.loc[:, "QuestionText"] = self.df_lvs_demo[
             "QuestionText"
         ].apply(self.remove_punctuation)
+
+        # Apply question text corrections after removing punctuation
+        self.df_bva_demo = self.apply_question_text_corrections(self.df_bva_demo)
+        self.df_lvs_demo = self.apply_question_text_corrections(self.df_lvs_demo)
 
         # Create backup of AnswerText
         self.df_bva_demo.loc[:, "AnswerText_backup"] = self.df_bva_demo[
