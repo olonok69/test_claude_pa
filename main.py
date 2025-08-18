@@ -1,8 +1,17 @@
+"""
+Simplified main.py with MLflow integration using a single run.
+Logs all summary metrics directly without nested runs.
+"""
 import argparse
 import os
+import sys
+import logging
+from datetime import datetime
+import mlflow
 from utils.logging_utils import setup_logging
 from utils.config_utils import load_config
 from utils.summary_utils import generate_and_save_summary
+from utils.mlflow_utils import MLflowManager
 from pipeline import (
     run_registration_processing,
     run_scan_processing,
@@ -11,9 +20,31 @@ from pipeline import (
     run_session_recommendation_processing,
 )
 
-if __name__ == "__main__":
+
+from dotenv import load_dotenv
+
+def configure_azure_logging():
+    """Configure Azure SDK logging to reduce verbosity."""
+    azure_loggers = [
+        'azure.core.pipeline.policies.http_logging_policy',
+        'azure.storage',
+        'azure.identity',
+        'azure.core',
+        'azure.storage.blob',
+        'azure.storage.filedatalake',
+    ]
+    
+    for logger_name in azure_loggers:
+        azure_logger = logging.getLogger(logger_name)
+        azure_logger.setLevel(logging.WARNING)  # Only show warnings and errors
+
+
+def main():
+    """Main entry point for the pipeline with simplified MLflow integration."""
+    
+    load_dotenv("keys/.env")
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Process and upload data to Neo4j.")
+    parser = argparse.ArgumentParser(description="Process and upload data to Neo4j with MLflow tracking.")
     parser.add_argument(
         "--config",
         "-c",
@@ -27,7 +58,9 @@ if __name__ == "__main__":
         help="Recreate all nodes, even if they already exist in Neo4j",
     )
     parser.add_argument(
-        "--skip-neo4j", action="store_true", help="Skip Neo4j upload steps"
+        "--skip-neo4j", 
+        action="store_true", 
+        help="Skip Neo4j upload steps"
     )
     parser.add_argument(
         "--only-steps",
@@ -38,6 +71,11 @@ if __name__ == "__main__":
         "--only-recommendations",
         action="store_true",
         help="Only run session recommendation processing (step 10)",
+    )
+    parser.add_argument(
+        "--skip-mlflow",
+        action="store_true",
+        help="Skip MLflow tracking (useful for testing)",
     )
     args = parser.parse_args()
 
@@ -52,6 +90,13 @@ if __name__ == "__main__":
 
     # Set up logging first to load config
     logger = setup_logging(log_file="logs/data_processing.log")
+    
+    # Configure Azure SDK logging to reduce verbosity
+    configure_azure_logging()
+    logger.info("Azure SDK logging configured to WARNING level")
+    
+    # Record start time
+    pipeline_start_time = datetime.now()
     
     try:
         # Load the configuration
@@ -69,151 +114,292 @@ if __name__ == "__main__":
         print(f"Error loading configuration: {e}")
         exit(1)
 
+    # Initialize MLflow if not skipped
+    mlflow_manager = None
+    run_id = None
+    
+    if not args.skip_mlflow:
+        try:
+            logger.info("Initializing MLflow tracking")
+            mlflow_manager = MLflowManager()
+            mlflow_manager.verify_environment()
+            
+            # Start single run for the entire pipeline
+            run_id = mlflow_manager.start_run(config)
+            
+            # Log command line arguments
+            mlflow.log_param("command_line_args", str(vars(args)))
+            mlflow.log_param("config_file", args.config)
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize MLflow: {e}")
+            if "MLFLOW_EXPERIMENT_ID" not in os.environ:
+                logger.warning("MLFLOW_EXPERIMENT_ID not set. Continuing without MLflow tracking.")
+                logger.warning("To enable MLflow, set: MLFLOW_EXPERIMENT_ID, DATABRICKS_HOST, MLFLOW_TRACKING_URI")
+            args.skip_mlflow = True
+            mlflow_manager = None
+    else:
+        logger.info("MLflow tracking is disabled (--skip-mlflow flag)")
+
     # Get create_only_new from config, but allow command line to override
-    # If --recreate-all is specified, create_only_new is False
-    # Otherwise, use the value from config (default True)
     if args.recreate_all:
         create_only_new = False
     else:
         create_only_new = config.get("create_only_new", True)
 
     logger.info(f"Running with create_only_new={create_only_new}")
+    
+    # Log initial pipeline parameters to MLflow
+    if mlflow_manager:
+        mlflow.log_param("create_only_new", create_only_new)
+        mlflow.log_param("skip_neo4j", args.skip_neo4j)
 
     try:
         # Determine which steps to run
         steps_to_run = []
         if args.only_steps:
             steps_to_run = [int(step.strip()) for step in args.only_steps.split(",")]
+            if mlflow_manager:
+                mlflow.log_param("steps_to_run", str(steps_to_run))
 
         # If only recommendations flag is set, only run step 10
         if args.only_recommendations:
             logger.info("Running only session recommendation processing (step 10)")
+            
             processors = {
                 "session_recommendation_processor": run_session_recommendation_processing(
                     config, create_only_new
                 )
             }
+            
+            # Log metrics for recommendation processing
+            if mlflow_manager:
+                mlflow_manager.log_summary_metrics(processors)
+                mlflow.log_param("steps_run", "10")
+            
             generate_and_save_summary(processors, skip_neo4j=True)
             logger.info("Session recommendation processing completed successfully")
+            
+            # End MLflow run
+            if mlflow_manager:
+                processing_time = (datetime.now() - pipeline_start_time).total_seconds()
+                mlflow.log_metric("total_processing_time_seconds", processing_time)
+                mlflow_manager.end_run(status="FINISHED")
+                logger.info(f"MLflow run completed. Run ID: {run_id}")
+                logger.info(f"View run at: {mlflow_manager.mlflow_tracking_uri}/#/experiments/{mlflow_manager.experiment_id}/runs/{run_id}")
+            
             exit(0)
 
         processors = {}
+        steps_completed = []
 
         # Step 1: Registration data processing
         if not steps_to_run or 1 in steps_to_run:
             if config.get("pipeline_steps", {}).get("registration_processing", True):
                 logger.info("Starting step 1: Registration data processing")
+                step_start = datetime.now()
+                
                 processors["reg_processor"] = run_registration_processing(config)
+                
+                # Log step timing
+                if mlflow_manager:
+                    step_time = (datetime.now() - step_start).total_seconds()
+                    mlflow.log_metric("step1_registration_time_seconds", step_time)
+                
+                steps_completed.append(1)
                 logger.info("Completed step 1: Registration data processing")
             else:
-                logger.info(
-                    "Skipping step 1: Registration data processing (disabled in config)"
-                )
+                logger.info("Skipping step 1: Registration data processing (disabled in config)")
 
         # Step 2: Scan data processing
         if not steps_to_run or 2 in steps_to_run:
             if config.get("pipeline_steps", {}).get("scan_processing", True):
                 logger.info("Starting step 2: Scan data processing")
+                step_start = datetime.now()
+                
                 processors["scan_processor"] = run_scan_processing(config)
+                
+                # Log step timing
+                if mlflow_manager:
+                    step_time = (datetime.now() - step_start).total_seconds()
+                    mlflow.log_metric("step2_scan_time_seconds", step_time)
+                
+                steps_completed.append(2)
                 logger.info("Completed step 2: Scan data processing")
             else:
-                logger.info(
-                    "Skipping step 2: Scan data processing (disabled in config)"
-                )
+                logger.info("Skipping step 2: Scan data processing (disabled in config)")
 
         # Step 3: Session data processing
         if not steps_to_run or 3 in steps_to_run:
             if config.get("pipeline_steps", {}).get("session_processing", True):
                 logger.info("Starting step 3: Session data processing")
+                step_start = datetime.now()
+                
                 processors["session_processor"] = run_session_processing(config)
+                
+                # Log step timing
+                if mlflow_manager:
+                    step_time = (datetime.now() - step_start).total_seconds()
+                    mlflow.log_metric("step3_session_time_seconds", step_time)
+                
+                steps_completed.append(3)
                 logger.info("Completed step 3: Session data processing")
             else:
-                logger.info(
-                    "Skipping step 3: Session data processing (disabled in config)"
-                )
+                logger.info("Skipping step 3: Session data processing (disabled in config)")
 
         # Neo4j processing steps (optional with --skip-neo4j flag)
         if not args.skip_neo4j:
-            # Check if any Neo4j steps are enabled
-            neo4j_steps_enabled = any(
-                [
-                    config.get("pipeline_steps", {}).get(
-                        "neo4j_visitor_processing", True
-                    ),
-                    config.get("pipeline_steps", {}).get(
-                        "neo4j_session_processing", True
-                    ),
-                    config.get("pipeline_steps", {}).get(
-                        "neo4j_job_stream_processing", True
-                    ),
-                    config.get("pipeline_steps", {}).get(
-                        "neo4j_specialization_stream_processing", True
-                    ),
-                    config.get("pipeline_steps", {}).get(
-                        "neo4j_visitor_relationship_processing", True
-                    ),
-                    config.get("pipeline_steps", {}).get(
-                        "session_embedding_processing", True
-                    ),
-                    config.get("pipeline_steps", {}).get(
-                        "session_recommendation_processing", True
-                    ),
-                ]
-            )
-
-            # Check which specific Neo4j steps should run based on configuration and command line
-            neo4j_steps_to_run = steps_to_run
-            if not steps_to_run:
+            # Check which specific Neo4j steps should run
+            neo4j_steps_to_run = []
+            if steps_to_run:
+                # Filter to only Neo4j steps (4-10)
+                neo4j_steps_to_run = [s for s in steps_to_run if s >= 4 and s <= 10]
+            else:
                 # If no specific steps are requested, include all steps that are enabled in config
-                neo4j_steps_to_run = []
-                if config.get("pipeline_steps", {}).get(
-                    "neo4j_visitor_processing", True
-                ):
+                if config.get("pipeline_steps", {}).get("neo4j_visitor_processing", True):
                     neo4j_steps_to_run.append(4)
-                if config.get("pipeline_steps", {}).get(
-                    "neo4j_session_processing", True
-                ):
+                if config.get("pipeline_steps", {}).get("neo4j_session_processing", True):
                     neo4j_steps_to_run.append(5)
-                if config.get("pipeline_steps", {}).get(
-                    "neo4j_job_stream_processing", True
-                ):
+                if config.get("pipeline_steps", {}).get("neo4j_job_stream_processing", True):
                     neo4j_steps_to_run.append(6)
-                if config.get("pipeline_steps", {}).get(
-                    "neo4j_specialization_stream_processing", True
-                ):
+                if config.get("pipeline_steps", {}).get("neo4j_specialization_stream_processing", True):
                     neo4j_steps_to_run.append(7)
-                if config.get("pipeline_steps", {}).get(
-                    "neo4j_visitor_relationship_processing", True
-                ):
+                if config.get("pipeline_steps", {}).get("neo4j_visitor_relationship_processing", True):
                     neo4j_steps_to_run.append(8)
-                if config.get("pipeline_steps", {}).get(
-                    "session_embedding_processing", True
-                ):
+                if config.get("pipeline_steps", {}).get("session_embedding_processing", True):
                     neo4j_steps_to_run.append(9)
-                if config.get("pipeline_steps", {}).get(
-                    "session_recommendation_processing", True
-                ):
+                if config.get("pipeline_steps", {}).get("session_recommendation_processing", True):
                     neo4j_steps_to_run.append(10)
 
-            if neo4j_steps_enabled and neo4j_steps_to_run:
+            if neo4j_steps_to_run:
                 logger.info("Starting Neo4j data processing")
+                neo4j_start = datetime.now()
+                
                 neo4j_processors = run_neo4j_processing(
                     config, create_only_new, neo4j_steps_to_run
                 )
                 processors.update(neo4j_processors)
+                
+                # Log Neo4j processing time
+                if mlflow_manager:
+                    neo4j_time = (datetime.now() - neo4j_start).total_seconds()
+                    mlflow.log_metric("neo4j_total_time_seconds", neo4j_time)
+                
+                steps_completed.extend(neo4j_steps_to_run)
                 logger.info("Completed Neo4j data processing")
             else:
-                logger.info(
-                    "Skipping Neo4j processing (all Neo4j steps disabled in config or not in selected steps)"
-                )
+                logger.info("Skipping Neo4j processing (all Neo4j steps disabled in config or not in selected steps)")
 
         # Generate and save summary statistics
         logger.info("Generating summary statistics")
-        generate_and_save_summary(processors, args.skip_neo4j)
+        summary = generate_and_save_summary(processors, args.skip_neo4j)
+        
+        # Print key metrics to console for visibility
+        logger.info("=" * 60)
+        logger.info("KEY PIPELINE METRICS")
+        logger.info("=" * 60)
+        
+        # Registration metrics
+        if "reg_processor" in processors:
+            reg = processors["reg_processor"]
+            logger.info("Registration Metrics:")
+            if hasattr(reg, 'df_bva'):
+                logger.info(f"  Total main event registrations: {len(reg.df_bva)}")
+            if hasattr(reg, 'df_lvs'):
+                logger.info(f"  Total secondary event registrations: {len(reg.df_lvs)}")
+            if hasattr(reg, 'df_bva_25_only_valid') or hasattr(reg, 'df_bva_this_year'):
+                df = getattr(reg, 'df_bva_25_only_valid', getattr(reg, 'df_bva_this_year', None))
+                if df is not None:
+                    logger.info(f"  Valid registrations this year: {len(df)}")
+                    logger.info(f"  Unique visitors this year: {df['BadgeId'].nunique()}")
+            if hasattr(reg, 'df_bva_24_25_only_valid') or hasattr(reg, 'df_bva_returning'):
+                df = getattr(reg, 'df_bva_24_25_only_valid', getattr(reg, 'df_bva_returning', None))
+                if df is not None:
+                    logger.info(f"  Returning visitors (main): {len(df)}")
+        
+        # Scan metrics
+        if "scan_processor" in processors:
+            scan = processors["scan_processor"]
+            logger.info("Scan Metrics:")
+            if hasattr(scan, 'df_scan_last_bva'):
+                logger.info(f"  Total scans last year main: {len(scan.df_scan_last_bva)}")
+                logger.info(f"  Unique seminars last year main: {scan.df_scan_last_bva['seminar_name'].nunique()}")
+            if hasattr(scan, 'df_scan_last_lva'):
+                logger.info(f"  Total scans last year secondary: {len(scan.df_scan_last_lva)}")
+                logger.info(f"  Unique seminars last year secondary: {scan.df_scan_last_lva['seminar_name'].nunique()}")
+        
+        # Session metrics
+        if "session_processor" in processors:
+            session = processors["session_processor"]
+            logger.info("Session Metrics:")
+            if hasattr(session, 'session_this_filtered_valid_cols'):
+                logger.info(f"  Sessions this year: {len(session.session_this_filtered_valid_cols)}")
+            if hasattr(session, 'session_last_filtered_valid_cols_bva'):
+                logger.info(f"  Sessions last year main: {len(session.session_last_filtered_valid_cols_bva)}")
+            if hasattr(session, 'session_last_filtered_valid_cols_lva'):
+                logger.info(f"  Sessions last year secondary: {len(session.session_last_filtered_valid_cols_lva)}")
+            if hasattr(session, 'streams'):
+                logger.info(f"  Unique stream categories: {len(session.streams)}")
+        
+        logger.info("=" * 60)
+        
+        # Log all summary metrics to MLflow
+        if mlflow_manager:
+            # Log which processors were run
+            mlflow.log_param("processors_run", ", ".join(processors.keys()))
+            mlflow.log_param("steps_completed", str(steps_completed))
+            
+            # Log summary metrics from all processors
+            mlflow_manager.log_summary_metrics(processors)
+            
+            # Log total processing time
+            total_time = (datetime.now() - pipeline_start_time).total_seconds()
+            mlflow.log_metric("total_processing_time_seconds", total_time)
+            
+            # Try to log summary file
+            summary_json_path = "logs/processing_summary.json"
+            if os.path.exists(summary_json_path):
+                mlflow_manager.log_processing_summary(summary_json_path)
+            
+            # Try to log output artifacts
+            try:
+                # Log key output files if they exist
+                output_dir = config.get("output_dir", "output")
+                important_outputs = [
+                    "output/Registration_data_bva_25_only_valid.csv",
+                    "output/scan_last_filtered_valid_cols_bva.csv",
+                    "output/session_this_filtered_valid_cols.csv",
+                    "logs/processing_summary.json"
+                ]
+                
+                for output_file in important_outputs:
+                    file_path = os.path.join(output_dir, output_file) if not output_file.startswith("logs") else output_file
+                    if os.path.exists(file_path):
+                        mlflow.log_artifact(file_path)
+                        logger.info(f"Logged artifact: {os.path.basename(file_path)}")
+            except Exception as e:
+                logger.warning(f"Could not log some artifacts: {e}")
+            
+            # End the run
+            mlflow_manager.end_run(status="FINISHED")
+            logger.info(f"MLflow run completed successfully. Run ID: {run_id}")
+            logger.info(f"View run at: {mlflow_manager.mlflow_tracking_uri}/#/experiments/{mlflow_manager.experiment_id}/runs/{run_id}")
+        
         logger.info("Data processing and analysis completed successfully")
 
     except Exception as e:
         logger.error(f"Error in data processing: {e}", exc_info=True)
+        
+        # Log failure to MLflow if enabled
+        if mlflow_manager:
+            mlflow.log_param("error_message", str(e))
+            mlflow.log_metric("total_processing_time_seconds", (datetime.now() - pipeline_start_time).total_seconds())
+            mlflow_manager.end_run(status="FAILED")
+        
         print(f"Error: {e}")
         print("See logs/data_processing.log for details")
         exit(1)
+
+
+if __name__ == "__main__":
+    main()
