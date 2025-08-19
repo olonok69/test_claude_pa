@@ -1,7 +1,6 @@
 """
 Simplified main.py with MLflow integration using a single run.
 Logs all summary metrics directly without nested runs.
-Enhanced to capture all metrics from steps 4-10.
 """
 import argparse
 import os
@@ -38,82 +37,6 @@ def configure_azure_logging():
     for logger_name in azure_loggers:
         azure_logger = logging.getLogger(logger_name)
         azure_logger.setLevel(logging.WARNING)  # Only show warnings and errors
-
-
-def log_neo4j_step_metrics(mlflow_manager, processors, step_number):
-    """
-    Log metrics for specific Neo4j processing steps.
-    
-    Args:
-        mlflow_manager: MLflow manager instance
-        processors: Dictionary of processors
-        step_number: The step number to log metrics for
-    """
-    if not mlflow_manager:
-        return
-    
-    try:
-        step_metrics = {}
-        
-        # Map step numbers to processor names and metric prefixes
-        step_mapping = {
-            4: ('neo4j_visitor_processor', 'step4_neo4j_visitor'),
-            5: ('neo4j_session_processor', 'step5_neo4j_session'),
-            6: ('neo4j_job_stream_processor', 'step6_neo4j_job_stream'),
-            7: ('neo4j_specialization_stream_processor', 'step7_neo4j_spec_stream'),
-            8: ('neo4j_visitor_relationship_processor', 'step8_neo4j_visitor_rel'),
-            9: ('session_embedding_processor', 'step9_session_embedding'),
-            10: ('session_recommendation_processor', 'step10_recommendations')
-        }
-        
-        if step_number in step_mapping:
-            processor_name, metric_prefix = step_mapping[step_number]
-            
-            if processor_name in processors:
-                processor = processors[processor_name]
-                
-                if hasattr(processor, 'statistics'):
-                    stats = processor.statistics
-                    
-                    # Log step-specific metrics based on the processor type
-                    if step_number == 4:  # Neo4j Visitor
-                        if 'nodes_created' in stats:
-                            step_metrics[f'{metric_prefix}_nodes_created'] = sum(stats['nodes_created'].values())
-                        if 'nodes_skipped' in stats:
-                            step_metrics[f'{metric_prefix}_nodes_skipped'] = sum(stats['nodes_skipped'].values())
-                    
-                    elif step_number == 5:  # Neo4j Session
-                        if 'nodes_created' in stats:
-                            step_metrics[f'{metric_prefix}_nodes_created'] = sum(stats['nodes_created'].values())
-                        if 'relationships_created' in stats:
-                            step_metrics[f'{metric_prefix}_relationships_created'] = sum(stats['relationships_created'].values())
-                    
-                    elif step_number in [6, 7]:  # Job Stream and Specialization Stream
-                        if not stats.get('processing_skipped', False):
-                            step_metrics[f'{metric_prefix}_relationships_created'] = stats.get('relationships_created', 0)
-                            step_metrics[f'{metric_prefix}_relationships_skipped'] = stats.get('relationships_skipped', 0)
-                    
-                    elif step_number == 8:  # Visitor Relationships
-                        if 'relationships_created' in stats:
-                            step_metrics[f'{metric_prefix}_relationships_created'] = sum(stats['relationships_created'].values())
-                        if 'relationships_failed' in stats:
-                            step_metrics[f'{metric_prefix}_relationships_failed'] = sum(stats['relationships_failed'].values())
-                    
-                    elif step_number == 9:  # Session Embedding
-                        step_metrics[f'{metric_prefix}_sessions_processed'] = stats.get('total_sessions_processed', 0)
-                        step_metrics[f'{metric_prefix}_sessions_with_embeddings'] = stats.get('sessions_with_embeddings', 0)
-                    
-                    elif step_number == 10:  # Recommendations
-                        step_metrics[f'{metric_prefix}_visitors_processed'] = stats.get('visitors_processed', 0)
-                        step_metrics[f'{metric_prefix}_recommendations_generated'] = stats.get('total_recommendations_generated', 0)
-        
-        # Log the metrics
-        if step_metrics:
-            mlflow_manager.log_metrics(step_metrics)
-            logging.getLogger(__name__).debug(f"Logged {len(step_metrics)} metrics for step {step_number}")
-    
-    except Exception as e:
-        logging.getLogger(__name__).warning(f"Could not log metrics for step {step_number}: {e}")
 
 
 def main():
@@ -159,31 +82,60 @@ def main():
     # Validate config file exists
     if not os.path.exists(args.config):
         print(f"Error: Configuration file '{args.config}' not found.")
-        sys.exit(1)
+        print("Please create a configuration file or specify a valid path with --config")
+        print("\nExample usage:")
+        print("  python main.py --config config/config_vet.yaml")
+        print("  python main.py --config config/config_tech.yaml")
+        exit(1)
 
-    # Setup logging
+    # Set up logging first to load config
     logger = setup_logging(log_file="logs/data_processing.log")
+    
+    # Configure Azure SDK logging to reduce verbosity
     configure_azure_logging()
+    logger.info("Azure SDK logging configured to WARNING level")
     
-    # Load configuration
-    logger.info(f"Loading configuration from {args.config}")
-    config = load_config(args.config)
-    
-    # Track pipeline start time
+    # Record start time
     pipeline_start_time = datetime.now()
     
-    # Initialize MLflow manager if not skipped
+    try:
+        # Load the configuration
+        config = load_config(args.config)
+        logger.info(f"Loaded configuration from: {args.config}")
+        
+        # Log event information
+        event_config = config.get("event", {})
+        main_event_name = event_config.get("main_event_name", "main")
+        secondary_event_name = event_config.get("secondary_event_name", "secondary")
+        logger.info(f"Processing data for {main_event_name} event (with {secondary_event_name} as secondary event)")
+        
+    except Exception as e:
+        logger.error(f"Error loading configuration from '{args.config}': {e}")
+        print(f"Error loading configuration: {e}")
+        exit(1)
+
+    # Initialize MLflow if not skipped
     mlflow_manager = None
     run_id = None
+    
     if not args.skip_mlflow:
         try:
+            logger.info("Initializing MLflow tracking")
             mlflow_manager = MLflowManager()
             mlflow_manager.verify_environment()
+            
+            # Start single run for the entire pipeline
             run_id = mlflow_manager.start_run(config)
-            logger.info(f"Started MLflow run: {run_id}")
+            
+            # Log command line arguments
+            mlflow.log_param("command_line_args", str(vars(args)))
+            mlflow.log_param("config_file", args.config)
+            
         except Exception as e:
-            logger.warning(f"Could not initialize MLflow: {e}. Continuing without MLflow tracking.")
-            logger.warning("To enable MLflow, set: MLFLOW_EXPERIMENT_ID, DATABRICKS_HOST, MLFLOW_TRACKING_URI")
+            logger.error(f"Failed to initialize MLflow: {e}")
+            if "MLFLOW_EXPERIMENT_ID" not in os.environ:
+                logger.warning("MLFLOW_EXPERIMENT_ID not set. Continuing without MLflow tracking.")
+                logger.warning("To enable MLflow, set: MLFLOW_EXPERIMENT_ID, DATABRICKS_HOST, MLFLOW_TRACKING_URI")
             args.skip_mlflow = True
             mlflow_manager = None
     else:
@@ -222,7 +174,6 @@ def main():
             
             # Log metrics for recommendation processing
             if mlflow_manager:
-                log_neo4j_step_metrics(mlflow_manager, processors, 10)
                 mlflow_manager.log_summary_metrics(processors)
                 mlflow.log_param("steps_run", "10")
             
@@ -235,10 +186,10 @@ def main():
                 mlflow.log_metric("total_processing_time_seconds", processing_time)
                 mlflow_manager.end_run(status="FINISHED")
                 logger.info(f"MLflow run completed. Run ID: {run_id}")
+                logger.info(f"View run at: {mlflow_manager.mlflow_tracking_uri}/#/experiments/{mlflow_manager.experiment_id}/runs/{run_id}")
             
-            return
+            exit(0)
 
-        # Run pipeline steps as configured
         processors = {}
         steps_completed = []
 
@@ -324,27 +275,17 @@ def main():
                 logger.info("Starting Neo4j data processing")
                 neo4j_start = datetime.now()
                 
-                # Process each Neo4j step individually and log metrics after each
-                for step_num in sorted(neo4j_steps_to_run):
-                    step_start = datetime.now()
-                    neo4j_processors = run_neo4j_processing(
-                        config, create_only_new, [step_num]
-                    )
-                    processors.update(neo4j_processors)
-                    
-                    # Log metrics for this specific step
-                    if mlflow_manager:
-                        step_time = (datetime.now() - step_start).total_seconds()
-                        mlflow.log_metric(f"step{step_num}_time_seconds", step_time)
-                        log_neo4j_step_metrics(mlflow_manager, processors, step_num)
-                    
-                    steps_completed.append(step_num)
+                neo4j_processors = run_neo4j_processing(
+                    config, create_only_new, neo4j_steps_to_run
+                )
+                processors.update(neo4j_processors)
                 
                 # Log Neo4j processing time
                 if mlflow_manager:
                     neo4j_time = (datetime.now() - neo4j_start).total_seconds()
                     mlflow.log_metric("neo4j_total_time_seconds", neo4j_time)
                 
+                steps_completed.extend(neo4j_steps_to_run)
                 logger.info("Completed Neo4j data processing")
             else:
                 logger.info("Skipping Neo4j processing (all Neo4j steps disabled in config or not in selected steps)")
@@ -369,68 +310,36 @@ def main():
             if hasattr(reg, 'df_bva_25_only_valid') or hasattr(reg, 'df_bva_this_year'):
                 df = getattr(reg, 'df_bva_25_only_valid', getattr(reg, 'df_bva_this_year', None))
                 if df is not None:
-                    logger.info(f"  This year unique visitors: {df['BadgeId'].nunique()}")
+                    logger.info(f"  Valid registrations this year: {len(df)}")
+                    logger.info(f"  Unique visitors this year: {df['BadgeId'].nunique()}")
+            if hasattr(reg, 'df_bva_24_25_only_valid') or hasattr(reg, 'df_bva_returning'):
+                df = getattr(reg, 'df_bva_24_25_only_valid', getattr(reg, 'df_bva_returning', None))
+                if df is not None:
+                    logger.info(f"  Returning visitors (main): {len(df)}")
         
         # Scan metrics
         if "scan_processor" in processors:
             scan = processors["scan_processor"]
             logger.info("Scan Metrics:")
             if hasattr(scan, 'df_scan_last_bva'):
-                logger.info(f"  Last year main event scans: {len(scan.df_scan_last_bva)}")
-                logger.info(f"  Unique attendees: {scan.df_scan_last_bva['BadgeId'].nunique()}")
+                logger.info(f"  Total scans last year main: {len(scan.df_scan_last_bva)}")
+                logger.info(f"  Unique seminars last year main: {scan.df_scan_last_bva['seminar_name'].nunique()}")
             if hasattr(scan, 'df_scan_last_lva'):
-                logger.info(f"  Last year secondary event scans: {len(scan.df_scan_last_lva)}")
+                logger.info(f"  Total scans last year secondary: {len(scan.df_scan_last_lva)}")
+                logger.info(f"  Unique seminars last year secondary: {scan.df_scan_last_lva['seminar_name'].nunique()}")
         
         # Session metrics
         if "session_processor" in processors:
             session = processors["session_processor"]
             logger.info("Session Metrics:")
-            if hasattr(session, 'df_session_this') or hasattr(session, 'session_this_filtered_valid_cols'):
-                df = getattr(session, 'df_session_this', getattr(session, 'session_this_filtered_valid_cols', None))
-                if df is not None:
-                    logger.info(f"  This year sessions: {len(df)}")
+            if hasattr(session, 'session_this_filtered_valid_cols'):
+                logger.info(f"  Sessions this year: {len(session.session_this_filtered_valid_cols)}")
+            if hasattr(session, 'session_last_filtered_valid_cols_bva'):
+                logger.info(f"  Sessions last year main: {len(session.session_last_filtered_valid_cols_bva)}")
+            if hasattr(session, 'session_last_filtered_valid_cols_lva'):
+                logger.info(f"  Sessions last year secondary: {len(session.session_last_filtered_valid_cols_lva)}")
             if hasattr(session, 'streams'):
                 logger.info(f"  Unique stream categories: {len(session.streams)}")
-        
-        # Neo4j metrics summary
-        for step_num in range(4, 11):
-            step_names = {
-                4: "Neo4j Visitor",
-                5: "Neo4j Session",
-                6: "Neo4j Job Stream",
-                7: "Neo4j Specialization Stream",
-                8: "Neo4j Visitor Relationship",
-                9: "Session Embedding",
-                10: "Session Recommendation"
-            }
-            processor_names = {
-                4: "neo4j_visitor_processor",
-                5: "neo4j_session_processor",
-                6: "neo4j_job_stream_processor",
-                7: "neo4j_specialization_stream_processor",
-                8: "neo4j_visitor_relationship_processor",
-                9: "session_embedding_processor",
-                10: "session_recommendation_processor"
-            }
-            
-            if processor_names[step_num] in processors:
-                processor = processors[processor_names[step_num]]
-                if hasattr(processor, 'statistics'):
-                    stats = processor.statistics
-                    logger.info(f"{step_names[step_num]} Metrics:")
-                    
-                    if step_num in [4, 5] and 'nodes_created' in stats:
-                        logger.info(f"  Nodes created: {sum(stats['nodes_created'].values())}")
-                    if step_num in [5, 6, 7, 8] and 'relationships_created' in stats:
-                        if isinstance(stats['relationships_created'], dict):
-                            logger.info(f"  Relationships created: {sum(stats['relationships_created'].values())}")
-                        else:
-                            logger.info(f"  Relationships created: {stats['relationships_created']}")
-                    if step_num == 9:
-                        logger.info(f"  Sessions processed: {stats.get('total_sessions_processed', 0)}")
-                    if step_num == 10:
-                        logger.info(f"  Visitors processed: {stats.get('visitors_processed', 0)}")
-                        logger.info(f"  Recommendations generated: {stats.get('total_recommendations_generated', 0)}")
         
         logger.info("=" * 60)
         
@@ -440,14 +349,14 @@ def main():
             mlflow.log_param("processors_run", ", ".join(processors.keys()))
             mlflow.log_param("steps_completed", str(steps_completed))
             
-            # Log comprehensive summary metrics from all processors
+            # Log summary metrics from all processors
             mlflow_manager.log_summary_metrics(processors)
             
             # Log total processing time
             total_time = (datetime.now() - pipeline_start_time).total_seconds()
             mlflow.log_metric("total_processing_time_seconds", total_time)
             
-            # Try to log summary file and extract additional metrics
+            # Try to log summary file
             summary_json_path = "logs/processing_summary.json"
             if os.path.exists(summary_json_path):
                 mlflow_manager.log_processing_summary(summary_json_path)
