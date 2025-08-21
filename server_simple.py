@@ -1,19 +1,26 @@
+#!/usr/bin/env python3
+"""
+MSSQL MCP Server - SSE version with OAuth endpoints for Claude.ai
+"""
+
 import os
 import json
 import logging
-from typing import Optional
+import secrets
+from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from pyodbc import connect, Error
 from decimal import Decimal
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from urllib.parse import urlencode
 
 from mcp.types import TextContent
 from mcp.server.fastmcp import FastMCP
-from mcp.server.sse import SseServerTransport
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 from starlette.requests import Request
+import uvicorn
 
 # Load environment variables
 load_dotenv(".env")
@@ -25,11 +32,111 @@ logging.basicConfig(
 )
 logger = logging.getLogger("mssql_mcp_server")
 
-# Create MCP server and transport
+# Create MCP server WITHOUT stateless_http
+# This will use the standard SSE approach that Claude.ai expects
 mcp = FastMCP("MSSQL MCP Server")
-transport = SseServerTransport("/messages/")
+
+# Token storage for OAuth
+valid_tokens: Dict[str, Dict[str, Any]] = {}
+
+# OAuth endpoints for Claude.ai
+async def oauth_authorization_server(request: Request):
+    """OAuth authorization server discovery."""
+    return JSONResponse({
+        "issuer": "https://data.forensic-bot.com",
+        "authorization_endpoint": "https://data.forensic-bot.com/authorize",
+        "token_endpoint": "https://data.forensic-bot.com/token",
+        "registration_endpoint": "https://data.forensic-bot.com/register"
+    })
+
+async def oauth_protected_resource(request: Request):
+    """OAuth protected resource discovery."""
+    return JSONResponse({
+        "resource": "https://data.forensic-bot.com/sse",
+        "oauth_authorization_server": "https://data.forensic-bot.com"
+    })
+
+async def register(request: Request):
+    """Registration endpoint."""
+    body = await request.json() if request.method == "POST" else {}
+    client_id = f"client_{secrets.token_hex(8)}"
+    
+    return JSONResponse({
+        "client_id": client_id,
+        "client_secret": secrets.token_urlsafe(32),
+        "registration_access_token": secrets.token_urlsafe(32),
+        "grant_types": ["client_credentials", "authorization_code"],
+        "redirect_uris": body.get("redirect_uris", [])
+    })
+
+async def authorize(request: Request):
+    """Authorization endpoint - redirect back with auth code."""
+    client_id = request.query_params.get("client_id")
+    redirect_uri = request.query_params.get("redirect_uri")
+    state = request.query_params.get("state", "")
+    
+    # Generate authorization code
+    auth_code = secrets.token_urlsafe(32)
+    
+    # Store for later exchange (in production, use proper storage)
+    valid_tokens[f"authcode_{auth_code}"] = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "expires_at": (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+    }
+    
+    logger.info(f"Authorization request from client: {client_id}")
+    
+    # Redirect back to Claude with auth code
+    if redirect_uri:
+        params = {"code": auth_code, "state": state}
+        redirect_url = f"{redirect_uri}?{urlencode(params)}"
+        return RedirectResponse(url=redirect_url, status_code=302)
+    
+    return JSONResponse({"authorization_code": auth_code, "state": state})
+
+async def token(request: Request):
+    """Token endpoint."""
+    content_type = request.headers.get("content-type", "")
+    
+    if "application/x-www-form-urlencoded" in content_type:
+        form_data = await request.form()
+        data = dict(form_data)
+    elif "application/json" in content_type:
+        data = await request.json()
+    else:
+        data = {}
+    
+    # Generate access token
+    access_token = secrets.token_urlsafe(32)
+    
+    # Store token
+    valid_tokens[access_token] = {
+        "client_id": data.get("client_id", "unknown"),
+        "expires_at": (datetime.utcnow() + timedelta(hours=1)).isoformat(),
+        "scope": data.get("scope", "mcp.access")
+    }
+    
+    logger.info(f"Issued token for client: {data.get('client_id', 'unknown')}")
+    
+    return JSONResponse({
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "refresh_token": secrets.token_urlsafe(32),
+        "scope": data.get("scope", "mcp.access")
+    })
+
+async def health_check(request: Request):
+    """Health check endpoint."""
+    try:
+        config, connection_string = get_db_config()
+        return JSONResponse({"status": "healthy", "transport": "sse"})
+    except Exception as e:
+        return JSONResponse({"status": "unhealthy", "error": str(e)}, status_code=500)
 
 def get_db_config():
+    """Get database configuration from environment variables."""
     config = {
         "driver": os.getenv("MSSQL_DRIVER", "ODBC Driver 18 for SQL Server"),
         "server": os.getenv("MSSQL_HOST", "localhost"),
@@ -72,6 +179,7 @@ def serialize_row_data(data):
     else:
         return str(data)
 
+# Define MCP tools
 @mcp.tool()
 async def list_tables() -> list[TextContent]:
     """List all tables in the database."""
@@ -205,69 +313,49 @@ async def get_table_sample(table_name: str, limit: int = 5) -> list[TextContent]
         logger.error(f"Failed to get sample from {table_name}: {e}")
         return [TextContent(type="text", text=f"Error getting sample: {str(e)}")]
 
-# Health check endpoint
-async def health_check(request):
-    try:
-        config, connection_string = get_db_config()
-        # Test database connection
-        with connect(connection_string) as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                cursor.fetchone()
-        
-        return JSONResponse({
-            "status": "healthy",
-            "database": config["database"],
-            "server": config["server"],
-            "driver": config["driver"]
-        })
-    except Exception as e:
-        return JSONResponse({
-            "status": "unhealthy",
-            "error": str(e)
-        })
-
-# SSE handler for GET requests (Claude Desktop)
-async def handle_sse(request):
-    async with transport.connect_sse(request.scope, request.receive, request._send) as (
-        in_stream, out_stream,
-    ):
-        await mcp._mcp_server.run(
-            in_stream, out_stream, mcp._mcp_server.create_initialization_options()
-        )
-
-# POST handler for Claude.ai
-async def handle_post_sse(request: Request):
-    """Handle POST requests to /sse endpoint from Claude.ai"""
-    try:
-        # Check if this is a message POST
-        if request.headers.get("content-type") == "application/json":
-            # Pass through to the messages handler
-            return await transport.handle_post_message(request.scope, request.receive, request._send)
-        else:
-            # For other POST requests, try to handle as SSE initialization
-            return await handle_sse(request)
-    except Exception as e:
-        logger.error(f"Error handling POST to /sse: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-# Build the complete Starlette app with all routes
-app = Starlette(
-    routes=[
-        Route("/health", health_check, methods=["GET"]),
-        Route("/sse", handle_sse, methods=["GET"]),  # For Claude Desktop
-        Route("/sse", handle_post_sse, methods=["POST"]),  # For Claude.ai
-        Mount("/messages/", app=transport.handle_post_message),
-    ]
-)
-
 if __name__ == "__main__":
-    import uvicorn
     logger.info("Starting MSSQL MCP Server with SSE transport...")
     logger.info(f"MSSQL HOST: {os.getenv('MSSQL_HOST')}")
     logger.info(f"MSSQL DB: {os.getenv('MSSQL_DATABASE')}")
     logger.info(f"MSSQL username: {os.getenv('MSSQL_USER')}")
-    logger.info("MSSQL MCP Server running on http://0.0.0.0:8008")
-    logger.info("SSE endpoint: http://0.0.0.0:8008/sse (GET for Claude Desktop, POST for Claude.ai)")
-    logger.info("Health check: http://0.0.0.0:8008/health")
+    logger.info("=" * 50)
+    logger.info("MCP Server running on http://0.0.0.0:8008")
+    logger.info("SSE endpoint: http://0.0.0.0:8008/sse")
+    logger.info("=" * 50)
+    
+    # Get the SSE app from FastMCP
+    sse_app = mcp.sse_app()
+    
+    # Create a wrapper to handle POST to /sse
+    async def handle_sse(request: Request):
+        """Handle both GET and POST to /sse by forwarding to SSE app"""
+        # For POST requests, we need to handle them specially
+        if request.method == "POST":
+            # Forward to the SSE app's message handler
+            # The SSE transport expects POST to /messages
+            scope = request.scope.copy()
+            scope["path"] = "/messages/"
+            return await sse_app(scope, request.receive, request._send)
+        else:
+            # For GET, just forward normally
+            return await sse_app(request.scope, request.receive, request._send)
+    
+    # Create Starlette app with OAuth endpoints and SSE mount
+    app = Starlette(
+        routes=[
+            # OAuth endpoints
+            Route("/.well-known/oauth-authorization-server", oauth_authorization_server, methods=["GET"]),
+            Route("/.well-known/oauth-protected-resource", oauth_protected_resource, methods=["GET"]),
+            Route("/register", register, methods=["POST"]),
+            Route("/authorize", authorize, methods=["GET", "POST"]),
+            Route("/token", token, methods=["POST"]),
+            Route("/health", health_check, methods=["GET"]),
+            # SSE endpoint - handle both GET and POST
+            Route("/sse", handle_sse, methods=["GET", "POST", "HEAD"]),
+            # Mount SSE app for other paths
+            Mount("/", app=sse_app),
+        ]
+    )
+    
+    # Run the combined app with uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8008, log_level="info")

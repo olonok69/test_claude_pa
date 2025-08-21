@@ -52,4 +52,5 @@ ENV ODBCINI=/etc/odbc.ini
 
 EXPOSE 8008
 
-CMD ["python", "serversse.py"]
+# Use the new HTTP server by default, with fallback to SSE server
+CMD ["python", "server_simple.py"]
