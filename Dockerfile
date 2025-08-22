@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Install system dependencies first, then ODBC
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Add Microsoft repository and install ODBC driver first
+# Add Microsoft repository and install ODBC driver
 RUN curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-prod.gpg \
     && echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
@@ -23,7 +23,7 @@ RUN curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /us
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install unixODBC after Microsoft ODBC driver to avoid conflicts
+# Install unixODBC
 RUN apt-get update && apt-get install -y \
     unixodbc \
     unixodbc-dev \
@@ -40,17 +40,14 @@ RUN pip install --upgrade pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Test pyodbc import
-RUN python -c "import pyodbc; print('pyodbc imported successfully')"
-
 # Copy application code
 COPY . .
 
-# Set environment variables for ODBC
+# Set environment variables
 ENV ODBCSYSINI=/etc
 ENV ODBCINI=/etc/odbc.ini
 
 EXPOSE 8008
 
-# Use the new HTTP server by default, with fallback to SSE server
-CMD ["python", "server_simple.py"]
+# Use the new OAuth server
+CMD ["python", "server_oauth.py"]
