@@ -104,3 +104,4 @@ comparison_output_scan/
 comparison_output_session/
 app/comparers/reports/
 *.csv
+*.png
