@@ -96,5 +96,11 @@ coverage.xml
 
 # Jupyter Notebook
 .ipynb_checkpoints
-outputs/
-archive/
+
+data/
+logs/
+comparison_output/
+comparison_output_scan/
+comparison_output_session/
+app/comparers/reports/
+*.csv
