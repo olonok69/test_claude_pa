@@ -43,6 +43,7 @@ except ImportError:
 from langchain_core.messages import HumanMessage
 
 
+
 class EnhancedCLTVCalculator(CLTVCalculator):
     """Enhanced CLTV Calculator with AI integration"""
     

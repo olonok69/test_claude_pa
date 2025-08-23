@@ -105,7 +105,7 @@ def get_llm():
         raise ValueError(f"Unsupported MODEL_PROVIDER: {MODEL_PROVIDER}")
 
 # Lending Analysis Tools
-
+# CLTV Analysis
 @tool
 def calculate_cltv_analysis(
     property_value: float,
@@ -213,6 +213,7 @@ def calculate_cltv_analysis(
         
     except Exception as e:
         return f"Error calculating CLTV: {str(e)}"
+# Calculate Debt-to-Income (DTI) ratios and assess loan qualification
 
 @tool
 def calculate_dti_analysis(
@@ -301,7 +302,7 @@ def calculate_dti_analysis(
         
     except Exception as e:
         return f"Error calculating DTI: {str(e)}"
-
+# This tool combines CLTV, DTI, credit score, employment history, and assets    to provide an overall lending recommendation.
 @tool  
 def calculate_comprehensive_borrower_score(
     property_value: float,
@@ -478,6 +479,8 @@ def calculate_comprehensive_borrower_score(
     except Exception as e:
         return f"Error calculating comprehensive score: {str(e)}"
 
+# compare_loan_scenarios  Analyzes different combinations of down payments and loan amounts to identify
+# the best lending options for the borrower.
 @tool
 def compare_loan_scenarios(
     property_value: float,
@@ -617,7 +620,7 @@ Credit Score: {credit_score}
         return f"Error comparing loan scenarios: {str(e)}"
 
 # Helper functions for recommendations
-
+# Generate CLTV-specific recommendations
 def _generate_cltv_recommendations(cltv: float, ltv: float, equity_pct: float) -> str:
     """Generate CLTV-specific recommendations"""
     recommendations = []
@@ -639,6 +642,7 @@ def _generate_cltv_recommendations(cltv: float, ltv: float, equity_pct: float) -
     
     return "\n".join(recommendations)
 
+# Generate DTI-specific recommendations
 def _generate_dti_recommendations(front_dti: float, back_dti: float, remaining_pct: float, limits: dict) -> str:
     """Generate DTI-specific recommendations"""
     recommendations = []
@@ -659,6 +663,7 @@ def _generate_dti_recommendations(front_dti: float, back_dti: float, remaining_p
     
     return "\n".join(recommendations)
 
+# Generate comprehensive recommendations based on overall score
 def _generate_comprehensive_recommendations(score: float, cltv: float, dti: float, credit: int, dp_pct: float) -> str:
     """Generate comprehensive recommendations based on overall score"""
     recommendations = []
@@ -688,6 +693,7 @@ def _generate_comprehensive_recommendations(score: float, cltv: float, dti: floa
     
     return "\n".join(recommendations)
 
+# Generate recommendations based on scenario comparison
 def _generate_scenario_recommendations(scenarios: list) -> str:
     """Generate recommendations based on scenario comparison"""
     recommendations = []

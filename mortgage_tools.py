@@ -19,6 +19,7 @@ import math
 from typing import List, Dict, Union
 
 
+
 @tool
 def calculate_pmi_analysis(
     loan_amount: float,

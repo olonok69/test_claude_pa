@@ -11,7 +11,7 @@ from cltv_ai_agent import (
     create_cltv_agent, 
     analyze_borrower_comprehensive,
     quick_loan_prequalification,
-    CLTVCalculator  # Your existing calculator
+    CLTVCalculator  
 )
 
 def main():
