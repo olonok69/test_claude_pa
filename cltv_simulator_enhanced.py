@@ -1,8 +1,14 @@
 """
-Enhanced CLTV Simulator with AI Integration
+Enhanced CLTV Simulator with AI Integration - FIXED VERSION
 
 This Streamlit app enhances your existing CLTV simulator with AI-powered analysis.
 It imports your existing CLTVCalculator and adds AI capabilities on top.
+
+FIXES APPLIED:
+1. Fixed tool calling method from __call__ to invoke
+2. Fixed pandas styling from applymap to map
+3. Improved error handling and user feedback
+4. Clean chat message display
 """
 
 import streamlit as st
@@ -14,6 +20,7 @@ import numpy as np
 import json
 import os
 import sys
+from typing import Dict, Any, Optional
 
 # Import your existing CLTV calculator
 from cltv_simulator import CLTVCalculator
@@ -43,7 +50,6 @@ except ImportError:
 from langchain_core.messages import HumanMessage
 
 
-
 class EnhancedCLTVCalculator(CLTVCalculator):
     """Enhanced CLTV Calculator with AI integration"""
     
@@ -60,7 +66,7 @@ class EnhancedCLTVCalculator(CLTVCalculator):
         else:
             self.ai_enabled = False
     
-    def get_ai_analysis(self, borrower_profile):
+    def get_ai_analysis(self, borrower_profile: Dict[str, Any]) -> str:
         """Get AI-powered analysis of borrower profile"""
         if not self.ai_enabled:
             return "AI analysis not available. Please check your configuration."
@@ -101,36 +107,119 @@ def main():
         layout="wide"
     )
     
-    # Custom CSS for better styling
+    # Custom CSS for better styling and comprehensive font/rendering fixes
     st.markdown("""
     <style>
+    /* Reset and normalize all fonts */
+    * {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
+        font-variant-ligatures: none !important;
+        font-feature-settings: normal !important;
+        text-rendering: optimizeLegibility !important;
+        -webkit-font-smoothing: antialiased !important;
+        -moz-osx-font-smoothing: grayscale !important;
+    }
+    
+    /* Global app styling */
+    .stApp {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
+    }
+    
+    /* Fix chat messages specifically */
+    .stChatMessage {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
+    }
+    
+    .stChatMessage [data-testid="chatAvatarIcon-user"],
+    .stChatMessage [data-testid="chatAvatarIcon-assistant"] {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
+    }
+    
+    /* Fix all markdown content */
+    .stMarkdown, .stMarkdown * {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
+        font-variant-ligatures: none !important;
+        font-feature-settings: normal !important;
+        letter-spacing: normal !important;
+        word-spacing: normal !important;
+    }
+    
+    /* Fix markdown containers */
+    div[data-testid="stMarkdownContainer"], 
+    div[data-testid="stMarkdownContainer"] * {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
+        font-variant-ligatures: none !important;
+        font-feature-settings: normal !important;
+        letter-spacing: normal !important;
+        word-spacing: normal !important;
+        line-height: 1.5 !important;
+    }
+    
+    /* Fix code blocks to use monospace only where appropriate */
+    code, pre {
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+        font-variant-ligatures: none !important;
+    }
+    
+    /* Custom component styles */
     .main-header {
         background: linear-gradient(90deg, #1f4e79 0%, #2e8b57 100%);
         padding: 1rem;
         border-radius: 10px;
         margin-bottom: 2rem;
         color: white;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
     }
+    
     .metric-card {
         background-color: #f8f9fa;
         padding: 1rem;
         border-radius: 8px;
         border-left: 4px solid #2e8b57;
         margin-bottom: 0.5rem;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
     }
+    
     .ai-section {
         background-color: #e8f4fd;
         padding: 1.5rem;
         border-radius: 10px;
         border: 2px solid #1f4e79;
         margin: 1rem 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
     }
+    
     .warning-box {
         background-color: #fff3cd;
         border: 1px solid #ffeaa7;
         padding: 1rem;
         border-radius: 8px;
         margin: 1rem 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
+    }
+    
+    /* Fix specific Streamlit components */
+    .stSelectbox label, .stNumberInput label, .stTextInput label, 
+    .stRadio label, .stMultiSelect label, .stSlider label,
+    .stButton button, .dataframe, .metric-container {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
+        font-variant-ligatures: none !important;
+        font-feature-settings: normal !important;
+    }
+    
+    /* Override any remaining problematic styling */
+    p, div, span, h1, h2, h3, h4, h5, h6, li, td, th {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
+        font-variant-ligatures: none !important;
+        font-feature-settings: normal !important;
+        letter-spacing: normal !important;
+        word-spacing: normal !important;
+    }
+    
+    /* Specifically target chat messages and content */
+    [data-testid="chatAvatarIcon-user"] + div,
+    [data-testid="chatAvatarIcon-assistant"] + div {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -446,6 +535,53 @@ def render_ai_analysis():
                 st.info("Please check your AI configuration and try again.")
 
 
+def clean_user_input(text: str) -> str:
+    """
+    Clean user input to prevent text formatting issues and ensure proper spacing.
+    
+    Args:
+        text (str): Raw user input text
+        
+    Returns:
+        str: Cleaned and properly formatted text
+    """
+    import re
+    
+    # Remove any problematic characters or formatting
+    cleaned = text.strip()
+    
+    # Fix common number formatting issues (add spaces after commas in numbers)
+    cleaned = re.sub(r'(\d),(\d)', r'\1, \2', cleaned)
+    
+    # Fix missing spaces after periods
+    cleaned = re.sub(r'\.([A-Z])', r'. \1', cleaned)
+    
+    # Fix missing spaces after common abbreviations and numbers
+    cleaned = re.sub(r'(\d)([A-Za-z])', r'\1 \2', cleaned)
+    
+    # Fix missing spaces before monetary amounts
+    cleaned = re.sub(r'([A-Za-z])(\$\d)', r'\1 \2', cleaned)
+    
+    # Ensure proper spacing around common financial terms
+    financial_terms = [
+        'homepurchase', 'monthlyincome', 'carpayment', 'downpayment',
+        'creditcards', 'studentloans', 'creditScore', 'monthlyincome'
+    ]
+    
+    for term in financial_terms:
+        # Add spaces around concatenated financial terms
+        pattern = r'(\d)(' + term + r')'
+        cleaned = re.sub(pattern, r'\1 \2', cleaned, flags=re.IGNORECASE)
+        
+        pattern = r'(' + term + r')(\d)'
+        cleaned = re.sub(pattern, r'\1 \2', cleaned, flags=re.IGNORECASE)
+    
+    # Clean up multiple spaces
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    
+    return cleaned.strip()
+
+
 def render_chat_interface():
     """Render the AI chat interface"""
     st.header("💬 AI Mortgage Lending Assistant")
@@ -463,17 +599,26 @@ def render_chat_interface():
             {"role": "assistant", "content": "Hello! I'm your AI mortgage lending assistant. I can help you with CLTV analysis, DTI calculations, loan qualification assessments, and provide lending recommendations. What would you like to know?"}
         ]
     
-    # Display chat messages
+    # Display chat messages with clean formatting
     for message in st.session_state.chat_messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            if message["role"] == "user":
+                # Use st.write for user messages to ensure proper text rendering
+                st.write(message["content"])
+            else:
+                # Use st.markdown for AI responses to maintain formatting
+                st.markdown(message["content"])
     
     # Chat input
     if prompt := st.chat_input("Ask me about mortgage lending, CLTV, DTI, or loan qualification..."):
+        # Clean and format the user input to prevent text formatting issues
+        cleaned_prompt = clean_user_input(prompt)
+        
         # Add user message
-        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        st.session_state.chat_messages.append({"role": "user", "content": cleaned_prompt})
         with st.chat_message("user"):
-            st.markdown(prompt)
+            # Use proper text formatting for user messages
+            st.write(cleaned_prompt)
         
         # Generate AI response
         with st.chat_message("assistant"):
@@ -481,8 +626,9 @@ def render_chat_interface():
                 try:
                     calculator = st.session_state.calculator
                     if calculator.ai_enabled:
+                        # Use the original prompt for AI processing, but cleaned prompt for display
                         result = calculator.ai_agent.invoke(
-                            {"messages": [HumanMessage(content=prompt)]},
+                            {"messages": [HumanMessage(content=prompt)]},  # Original for AI
                             calculator.chat_config
                         )
                         response = result["messages"][-1].content
@@ -497,6 +643,13 @@ def render_chat_interface():
                     error_msg = f"I apologize, but I encountered an error: {str(e)}"
                     st.error(error_msg)
                     st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+    
+    # Clear chat button
+    if st.sidebar.button("🗑️ Clear Chat History"):
+        st.session_state.chat_messages = [
+            {"role": "assistant", "content": "Chat cleared! How can I help you with mortgage lending analysis?"}
+        ]
+        st.rerun()
     
     # Sidebar with example prompts
     with st.sidebar:
@@ -538,7 +691,7 @@ def render_advanced_tools():
 
 
 def render_pmi_tool():
-    """Render PMI analysis tool"""
+    """Render PMI analysis tool - FIXED VERSION"""
     st.subheader("🏠 PMI Analysis & Calculation")
     
     col1, col2 = st.columns(2)
@@ -553,19 +706,23 @@ def render_pmi_tool():
         if st.button("📊 Calculate PMI", type="primary"):
             with st.spinner("Calculating PMI requirements..."):
                 try:
-                    result = calculate_pmi_analysis(
-                        loan_amount=loan_amount,
-                        property_value=property_value,
-                        credit_score=credit_score,
-                        loan_type=loan_type
-                    )
+                    # FIXED: Use invoke instead of __call__
+                    result = calculate_pmi_analysis.invoke({
+                        "loan_amount": loan_amount,
+                        "property_value": property_value,
+                        "credit_score": credit_score,
+                        "loan_type": loan_type
+                    })
                     st.markdown(result)
                 except Exception as e:
                     st.error(f"PMI calculation failed: {str(e)}")
+                    # Provide fallback calculation
+                    ltv = (loan_amount / property_value) * 100
+                    st.info(f"Basic calculation: LTV = {ltv:.1f}%. PMI required: {'Yes' if ltv > 80 else 'No'}")
 
 
 def render_debt_consolidation_tool():
-    """Render debt consolidation analysis tool"""
+    """Render debt consolidation analysis tool - FIXED VERSION"""
     st.subheader("💳 Debt Consolidation Impact Analysis")
     
     col1, col2 = st.columns(2)
@@ -588,20 +745,26 @@ def render_debt_consolidation_tool():
     if st.button("🔄 Analyze Consolidation Impact", type="primary"):
         with st.spinner("Analyzing debt consolidation impact..."):
             try:
-                result = analyze_debt_consolidation_impact(
-                    current_monthly_debts=current_payments,
-                    debt_balances=debt_balances,
-                    consolidation_amount=consolidation_amount,
-                    new_payment=new_payment,
-                    gross_monthly_income=gross_income
-                )
+                # FIXED: Use invoke instead of __call__
+                result = analyze_debt_consolidation_impact.invoke({
+                    "current_monthly_debts": current_payments,
+                    "debt_balances": debt_balances,
+                    "consolidation_amount": consolidation_amount,
+                    "new_payment": new_payment,
+                    "gross_monthly_income": gross_income
+                })
                 st.markdown(result)
             except Exception as e:
                 st.error(f"Debt consolidation analysis failed: {str(e)}")
+                # Provide fallback calculation
+                current_dti = (current_payments / gross_income) * 100
+                new_dti = (new_payment / gross_income) * 100
+                savings = current_payments - new_payment
+                st.info(f"Basic calculation: Current DTI = {current_dti:.1f}%, New DTI = {new_dti:.1f}%, Monthly Savings = ${savings:.0f}")
 
 
 def render_affordability_tool():
-    """Render home affordability calculator"""
+    """Render home affordability calculator - FIXED VERSION"""
     st.subheader("🏠 Home Affordability Calculator")
     
     col1, col2 = st.columns(2)
@@ -619,21 +782,25 @@ def render_affordability_tool():
     if st.button("💰 Calculate Affordability", type="primary"):
         with st.spinner("Calculating home affordability..."):
             try:
-                result = calculate_affordability_analysis(
-                    gross_monthly_income=gross_income,
-                    monthly_debt_payments=monthly_debts,
-                    down_payment_available=down_payment,
-                    target_dti=target_dti,
-                    interest_rate=interest_rate,
-                    loan_term=loan_term
-                )
+                # FIXED: Use invoke instead of __call__
+                result = calculate_affordability_analysis.invoke({
+                    "gross_monthly_income": gross_income,
+                    "monthly_debt_payments": monthly_debts,
+                    "down_payment_available": down_payment,
+                    "target_dti": target_dti,
+                    "interest_rate": interest_rate,
+                    "loan_term": loan_term
+                })
                 st.markdown(result)
             except Exception as e:
                 st.error(f"Affordability calculation failed: {str(e)}")
+                # Provide fallback calculation
+                max_payment = gross_income * (target_dti / 100) - monthly_debts
+                st.info(f"Basic calculation: Maximum housing payment = ${max_payment:.0f}")
 
 
-def render_scenario_analysis(calculator, property_value):
-    """Render scenario analysis from your original simulator"""
+def render_scenario_analysis(calculator: CLTVCalculator, property_value: float):
+    """Render scenario analysis from your original simulator - FIXED VERSION"""
     st.header("📊 Scenario Analysis")
     
     scenario_col1, scenario_col2 = st.columns(2)
@@ -662,7 +829,7 @@ def render_scenario_analysis(calculator, property_value):
         # Scenario results table
         st.subheader("Scenario Results")
         
-        # Color code CLTV values
+        # FIXED: Use map instead of applymap (deprecated)
         def color_cltv(val):
             if val <= 65:
                 return 'background-color: lightgreen'
@@ -675,7 +842,8 @@ def render_scenario_analysis(calculator, property_value):
             else:
                 return 'background-color: red'
         
-        styled_df = scenarios_df.style.applymap(color_cltv, subset=['CLTV (%)'])
+        # Apply styling using the modern method
+        styled_df = scenarios_df.style.map(color_cltv, subset=['CLTV (%)'])
         st.dataframe(styled_df, use_container_width=True)
         
         # Scenario visualization
