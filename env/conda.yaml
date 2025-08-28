@@ -1,0 +1,18 @@
+name: csm-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10.10
+  - pip
+  - scikit-learn
+  - scipy
+  - pandas
+  - pip:  
+    - azureml-mlflow
+    - mlflow-skinny
+    - azure-ai-ml
+    - mltable
+    - azure-identity
+    - python-dotenv>=1.1.0
+    - numpy<2
+    - azureml-fsspec
