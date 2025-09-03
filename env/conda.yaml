@@ -1,18 +1,50 @@
-name: csm-env
+# Conda environment specification for Personal Agendas Pipeline
+# Place this file in: env/conda.yaml
+
+name: personal_agendas_env
 channels:
   - conda-forge
+  - defaults
 dependencies:
-  - python=3.10.10
+  - python=3.10
   - pip
-  - scikit-learn
-  - scipy
-  - pandas
-  - pip:  
-    - azureml-mlflow
-    - mlflow-skinny
-    - azure-ai-ml
-    - mltable
-    - azure-identity
-    - python-dotenv>=1.1.0
-    - numpy<2
-    - azureml-fsspec
+  - numpy=1.24.3
+  - pandas=2.0.3
+  - pip:
+      # Azure ML SDK
+      - azureml-core==1.54.0
+      - azureml-pipeline==1.54.0
+      - azureml-pipeline-core==1.54.0
+      - azureml-pipeline-steps==1.54.0
+      - azure-ai-ml==1.15.0
+      - azure-identity==1.15.0
+      - azure-storage-blob==12.19.0
+      - azureml-fsspec==1.3.0
+      
+      # MLflow for tracking
+      - mlflow==2.10.0
+      - mlflow-skinny==2.10.0
+      
+      # Neo4j
+      - neo4j==5.15.0
+      
+      # Data processing
+      - pyyaml==6.0.1
+      - python-dotenv==1.0.0
+      - openpyxl==3.1.2
+      - xlrd==2.0.1
+      
+      # Machine Learning (for embeddings step)
+      - scikit-learn==1.3.2
+      - sentence-transformers==2.2.2
+      - torch==2.1.2
+      - transformers==4.36.2
+      
+      # Utilities
+      - tqdm==4.66.1
+      - requests==2.31.0
+      - urllib3==2.1.0
+      
+      # Logging and monitoring
+      - colorlog==6.8.0
+      - python-json-logger==2.0.7
