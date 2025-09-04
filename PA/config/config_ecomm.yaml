@@ -127,16 +127,15 @@ stream_processing:
 # Scan output files
 scan_output_files:
   processed_scans:
-    this_year: "scan_this_filtered_valid_cols.csv"
-    last_year_main: "scan_last_filtered_valid_cols_ecomm.csv"   # Changed from bva to ecomm
-    last_year_secondary: "scan_last_filtered_valid_cols_tfm.csv"  # Changed from lva to tfm
+    last_year_main: "scan_bva_past.csv"   # Changed from bva to ecomm
+    last_year_secondary: "scan_lva_past.csv"  # Changed from lva to tfm
 
 # Session output file configuration
 session_output_files:
   processed_sessions:
     this_year: "session_this_filtered_valid_cols.csv"
-    last_year_main: "session_last_filtered_valid_cols_ecomm.csv"   # Changed from bva to ecomm
-    last_year_secondary: "session_last_filtered_valid_cols_tfm.csv"  # Changed from lva to tfm
+    last_year_main: "session_last_filtered_valid_cols_bva.csv"   # Changed from bva to ecomm
+    last_year_secondary: "session_last_filtered_valid_cols_lva.csv"  # Changed from lva to tfm
   streams_catalog: "streams.json"
   
 # Session processing configuration (SAME STRUCTURE)

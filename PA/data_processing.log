@@ -1,0 +1,169 @@
+2025-08-18 14:26:45,898 - __main__ - INFO - D:\repos\PA\app\main.py:145 - ============================================================
+2025-08-18 14:26:45,898 - __main__ - INFO - D:\repos\PA\app\main.py:146 - Starting Data Processing Pipeline with MLflow Integration
+2025-08-18 14:26:45,898 - __main__ - INFO - D:\repos\PA\app\main.py:147 - ============================================================
+2025-08-18 14:26:45,934 - utils.config_utils - INFO - D:\repos\PA\app\utils\config_utils.py:22 - Successfully loaded configuration from config/config.yaml
+2025-08-18 14:26:46,004 - utils.config_utils - INFO - D:\repos\PA\app\utils\config_utils.py:22 - Successfully loaded configuration from config/config_vet.yaml
+2025-08-18 14:26:46,006 - __main__ - INFO - D:\repos\PA\app\main.py:159 - Loaded event-specific configuration from config/config_vet.yaml
+2025-08-18 14:26:46,006 - __main__ - INFO - D:\repos\PA\app\main.py:183 - Initializing MLflow tracking
+2025-08-18 14:26:46,006 - utils.mlflow_utils - ERROR - D:\repos\PA\app\utils\mlflow_utils.py:44 - Environment variables are not configured correctly. Please set MLFLOW_EXPERIMENT_ID, DATABRICKS_HOST, and MLFLOW_TRACKING_URI
+2025-08-18 14:26:46,008 - __main__ - ERROR - D:\repos\PA\app\main.py:197 - Failed to initialize MLflow: Environment variables are not configured correctly. Please set MLFLOW_EXPERIMENT_ID, DATABRICKS_HOST, and MLFLOW_TRACKING_URI
+2025-08-18 14:26:46,008 - __main__ - WARNING - D:\repos\PA\app\main.py:199 - MLFLOW_EXPERIMENT_ID not set. Continuing without MLflow tracking.
+2025-08-18 14:26:46,008 - __main__ - WARNING - D:\repos\PA\app\main.py:200 - To enable MLflow, set: MLFLOW_EXPERIMENT_ID, DATABRICKS_HOST, MLFLOW_TRACKING_URI
+2025-08-18 14:26:46,008 - __main__ - INFO - D:\repos\PA\app\main.py:226 - Running all steps (1-10)
+2025-08-18 14:26:46,008 - __main__ - INFO - D:\repos\PA\app\main.py:237 - ============================================================
+2025-08-18 14:26:46,008 - __main__ - INFO - D:\repos\PA\app\main.py:238 - Starting Registration Processing (Step 1)
+2025-08-18 14:26:46,008 - __main__ - INFO - D:\repos\PA\app\main.py:239 - ============================================================
+2025-08-18 14:26:46,010 - pipeline - INFO - D:\repos\PA\app\pipeline.py:33 - Initializing registration processor for event: bva
+2025-08-18 14:26:46,010 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:125 - Initialized RegistrationProcessor for bva event with output to data/bva
+2025-08-18 14:26:46,012 - pipeline - INFO - D:\repos\PA\app\pipeline.py:38 - Detected veterinary event - applying veterinary-specific processing functions
+2025-08-18 14:26:46,012 - utils.vet_specific_functions - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:118 - === APPLYING VET-SPECIFIC FUNCTIONS ===
+2025-08-18 14:26:46,012 - utils.vet_specific_functions - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:147 - *** VET-SPECIFIC FUNCTIONS SUCCESSFULLY APPLIED ***
+2025-08-18 14:26:46,012 - registration_processor - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:148 - *** VET-SPECIFIC FUNCTIONS ACTIVE ***
+2025-08-18 14:26:46,012 - pipeline - INFO - D:\repos\PA\app\pipeline.py:47 - \u2705 Veterinary-specific processing functions successfully applied and verified
+2025-08-18 14:26:46,012 - registration_processor - INFO - D:\repos\PA\app\pipeline.py:48 - Veterinary-specific functions are active for this processing session
+2025-08-18 14:26:46,012 - pipeline - INFO - D:\repos\PA\app\pipeline.py:69 - Registration processor initialized with veterinary-specific functions
+2025-08-18 14:26:46,012 - pipeline - INFO - D:\repos\PA\app\pipeline.py:72 - Starting registration data processing
+2025-08-18 14:26:46,014 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1463 - Starting data processing workflow
+2025-08-18 14:26:46,014 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:36 - Loading JSON data from data/bva/20250609_registration_BVA24_BVA25.json
+2025-08-18 14:26:46,203 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:40 - Successfully loaded 5992 records from data/bva/20250609_registration_BVA24_BVA25.json
+2025-08-18 14:26:46,203 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:36 - Loading JSON data from data/bva/20250428_registration_LVS24.json
+2025-08-18 14:26:46,556 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:40 - Successfully loaded 11426 records from data/bva/20250428_registration_LVS24.json
+2025-08-18 14:26:46,556 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:36 - Loading JSON data from data/bva/20250609_demographics_BVA24_BVA25.json
+2025-08-18 14:26:46,835 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:40 - Successfully loaded 36889 records from data/bva/20250609_demographics_BVA24_BVA25.json
+2025-08-18 14:26:46,835 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:36 - Loading JSON data from data/bva/20250428_demographics_LVS24.json
+2025-08-18 14:26:47,345 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:40 - Successfully loaded 65186 records from data/bva/20250428_demographics_LVS24.json
+2025-08-18 14:26:48,341 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:179 - Loaded 5992 bva registration records and 11426 lva registration records
+2025-08-18 14:26:48,341 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:182 - Loaded 36889 bva demographic records and 65186 lva demographic records
+2025-08-18 14:26:50,135 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:204 - Saved initial data to CSV files in data/bva/csv/
+2025-08-18 14:26:50,967 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:288 - Preprocessed data - bva: 5975 records, lva: 11400 records
+2025-08-18 14:26:50,967 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:291 - Found 1836 unique job titles
+2025-08-18 14:26:51,004 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:474 - Split bva data: 2847 records for this year, 3128 records for last year
+2025-08-18 14:26:51,005 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:477 - Split bva demo data: 18649 records for this year, 18240 records for last year
+2025-08-18 14:26:51,031 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:500 - After filtering and deduplication: bva this year: 1984, bva last year: 1912, lva last year: 5563
+2025-08-18 14:26:51,258 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:531 - Identified 439 returning visitors from bva and 237 from lva
+2025-08-18 14:26:51,259 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:534 - Total unique returning visitors: 592
+2025-08-18 14:26:51,293 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:573 - Added badge history information to current year data
+2025-08-18 14:26:51,295 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:575 - Number of unique BadgeId_last_year_bva values: 440
+2025-08-18 14:26:51,296 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:578 - Number of unique BadgeId_last_year_lva values: 238
+2025-08-18 14:27:00,111 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:600 - Calculated days until event for all datasets
+2025-08-18 14:27:00,145 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:607 - Returning visitors: 592 out of 1984
+2025-08-18 14:27:00,296 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:676 - Saved final processed data to data/bva/csv/
+2025-08-18 14:27:00,299 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1112 - Starting demographic data processing workflow
+2025-08-18 14:27:01,164 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:697 - Saved demographic data to CSV files
+2025-08-18 14:27:01,185 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:728 - Extracted 7 unique specializations for this year
+2025-08-18 14:27:01,185 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:731 - Extracted 8 unique specializations for bva last year
+2025-08-18 14:27:01,185 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:734 - Extracted 10 unique specializations for lva last year
+2025-08-18 14:27:01,426 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:805 - Extracted 0 unique job roles
+2025-08-18 14:27:01,511 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:819 - bva returning visitors: 439
+2025-08-18 14:27:01,511 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:820 - lva returning visitors: 237
+2025-08-18 14:27:01,586 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:849 - Found demographic data for 4114 returning bva visitors
+2025-08-18 14:27:01,586 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:852 - Found demographic data for 2175 returning lva visitors
+2025-08-18 14:27:01,754 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:903 - Found 1874 registration records with demographic data for this year
+2025-08-18 14:27:01,754 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:906 - Found 387 registration records with demographic data for bva last year
+2025-08-18 14:27:01,754 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:909 - Found 209 registration records with demographic data for lva last year
+2025-08-18 14:27:04,394 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:960 - Created 1874 concatenated registration data entries
+2025-08-18 14:27:04,759 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:960 - Created 387 concatenated registration data entries
+2025-08-18 14:27:04,939 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:960 - Created 209 concatenated registration data entries
+2025-08-18 14:27:05,006 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1026 - Saved concatenated registration data to JSON files
+2025-08-18 14:27:05,151 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for 65K58K5
+2025-08-18 14:27:08,521 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for L55IKEV
+2025-08-18 14:27:11,102 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1065 - Created 1872 demographic data entries
+2025-08-18 14:27:11,601 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for PRPXUXC
+2025-08-18 14:27:11,805 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for 6VBXF6E
+2025-08-18 14:27:12,341 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1065 - Created 385 demographic data entries
+2025-08-18 14:27:12,525 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for 7CFT4RW
+2025-08-18 14:27:14,096 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1065 - Created 208 demographic data entries
+2025-08-18 14:27:14,318 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1108 - Saved demographic data to JSON files
+2025-08-18 14:27:14,321 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1122 - Demographic data processing workflow completed successfully
+2025-08-18 14:27:14,322 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1225 - Starting to combine demographic data with registration data
+2025-08-18 14:27:14,331 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1290 - Initial counts - bva returning: 439, lva returning: 237
+2025-08-18 14:27:14,332 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1295 - After filtering: current year: 1874, bva last year: 439, lva last year: 237
+2025-08-18 14:27:14,477 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for 65K58K5
+2025-08-18 14:27:17,835 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for L55IKEV
+2025-08-18 14:27:20,409 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1065 - Created 1872 demographic data entries
+2025-08-18 14:27:20,908 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for PRPXUXC
+2025-08-18 14:27:21,112 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for 6VBXF6E
+2025-08-18 14:27:21,650 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1065 - Created 385 demographic data entries
+2025-08-18 14:27:21,831 - root - WARNING - D:\repos\PA\app\registration_processor.py:1063 - No demo data for 7CFT4RW
+2025-08-18 14:27:23,400 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1065 - Created 208 demographic data entries
+2025-08-18 14:27:23,401 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1313 - Processed demographic data. Created demographic data for 1872 this year, 385 last year bva, and 208 last year lva
+2025-08-18 14:27:29,467 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1172 - Populated demographic data columns for 1872 records
+2025-08-18 14:27:30,019 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1172 - Populated demographic data columns for 385 records
+2025-08-18 14:27:30,358 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1172 - Populated demographic data columns for 208 records
+2025-08-18 14:27:30,359 - registration_processor - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:35 - Applying veterinary-specific job role processing logic
+2025-08-18 14:27:30,378 - registration_processor - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:109 - Processed 5 job roles using veterinary-specific logic
+2025-08-18 14:27:30,379 - registration_processor - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:35 - Applying veterinary-specific job role processing logic
+2025-08-18 14:27:30,553 - registration_processor - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:109 - Processed 135 job roles using veterinary-specific logic
+2025-08-18 14:27:30,554 - registration_processor - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:35 - Applying veterinary-specific job role processing logic
+2025-08-18 14:27:30,596 - registration_processor - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:109 - Processed 30 job roles using veterinary-specific logic
+2025-08-18 14:27:30,598 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1331 - Processed job roles for all demographic data entries
+2025-08-18 14:27:30,598 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1332 - Length of df_reg_demo_this: 1874
+2025-08-18 14:27:30,598 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1333 - Length of df_reg_demo_last_bva: 439
+2025-08-18 14:27:30,598 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1336 - Length of df_reg_demo_last_lva: 237
+2025-08-18 14:27:30,598 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1342 - BadgeId_last_year_bva column exists in final dataframe
+2025-08-18 14:27:30,600 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1343 - Number of unique BadgeId_last_year_bva values: 429
+2025-08-18 14:27:30,600 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1352 - BadgeId_last_year_lva column exists in final dataframe
+2025-08-18 14:27:30,601 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1353 - Number of unique BadgeId_last_year_lva values: 206
+2025-08-18 14:27:30,741 - registration_processor - INFO - D:\repos\PA\app\utils\vet_specific_functions.py:10 - Applying veterinary-specific practice type filling logic
+2025-08-18 14:27:30,741 - registration_processor - WARNING - D:\repos\PA\app\registration_processor.py:1220 - fill_missing_practice_types called for vet event but vet-specific functions not properly applied
+2025-08-18 14:27:30,741 - registration_processor - WARNING - D:\repos\PA\app\registration_processor.py:1220 - fill_missing_practice_types called for vet event but vet-specific functions not properly applied
+2025-08-18 14:27:30,741 - registration_processor - WARNING - D:\repos\PA\app\registration_processor.py:1220 - fill_missing_practice_types called for vet event but vet-specific functions not properly applied
+2025-08-18 14:27:30,743 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1374 - Filled missing practice types using vet-specific practices data
+2025-08-18 14:27:30,796 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1404 - Saved combined demographic and registration data to CSV files
+2025-08-18 14:27:30,796 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1413 - Finished combining demographic with registration data
+2025-08-18 14:27:30,798 - registration_processor - INFO - D:\repos\PA\app\registration_processor.py:1477 - Data processing workflow completed successfully
+2025-08-18 14:27:30,798 - pipeline - INFO - D:\repos\PA\app\pipeline.py:74 - Registration data processing completed
+2025-08-18 14:27:30,798 - __main__ - INFO - D:\repos\PA\app\main.py:270 - ============================================================
+2025-08-18 14:27:30,800 - __main__ - INFO - D:\repos\PA\app\main.py:271 - Starting Scan Processing (Step 2)
+2025-08-18 14:27:30,800 - __main__ - INFO - D:\repos\PA\app\main.py:272 - ============================================================
+2025-08-18 14:27:30,801 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:54 - Initialized ScanProcessor for bva event with output to data/bva
+2025-08-18 14:27:30,802 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:439 - Starting scan data processing workflow
+2025-08-18 14:27:31,537 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:103 - Loaded session data: 225 records this year, 208 bva records last year, 702 lva records last year
+2025-08-18 14:27:31,537 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:109 - Loaded seminar scan data: 11594 bva records, 40864 lva records
+2025-08-18 14:27:31,642 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:161 - Loaded registration data: 439 bva records, 237 lva records
+2025-08-18 14:27:31,642 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:166 - Loaded detailed registration data: 387 bva records, 209 lva records
+2025-08-18 14:27:32,315 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:233 - Enhanced seminar data with seminar names: 11594 bva records, 40864 lva records
+2025-08-18 14:27:32,335 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:274 - bva seminar-session intersection: 101 out of 102 seminar keys and 109 session keys
+2025-08-18 14:27:32,335 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:277 - lva seminar-session intersection: 308 out of 311 seminar keys and 340 session keys
+2025-08-18 14:27:32,335 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:280 - bva registration-seminar badge intersection: 408 out of 439 registration badges and 1748 seminar badges
+2025-08-18 14:27:32,335 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:283 - lva registration-seminar badge intersection: 216 out of 237 registration badges and 6696 seminar badges
+2025-08-18 14:27:32,354 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:344 - Total seminar records: 11594
+2025-08-18 14:27:32,354 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:345 - Records with matching badge IDs: 3021 (26.06%)
+2025-08-18 14:27:32,398 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:344 - Total seminar records: 40864
+2025-08-18 14:27:32,398 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:345 - Records with matching badge IDs: 1490 (3.65%)
+2025-08-18 14:27:32,402 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:374 - Successfully enhanced seminar data with demographics
+2025-08-18 14:27:34,854 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:419 - Saved processed scan data to data/bva/output/
+2025-08-18 14:27:34,854 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:420 - bva scan data: 11594 records
+2025-08-18 14:27:34,856 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:423 - lva scan data: 40864 records
+2025-08-18 14:27:34,856 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:426 - bva sessions with demographics: 11594 records
+2025-08-18 14:27:34,856 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:429 - lva sessions with demographics: 40864 records
+2025-08-18 14:27:34,856 - scan_processor - INFO - D:\repos\PA\app\scan_processor.py:448 - Scan data processing workflow completed successfully
+2025-08-18 14:27:34,856 - __main__ - INFO - D:\repos\PA\app\main.py:305 - ============================================================
+2025-08-18 14:27:34,856 - __main__ - INFO - D:\repos\PA\app\main.py:306 - Starting Session Processing (Step 3)
+2025-08-18 14:27:34,856 - __main__ - INFO - D:\repos\PA\app\main.py:307 - ============================================================
+2025-08-18 14:27:34,870 - session_processor - INFO - D:\repos\PA\app\session_processor.py:103 - Successfully loaded environment variables
+2025-08-18 14:27:34,870 - session_processor - INFO - D:\repos\PA\app\session_processor.py:74 - Initialized SessionProcessor with output to data/bva
+2025-08-18 14:27:34,872 - session_processor - INFO - D:\repos\PA\app\session_processor.py:512 - Starting session data processing workflow
+2025-08-18 14:27:34,948 - session_processor - INFO - D:\repos\PA\app\session_processor.py:138 - Loaded session data: 225 records this year, 208 BVA records last year, 702 LVA records last year
+2025-08-18 14:27:34,977 - session_processor - INFO - D:\repos\PA\app\session_processor.py:200 - Filtered session data: 121 records this year, 109 BVA records last year, 339 LVA records last year
+2025-08-18 14:27:34,985 - session_processor - INFO - D:\repos\PA\app\session_processor.py:250 - Selected relevant columns and cleaned data
+2025-08-18 14:27:34,987 - session_processor - INFO - D:\repos\PA\app\session_processor.py:280 - Extracted 52 unique streams
+2025-08-18 14:27:35,197 - session_processor - INFO - D:\repos\PA\app\session_processor.py:293 - Loaded cached stream descriptions from data/bva\output\streams_cache.json
+2025-08-18 14:27:35,199 - session_processor - INFO - D:\repos\PA\app\session_processor.py:341 - Using existing cached stream descriptions
+2025-08-18 14:27:35,199 - session_processor - INFO - D:\repos\PA\app\session_processor.py:384 - Stream catalog ready with 52 entries
+2025-08-18 14:27:35,357 - session_processor - INFO - D:\repos\PA\app\session_processor.py:394 - Saved stream catalog to data/bva\output\streams.json
+2025-08-18 14:27:35,357 - session_processor - WARNING - D:\repos\PA\app\session_processor.py:441 - Found unmapped abbreviations: {''}
+2025-08-18 14:27:35,367 - session_processor - INFO - D:\repos\PA\app\session_processor.py:460 - Expanded sponsor abbreviations to full names
+2025-08-18 14:27:35,399 - session_processor - INFO - D:\repos\PA\app\session_processor.py:491 - Saved processed session data to data/bva/output/
+2025-08-18 14:27:35,399 - session_processor - INFO - D:\repos\PA\app\session_processor.py:494 - BVA last year sessions: 109 records
+2025-08-18 14:27:35,401 - session_processor - INFO - D:\repos\PA\app\session_processor.py:497 - LVA last year sessions: 339 records
+2025-08-18 14:27:35,401 - session_processor - INFO - D:\repos\PA\app\session_processor.py:500 - This year sessions: 121 records
+2025-08-18 14:27:35,401 - session_processor - INFO - D:\repos\PA\app\session_processor.py:525 - Session data processing workflow completed successfully
+2025-08-18 14:27:35,401 - __main__ - INFO - D:\repos\PA\app\main.py:340 - ============================================================
+2025-08-18 14:27:35,401 - __main__ - INFO - D:\repos\PA\app\main.py:341 - Starting Neo4j Processing Step 4
+2025-08-18 14:27:35,401 - __main__ - INFO - D:\repos\PA\app\main.py:342 - ============================================================
+2025-08-18 14:27:35,401 - __main__ - ERROR - D:\repos\PA\app\main.py:379 - Pipeline failed: run_neo4j_processing() got an unexpected keyword argument 'steps'
+Traceback (most recent call last):
+  File "D:\repos\PA\app\main.py", line 347, in main
+    run_neo4j_processing(config, steps=[step_num])
+TypeError: run_neo4j_processing() got an unexpected keyword argument 'steps'
