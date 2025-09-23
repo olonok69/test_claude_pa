@@ -129,7 +129,25 @@ class SessionRecommendationProcessor:
         # Output directory
         self.output_dir = Path(config.get("output_dir", "data/output"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
+        # Intermediary CSV enrichment for step 10: override base profile and contact fields from registration+demographics output
+        # Base profile fields + contact fields commonly requested in exports
+        self._csv_enrichment_fields = [
+            "Company",
+            "JobTitle",
+            "Email_domain",
+            "Country",
+            "Source",
+            # Contact fields expected by ecomm/email.ipynb and export_additional_visitor_fields
+            "Email",
+            "Forename",
+            "Surname",
+            "Tel",
+            "Mobile",
+        ]
+        self._visitor_profile_map = {}
+        self._load_registration_demographics_this_year()
+
         self.logger.info(f"SessionRecommendationProcessor initialized for {self.show_name} show")
         self.logger.info(f"Filtering enabled: {self.enable_filtering}")
         if self.enable_filtering:
@@ -158,6 +176,52 @@ class SessionRecommendationProcessor:
             self.logger.error(f"Error initializing model: {str(e)}")
             self.model = None
 
+    def _load_registration_demographics_this_year(self) -> None:
+        """Load intermediary CSV to enrich visitor attributes for output exports.
+        Reads the file configured under output_files.registration_with_demographic.this_year.
+        """
+        try:
+            out_cfg = self.config.get("output_files", {}).get("registration_with_demographic", {})
+            filename = out_cfg.get("this_year", "Registration_data_with_demographicdata_bva_this.csv")
+            # File is written under <output_dir>/output/<filename>
+            csv_path = Path(self.config.get("output_dir", "data/output")) / "output" / filename
+            if not csv_path.exists():
+                self.logger.info(f"Intermediary CSV for enrichment not found: {csv_path}")
+                return
+            df = pd.read_csv(csv_path, dtype=str)
+            if "BadgeId" not in df.columns:
+                self.logger.warning(f"Intermediary CSV missing 'BadgeId' column: {csv_path}")
+                return
+            # Keep only the fields we need
+            present_fields = [c for c in self._csv_enrichment_fields if c in df.columns]
+            if not present_fields:
+                self.logger.info("No enrichment fields present in intermediary CSV; skipping enrichment load")
+                return
+            subset = df[["BadgeId", *present_fields]].copy()
+            # Build map BadgeId -> field dict
+            for _, row in subset.iterrows():
+                bid = str(row.get("BadgeId", ""))
+                if not bid:
+                    continue
+                self._visitor_profile_map[bid] = {f: (row.get(f) if pd.notna(row.get(f)) else "NA") for f in present_fields}
+            self.logger.info(f"Loaded enrichment profiles for {len(self._visitor_profile_map)} visitors from {csv_path}")
+        except Exception as e:
+            self.logger.error(f"Failed to load intermediary CSV enrichment: {str(e)}", exc_info=True)
+
+    def _apply_csv_enrichment(self, visitor: Dict) -> Dict:
+        """Override base fields with values from intermediary CSV when present."""
+        try:
+            bid = str(visitor.get("BadgeId", ""))
+            if not bid or bid not in self._visitor_profile_map:
+                return visitor
+            enrichment = self._visitor_profile_map[bid]
+            for field in self._csv_enrichment_fields:
+                if field in enrichment:
+                    visitor[field] = enrichment.get(field, visitor.get(field, "NA"))
+            return visitor
+        except Exception:
+            return visitor
+
     def _get_visitors_to_process(self, create_only_new: bool = False) -> List[str]:
         """
         Get list of visitors to process based on create_only_new flag.
@@ -175,11 +239,13 @@ class SessionRecommendationProcessor:
                 with driver.session() as session:
                     if create_only_new:
                         # Only get visitors without recommendations
-                        # Check for NULL, "0", or missing has_recommendation
+                        # Newer Neo4j versions deprecate NOT EXISTS(variable.property) for property existence.
+                        # If a property does not exist, referencing it returns NULL, so the IS NULL predicate
+                        # covers both missing and explicit null cases. We also include = "0" for unprocessed.
                         query = f"""
                         MATCH (v:{self.visitor_this_year_label})
                         WHERE (v.show = $show_name OR v.show IS NULL)
-                        AND (v.has_recommendation IS NULL OR v.has_recommendation = "0" OR NOT EXISTS(v.has_recommendation))
+                        AND (v.has_recommendation IS NULL OR v.has_recommendation = "0")
                         RETURN v.BadgeId as badge_id
                         """
                     else:
@@ -224,6 +290,8 @@ class SessionRecommendationProcessor:
                     
                     if record:
                         visitor_data = dict(record["v"])
+                        # Apply CSV enrichment overrides for base context fields
+                        visitor_data = self._apply_csv_enrichment(visitor_data)
                         self._visitor_cache[badge_id] = visitor_data
                         return visitor_data
                     
@@ -877,6 +945,7 @@ class SessionRecommendationProcessor:
                                     MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
                                     WHERE v.show = $show_name
                                     MATCH (s:{self.session_this_year_label} {{session_id: $session_id}})
+                                    WHERE s.title IS NOT NULL AND trim(s.title) <> ''
                                     MERGE (v)-[r:IS_RECOMMENDED]->(s)
                                     SET r.similarity_score = $score,
                                         r.generated_at = $timestamp,
@@ -920,6 +989,14 @@ class SessionRecommendationProcessor:
                 data = json.load(f)
             
             rows = []
+            # Config-driven additional visitor fields for enrichment
+            extra_fields = self.recommendation_config.get("export_additional_visitor_fields", [])
+            extra_fields = [f for f in extra_fields if isinstance(f, str) and f]
+            # Always include common contact fields if present in visitor profile
+            for f in ["Email", "Forename", "Surname", "Tel", "Mobile"]:
+                if f not in extra_fields:
+                    extra_fields.append(f)
+
             for visitor_id, recs in data.get("recommendations", {}).items():
                 visitor_info = recs.get("visitor", {})
                 
@@ -937,10 +1014,16 @@ class SessionRecommendationProcessor:
                         col_name = attr_name.replace(" ", "_").replace(".", "")
                         row[col_name] = visitor_info.get(attr_name, "NA")
                     
-                    # Add additional visitor context fields
-                    additional_fields = ["Company", "JobTitle", "Email_domain", "Country", "Source"]
-                    for field in additional_fields:
+                    # Add base context fields (if not part of similarity attributes)
+                    base_context_fields = ["Company", "JobTitle", "Email_domain", "Country", "Source"]
+                    for field in base_context_fields:
                         if field not in self.similarity_attributes:
+                            row[field] = visitor_info.get(field, "NA")
+
+                    # Add configured extra enrichment fields (Email, Forename, Surname, Tel, Mobile, etc.)
+                    for field in extra_fields:
+                        # Only add if not already present (avoid overwrite) and value exists
+                        if field not in row:
                             row[field] = visitor_info.get(field, "NA")
                     
                     # Add session recommendation details
@@ -965,9 +1048,19 @@ class SessionRecommendationProcessor:
                 attr.replace(" ", "_").replace(".", "") for attr in self.similarity_attributes.keys()
             ]]
             session_cols = [col for col in df.columns if col.startswith("session_")]
-            other_cols = [col for col in df.columns if col not in priority_cols + similarity_cols + session_cols]
+
+            # Keep extra/enrichment fields grouped after priority + similarity
+            enrichment_cols = [c for c in ["Company", "JobTitle", "Email_domain", "Country", "Source"] if c in df.columns]
+            # Append configured extra fields preserving order
+            for f in extra_fields:
+                if f in df.columns and f not in enrichment_cols:
+                    enrichment_cols.append(f)
+
+            # Other cols are anything not already categorized
+            categorized = set(priority_cols + similarity_cols + session_cols + enrichment_cols)
+            other_cols = [c for c in df.columns if c not in categorized]
             
-            ordered_cols = priority_cols + similarity_cols + other_cols + session_cols
+            ordered_cols = priority_cols + similarity_cols + enrichment_cols + other_cols + session_cols
             df = df[[col for col in ordered_cols if col in df.columns]]
             
             return df
@@ -993,6 +1086,9 @@ class SessionRecommendationProcessor:
             visitors_to_process = self._get_visitors_to_process(create_only_new)
             
             if not visitors_to_process:
+                # Ensure summary utilities have the expected alias key even when nothing processed
+                self.statistics["visitors_processed"] = 0
+                self.statistics["total_visitors_processed"] = 0
                 self.logger.info("No visitors to process for recommendations.")
                 return
             

@@ -186,6 +186,17 @@ class SessionProcessor:
                 "title"
             ].apply(self.clean_text)
 
+            # Deterministic sort before de-dup so we consistently keep the earliest scheduled session
+            def stable_sort(df: pd.DataFrame) -> pd.DataFrame:
+                sort_cols = [c for c in ["date", "start_time", "session_id"] if c in df.columns]
+                if sort_cols:
+                    return df.sort_values(by=sort_cols, ascending=True, kind="stable")
+                return df
+
+            self.session_this_filtered = stable_sort(self.session_this_filtered)
+            self.session_last_filtered_bva = stable_sort(self.session_last_filtered_bva)
+            self.session_last_filtered_lva = stable_sort(self.session_last_filtered_lva)
+
             # Remove duplicates based on key_text
             self.session_this_filtered = self.session_this_filtered.drop_duplicates(
                 subset=["key_text"]
@@ -245,6 +256,37 @@ class SessionProcessor:
             )
             self.session_last_filtered_valid_cols_lva = (
                 self.session_last_filtered_valid_cols_lva.fillna("")
+            )
+
+            # Upstream data-quality gate: drop and quarantine placeholder rows (e.g., blank titles)
+            def drop_and_quarantine(df: pd.DataFrame, name: str) -> pd.DataFrame:
+                required_text_fields = ["title", "synopsis_stripped", "theatre__name", "key_text", "stream"]
+                # Identify placeholder rows: all core text fields blank OR title blank
+                is_blank = df[required_text_fields].apply(lambda s: s.astype(str).str.strip() == "").all(axis=1)
+                is_title_blank = df["title"].astype(str).str.strip() == ""
+                mask_quarantine = is_blank | is_title_blank
+                quarantined = df[mask_quarantine].copy()
+                cleaned = df[~mask_quarantine].copy()
+
+                if len(quarantined) > 0:
+                    q_path = os.path.join(self.output_dir, "output", f"quarantined_sessions_{name}.csv")
+                    try:
+                        quarantined.to_csv(q_path, index=False)
+                        self.logger.warning(
+                            f"Quarantined {len(quarantined)} placeholder sessions from {name} → {q_path}"
+                        )
+                    except Exception as e:
+                        self.logger.error(f"Failed to write quarantine file for {name}: {e}")
+                return cleaned
+
+            self.session_this_filtered_valid_cols = drop_and_quarantine(
+                self.session_this_filtered_valid_cols, "this_year"
+            )
+            self.session_last_filtered_valid_cols_bva = drop_and_quarantine(
+                self.session_last_filtered_valid_cols_bva, "past_year_bva"
+            )
+            self.session_last_filtered_valid_cols_lva = drop_and_quarantine(
+                self.session_last_filtered_valid_cols_lva, "past_year_lva"
             )
 
             self.logger.info("Selected relevant columns and cleaned data")

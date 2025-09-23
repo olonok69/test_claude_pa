@@ -190,6 +190,10 @@ class SessionEmbeddingProcessor:
             
             # Filter by node labels
             where_conditions.append("(s:Sessions_this_year OR s:Sessions_past_year)")
+
+            # Skip placeholder sessions with no meaningful text to embed
+            # This prevents creating identical embeddings for empty/null content
+            where_conditions.append("(coalesce(s.title,'') <> '' OR coalesce(s.synopsis_stripped,'') <> '' OR coalesce(s.theatre__name,'') <> '' OR coalesce(s.key_text,'') <> '' OR coalesce(s.stream,'') <> '')")
             
             where_clause = "WHERE " + " AND ".join(where_conditions)
 

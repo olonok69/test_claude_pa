@@ -123,16 +123,30 @@ class Neo4jSessionProcessor:
             driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
             
             with driver.session() as session:
+                # Define core text fields used downstream (embedding, matching)
+                required_text_fields = ["title", "synopsis_stripped", "theatre__name", "key_text", "stream"]
+
                 for index, row in data.iterrows():
                     try:
                         # Create properties dictionary
                         properties = {}
                         for csv_col, node_prop in properties_map.items():
-                            if csv_col in row and pd.notna(row[csv_col]):
-                                properties[node_prop] = str(row[csv_col])
+                            if csv_col in row:
+                                val = row[csv_col]
+                                # Normalize NaN to empty string for text fields
+                                if pd.isna(val):
+                                    val_str = ""
+                                else:
+                                    val_str = str(val)
+                                properties[node_prop] = val_str
                         
                         # Add show attribute
                         properties['show'] = self.show_name
+
+                        # Skip placeholder sessions with no meaningful text
+                        if all(properties.get(f, "").strip() == "" for f in required_text_fields):
+                            nodes_skipped += 1
+                            continue
 
                         # Check if node already exists (only if create_only_new is True)
                         if create_only_new:
@@ -405,38 +419,137 @@ class Neo4jSessionProcessor:
             self.logger.info("Processing sessions from this year")
             csv_file_path = os.path.join(self.output_dir, "output/session_this_filtered_valid_cols.csv")
             data = pd.read_csv(csv_file_path)
-            properties_map = {col: col for col in data.columns}
             node_label = "Sessions_this_year"
 
-            # For Sessions_this_year, always recreate all nodes (delete existing ones first)
-            self.logger.info("Recreating all Sessions_this_year nodes")
+            if create_only_new:
+                # INCREMENTAL MODE: Merge / update sessions without deleting existing ones
+                self.logger.info("Incremental mode enabled (create_only_new=True): merging Sessions_this_year; preserving IS_RECOMMENDED relationships")
 
-            # Delete existing Sessions_this_year nodes and their relationships
-            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
-            try:
-                with driver.session() as session:
-                    # Delete all Sessions_this_year nodes and their relationships
-                    delete_query = """
-                    MATCH (s:Sessions_this_year)
-                    WHERE s.show = $show
-                    DETACH DELETE s
-                    """
-                    session.run(delete_query, show=self.show_name)
-                    self.logger.info("Deleted all existing Sessions_this_year nodes")
-            finally:
+                driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+                nodes_created = 0
+                nodes_updated = 0
+                has_stream_added = 0
+                has_stream_removed = 0
+
+                # Pre-compute column list for property setting (exclude session_id to avoid accidental overwrite of identifier semantics)
+                all_columns = list(data.columns)
+                for idx, row in data.iterrows():
+                    try:
+                        session_id = str(row.get("session_id", "")).strip()
+                        if not session_id:
+                            continue
+
+                        # Build properties dictionary (stringify to keep consistency)
+                        props = {c: ("" if pd.isna(row[c]) else str(row[c])) for c in all_columns if c != "session_id"}
+                        props["show"] = self.show_name
+
+                        # Skip placeholder sessions with no meaningful text
+                        if all(props.get(f, "").strip() == "" for f in ["title", "synopsis_stripped", "theatre__name", "key_text", "stream"]):
+                            nodes_updated += 1  # treat as skipped/update
+                            continue
+
+                        with driver.session() as session:
+                            # MERGE the session node
+                            merge_query = f"""
+                            MERGE (s:{node_label} {{session_id:$session_id}})
+                            ON CREATE SET s.created_at = timestamp(), s.show = $show
+                            SET s += $props
+                            RETURN (s.created_at IS NOT NULL) AS created_flag  // placeholder to satisfy RETURN
+                            """
+                            # Track creation vs update via an existence check of a temp flag
+                            # We'll run an existence query before merge
+                            exists_query = f"""
+                            MATCH (s:{node_label} {{session_id:$session_id}})
+                            RETURN count(s) AS cnt
+                            """
+                            pre = session.run(exists_query, session_id=session_id).single()["cnt"]
+                            session.run(merge_query, session_id=session_id, show=self.show_name, props=props)
+                            if pre == 0:
+                                nodes_created += 1
+                            else:
+                                nodes_updated += 1
+
+                            # Stream handling (add/update relationships, create stream nodes if missing)
+                            stream_field = row.get("stream", "")
+                            # Normalize and split; allow multiple separated by ';'
+                            raw_tokens = [t.strip() for t in str(stream_field).split(";") if t and str(t).strip()]
+                            # Case-insensitive unique set while preserving first occurrence case
+                            seen_lower = set()
+                            tokens = []
+                            for t in raw_tokens:
+                                tl = t.lower()
+                                if tl not in seen_lower:
+                                    seen_lower.add(tl)
+                                    tokens.append(t)
+
+                            # Create missing Stream nodes & relationships
+                            for token in tokens:
+                                stream_merge_query = """
+                                MERGE (st:Stream {stream:$stream_case, show:$show})
+                                ON CREATE SET st.description = coalesce(st.description, $default_desc)
+                                WITH st
+                                MATCH (s:Sessions_this_year {session_id:$session_id})
+                                SET s.show = coalesce(s.show, $show)
+                                MERGE (s)-[:HAS_STREAM]->(st)
+                                """
+                                session.run(stream_merge_query, stream_case=token, show=self.show_name, session_id=session_id, default_desc=f"Stream for {token}")
+                            has_stream_added += len(tokens)
+
+                            # Remove obsolete HAS_STREAM relationships (only those whose stream no longer listed)
+                            if tokens:
+                                remove_query = """
+                                MATCH (s:Sessions_this_year {session_id:$session_id})-[r:HAS_STREAM]->(st:Stream {show:$show})
+                                WHERE NOT toLower(st.stream) IN $current_streams_lower
+                                DELETE r
+                                RETURN count(r) AS removed
+                                """
+                                removed = session.run(remove_query, session_id=session_id, show=self.show_name, current_streams_lower=[t.lower() for t in tokens]).single()["removed"]
+                                has_stream_removed += removed
+                    except Exception as e:
+                        self.logger.error(f"Incremental update failed for session_id={row.get('session_id')}: {e}")
+                        continue
+
                 driver.close()
 
-            nodes_created, nodes_skipped = self.load_csv_to_neo4j(
-                csv_file_path, node_label, properties_map, "session_id", create_only_new=False
-            )
+                # Update statistics (treat updates as 'skipped' to preserve existing summary logic)
+                self.statistics["nodes_created"]["sessions_this_year"] = nodes_created
+                self.statistics["nodes_skipped"]["sessions_this_year"] = nodes_updated
+                # Store additional incremental metrics
+                self.statistics.setdefault("incremental_metrics", {})["sessions_this_year_updated"] = nodes_updated
+                self.statistics["relationships_created"]["sessions_this_year_has_stream"] = has_stream_added
+                self.statistics["relationships_skipped"].setdefault("sessions_this_year_has_stream", 0)
+                self.statistics.setdefault("relationships_removed", {})["sessions_this_year_has_stream"] = has_stream_removed
 
-            self.statistics["nodes_created"]["sessions_this_year"] = nodes_created
-            self.statistics["nodes_skipped"]["sessions_this_year"] = nodes_skipped
+                self.logger.info(f"Incremental session processing complete: {nodes_created} created, {nodes_updated} updated; HAS_STREAM added tokens total={has_stream_added}, removed relationships={has_stream_removed}")
+            else:
+                # FULL REBUILD MODE (create_only_new=False) retains original delete + recreate semantics
+                self.logger.info("Full rebuild mode: recreating all Sessions_this_year nodes (will remove existing HAS_STREAM & IS_RECOMMENDED relationships to those sessions)")
+                properties_map = {col: col for col in data.columns}
+
+                # Delete existing Sessions_this_year nodes and their relationships
+                driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+                try:
+                    with driver.session() as session:
+                        delete_query = """
+                        MATCH (s:Sessions_this_year)
+                        WHERE s.show = $show
+                        DETACH DELETE s
+                        """
+                        session.run(delete_query, show=self.show_name)
+                        self.logger.info("Deleted all existing Sessions_this_year nodes")
+                finally:
+                    driver.close()
+
+                nodes_created, nodes_skipped = self.load_csv_to_neo4j(
+                    csv_file_path, node_label, properties_map, "session_id", create_only_new=False
+                )
+                self.statistics["nodes_created"]["sessions_this_year"] = nodes_created
+                self.statistics["nodes_skipped"]["sessions_this_year"] = nodes_skipped
 
             # Process sessions from last year (main event)
             self.logger.info(f"Processing sessions from last year {self.main_event_name}")
             csv_file_path = os.path.join(
-                self.output_dir, "output/session_last_filtered_valid_cols_bva.csv"
+                self.output_dir, f"output/session_last_filtered_valid_cols_{self.main_event_name}.csv"
             )
             data = pd.read_csv(csv_file_path)
             properties_map = {col: col for col in data.columns}
@@ -456,7 +569,7 @@ class Neo4jSessionProcessor:
             # Process sessions from last year (secondary event)
             self.logger.info(f"Processing sessions from last year {self.secondary_event_name}")
             csv_file_path = os.path.join(
-                self.output_dir, "output/session_last_filtered_valid_cols_lva.csv"
+                self.output_dir, f"output/session_last_filtered_valid_cols_{self.secondary_event_name}.csv"
             )
             data = pd.read_csv(csv_file_path)
             properties_map = {col: col for col in data.columns}
@@ -492,14 +605,15 @@ class Neo4jSessionProcessor:
             self.statistics["nodes_created"]["streams"] = nodes_created
             self.statistics["nodes_skipped"]["streams"] = nodes_skipped
 
-            # Create relationships between sessions this year and streams
-            self.logger.info("Creating stream relationships for sessions this year")
-            rels_created, rels_skipped = self.create_stream_relationships(
-                "Sessions_this_year", "Stream", create_only_new
-            )
-
-            self.statistics["relationships_created"]["sessions_this_year_has_stream"] = rels_created
-            self.statistics["relationships_skipped"]["sessions_this_year_has_stream"] = rels_skipped
+            # Create relationships between sessions this year and streams (only in full rebuild mode)
+            if not create_only_new:
+                self.logger.info("Creating stream relationships for sessions this year (full rebuild mode)")
+                rels_created, rels_skipped = self.create_stream_relationships(
+                    "Sessions_this_year", "Stream", create_only_new
+                )
+                # Only overwrite if not already populated by incremental logic
+                self.statistics["relationships_created"]["sessions_this_year_has_stream"] = rels_created
+                self.statistics["relationships_skipped"]["sessions_this_year_has_stream"] = rels_skipped
 
             # Create relationships between sessions past year and streams
             self.logger.info("Creating stream relationships for sessions past year")

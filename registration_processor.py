@@ -1440,19 +1440,20 @@ class RegistrationProcessor:
         # Use practice_type_columns from config for generic behavior
         practice_columns = self.config.get("practice_type_columns", {})
         this_year_col = practice_columns.get("current", "specialization_current")
-        past_year_col = practice_columns.get("past", "specialization_past")
+        past_year_col_bva = practice_columns.get("past_bva", "specialization_past")
+        past_year_col_lva = practice_columns.get("past_lva", "specialization_past")
 
-        self.logger.info(f"Using practice type columns - current: {this_year_col}, past: {past_year_col}")
+        self.logger.info(f"Using practice type columns - current: {this_year_col}, past BVA: {past_year_col_bva}, past LVA: {past_year_col_lva}")
 
         # Fill missing practice types using generic logic
         df_reg_demo_this = self.fill_missing_practice_types(
             df_reg_demo_this, practices, column=this_year_col
         )
         df_reg_demo_last_bva = self.fill_missing_practice_types(
-            df_reg_demo_last_bva, practices, column=past_year_col
+            df_reg_demo_last_bva, practices, column=past_year_col_bva
         )
         df_reg_demo_last_lva = self.fill_missing_practice_types(
-            df_reg_demo_last_lva, practices, column=past_year_col
+            df_reg_demo_last_lva, practices, column=past_year_col_lva
         )
         
         return df_reg_demo_this, df_reg_demo_last_bva, df_reg_demo_last_lva

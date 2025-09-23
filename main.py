@@ -218,6 +218,7 @@ def main():
             steps_to_run = [int(step.strip()) for step in args.only_steps.split(",")]
             if mlflow_manager:
                 mlflow.log_param("steps_to_run", str(steps_to_run))
+            logger.info(f"User-specified steps_to_run: {steps_to_run}")
 
         # If only recommendations flag is set, only run step 10
         if args.only_recommendations:
@@ -328,6 +329,37 @@ def main():
                     neo4j_steps_to_run.append(9)
                 if config.get("pipeline_steps", {}).get("session_recommendation_processing", True):
                     neo4j_steps_to_run.append(10)
+
+            # Pre-execution diagnostic matrix of Neo4j steps
+            neo4j_step_names = {
+                4: "Neo4j Visitor",
+                5: "Neo4j Session",
+                6: "Neo4j Job->Stream",
+                7: "Neo4j Specialization->Stream",
+                8: "Neo4j Visitor Relationships",
+                9: "Session Embeddings",
+                10: "Session Recommendations"
+            }
+            logger.info("Neo4j step selection summary:")
+            for s in range(4, 11):
+                enabled = config.get("pipeline_steps", {}).get({
+                    4:"neo4j_visitor_processing",
+                    5:"neo4j_session_processing",
+                    6:"neo4j_job_stream_processing",
+                    7:"neo4j_specialization_stream_processing",
+                    8:"neo4j_visitor_relationship_processing",
+                    9:"session_embedding_processing",
+                    10:"session_recommendation_processing"
+                }[s], True)
+                selected = s in neo4j_steps_to_run
+                status = ("RUN" if (enabled and selected) else
+                          "DISABLED" if not enabled else
+                          "NOT_SELECTED")
+                logger.info(f"  Step {s}: {neo4j_step_names[s]:32} -> {status}")
+            if create_only_new:
+                logger.info("Neo4j session processing will run in INCREMENTAL mode (create_only_new=True)")
+            else:
+                logger.info("Neo4j session processing will run in FULL REBUILD mode (create_only_new=False)")
 
             if neo4j_steps_to_run:
                 logger.info("Starting Neo4j data processing")

@@ -173,108 +173,79 @@ class Neo4jVisitorRelationshipProcessor:
         try:
             driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
 
-            # Get initial count of existing relationships
             with driver.session() as session:
-                initial_count_result = session.run(
+                # Count existing relationships of this type (used for reporting only)
+                initial_count = session.run(
                     f"""
                     MATCH (this_year:{visitor_this_year_label})-[r:{same_visitor_relationship}]->(last_year:{visitor_last_year_label})
-                    WHERE this_year.show = $show_name AND last_year.show = $show_name
-                    AND r.type = $relationship_type
+                    WHERE this_year.show = $show_name AND last_year.show = $show_name AND r.type = $relationship_type
                     RETURN COUNT(r) AS count
                     """,
                     show_name=self.show_name,
                     relationship_type=properties.get('type', relationship_type)
-                )
-                initial_count = initial_count_result.single()["count"]
-
+                ).single()["count"]
                 self.logger.info(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Found {initial_count} existing {relationship_type} Same_Visitor relationships"
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Existing {relationship_type} Same_Visitor relationships before run: {initial_count}"
                 )
 
-                if create_only_new and initial_count > 0:
-                    self.logger.info(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Skipping creation as create_only_new=True."
-                    )
-                    skipped_count = initial_count
-                    self.statistics["relationships_skipped"][f"same_visitor_{relationship_type}"] = skipped_count
-                    return
-
-                # Get all visitor nodes with matching last year IDs (including NA for compatibility)
+                # Determine badge history field
                 badge_id_field = f"{visitor_id_field}_last_year_{relationship_type}"
-                visitors_result = session.run(
-                    f"""
+
+                # Build a candidate list of pairs that are missing the Same_Visitor relationship
+                # This makes behavior consistent for both full and incremental runs and avoids
+                # coupling to has_recommendation.
+                candidate_query = f"""
                     MATCH (this_year:{visitor_this_year_label})
                     WHERE this_year.show = $show_name
-                    AND this_year.{badge_id_field} IS NOT NULL
-                    RETURN this_year.{visitor_id_field} as this_year_id, this_year.{badge_id_field} as last_year_id
-                    """,
-                    show_name=self.show_name
+                      AND this_year.{badge_id_field} IS NOT NULL
+                      AND this_year.{badge_id_field} <> 'NA'
+                    WITH this_year, this_year.{visitor_id_field} AS this_year_id, this_year.{badge_id_field} AS last_year_id
+                    MATCH (last_year:{visitor_last_year_label} {{{visitor_id_field}: last_year_id}})
+                    WHERE last_year.show = $show_name
+                    OPTIONAL MATCH (this_year)-[r:{same_visitor_relationship} {{type: $relationship_type}}]->(last_year)
+                    WITH this_year_id, last_year_id, r
+                    WHERE r IS NULL
+                    RETURN this_year_id, last_year_id
+                """
+
+                visitors_result = session.run(
+                    candidate_query,
+                    show_name=self.show_name,
+                    relationship_type=properties.get('type', relationship_type)
                 )
 
-                for record in visitors_result:
+                candidates = list(visitors_result)
+                self.logger.info(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Candidate current-year visitors missing Same_Visitor ({relationship_type}): {len(candidates)}"
+                )
+
+                for record in candidates:
                     this_year_id = record["this_year_id"]
                     last_year_id = record["last_year_id"]
 
-                    # Skip "NA" values without logging warnings (they are placeholders)
-                    if last_year_id == "NA":
-                        failed_count += 1
-                        continue
-
-                    # Check if the relationship already exists
-                    relationship_exists = session.run(
-                        f"""
-                        MATCH (this_year:{visitor_this_year_label} {{{visitor_id_field}: $this_year_id}})-[:{same_visitor_relationship} {{type: $relationship_type}}]->
-                              (last_year:{visitor_last_year_label} {{{visitor_id_field}: $last_year_id}})
-                        WHERE this_year.show = $show_name AND last_year.show = $show_name
-                        RETURN count(*) > 0 AS exists
-                        """,
-                        this_year_id=this_year_id,
-                        last_year_id=last_year_id,
-                        show_name=self.show_name,
-                        relationship_type=properties.get('type', relationship_type)
-                    ).single()["exists"]
-
-                    if not relationship_exists:
-                        # Check if both nodes exist before creating relationship
-                        nodes_exist = session.run(
+                    try:
+                        # Use MERGE to avoid duplicates if an untyped relationship already exists
+                        # Then SET the properties from configuration (e.g., type: ecomm/tfm)
+                        set_clause = ", ".join([f"r.{k} = ${k}" for k in properties.keys()])
+                        session.run(
                             f"""
                             MATCH (this_year:{visitor_this_year_label} {{{visitor_id_field}: $this_year_id}})
                             MATCH (last_year:{visitor_last_year_label} {{{visitor_id_field}: $last_year_id}})
                             WHERE this_year.show = $show_name AND last_year.show = $show_name
-                            RETURN count(*) > 0 AS exists
+                            MERGE (this_year)-[r:{same_visitor_relationship}]->(last_year)
+                            SET {set_clause}
                             """,
                             this_year_id=this_year_id,
                             last_year_id=last_year_id,
-                            show_name=self.show_name
-                        ).single()["exists"]
-
-                        if nodes_exist:
-                            try:
-                                # Create relationship with properties
-                                property_params = ", ".join([f"{k}: ${k}" for k in properties.keys()])
-                                session.run(
-                                    f"""
-                                    MATCH (this_year:{visitor_this_year_label} {{{visitor_id_field}: $this_year_id}})
-                                    MATCH (last_year:{visitor_last_year_label} {{{visitor_id_field}: $last_year_id}})
-                                    WHERE this_year.show = $show_name AND last_year.show = $show_name
-                                    CREATE (this_year)-[:{same_visitor_relationship} {{{property_params}}}]->(last_year)
-                                    """,
-                                    this_year_id=this_year_id,
-                                    last_year_id=last_year_id,
-                                    show_name=self.show_name,
-                                    **properties
-                                )
-                                relationship_count += 1
-                            except Exception as e:
-                                failed_count += 1
-                                self.logger.error(
-                                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationship for {this_year_id} -> {last_year_id}: {str(e)}"
-                                )
-                        else:
-                            failed_count += 1
-                            # Note: Not logging warning for missing nodes as they may be legitimately absent
-                    else:
-                        skipped_count += 1
+                            show_name=self.show_name,
+                            **properties
+                        )
+                        relationship_count += 1
+                    except Exception as e:
+                        failed_count += 1
+                        self.logger.error(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating Same_Visitor relationship for {this_year_id}->{last_year_id}: {str(e)}"
+                        )
 
         except Exception as e:
             self.logger.error(
@@ -348,14 +319,8 @@ class Neo4jVisitorRelationshipProcessor:
                 self.logger.info(
                     f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Found {initial_count} existing {relationship_type} attended_session relationships"
                 )
-
-                if create_only_new and initial_count > 0:
-                    self.logger.info(
-                        f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Skipping creation as create_only_new=True."
-                    )
-                    skipped_count = initial_count
-                    self.statistics["relationships_skipped"][f"attended_session_{relationship_type}"] = skipped_count
-                    return
+                # Note: Do not globally skip in incremental mode. We'll rely on per-row existence checks
+                # so that new relationships get added while existing ones are skipped idempotently.
 
                 # Load and process scan data
                 scan_files = self.config.get("scan_files", {})
@@ -374,13 +339,14 @@ class Neo4jVisitorRelationshipProcessor:
                     )
                     return
 
-                # Load and process scan data to match old processor behavior
+                # Load and process scan data to match old processor behavior (now configurable via YAML)
+                attended_inputs = scan_output_files.get("attended_session_inputs", {})
                 if relationship_type == "bva":
-                    scan_filename = "scan_bva_past.csv"
-                    filter_filename = "df_reg_demo_last_bva.csv"
+                    scan_filename = attended_inputs.get("past_year_main_scan", "scan_bva_past.csv")
+                    filter_filename = attended_inputs.get("past_year_main_filter", "df_reg_demo_last_bva.csv")
                 elif relationship_type == "lva":
-                    scan_filename = "scan_lva_past.csv"
-                    filter_filename = "df_reg_demo_last_lva.csv"
+                    scan_filename = attended_inputs.get("past_year_secondary_scan", "scan_lva_past.csv")
+                    filter_filename = attended_inputs.get("past_year_secondary_filter", "df_reg_demo_last_lva.csv")
                 else:
                     # For other show types, skip attended_session processing
                     self.logger.info(
