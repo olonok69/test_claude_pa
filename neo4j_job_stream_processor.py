@@ -203,13 +203,15 @@ class Neo4jJobStreamProcessor:
         # Apply any additional mapping rules here if needed
         mapping_applied = False
         
-        # Example mapping rules (commented out but structure preserved):
-        # if normalized_name == "geriatric medicine":
-        #     normalized_name = "internal medicine"
-        #     mapping_applied = True
-        # elif normalized_name == "welfare":
-        #     normalized_name = "animal welfare"
-        #     mapping_applied = True
+        # Known synonyms -> canonical names (based on streams.json)
+        lower_name = normalized_name.lower()
+        synonyms = {
+            "emergency and critical care (ecc)": "Emergency Medicine",
+            "ecc": "Emergency Medicine",
+        }
+        if lower_name in synonyms:
+            normalized_name = synonyms[lower_name]
+            mapping_applied = True
 
         return normalized_name, mapping_applied
 
