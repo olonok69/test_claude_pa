@@ -97,4 +97,3 @@ coverage.xml
 # Jupyter Notebook
 .ipynb_checkpoints
 outputs/
-archive/

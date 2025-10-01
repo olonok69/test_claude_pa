@@ -1,472 +1,606 @@
-# Generic Event Recommendation Pipeline (Personal Agendas)
+# MSSQL MCP Server - Technical Documentation
 
-A fully configurable data processing and recommendation pipeline for event management, designed to process registration, attendance, and session information to generate personalized recommendations through knowledge graph analytics.
+## Table of Contents
+- [Overview](#overview)
+- [ChatGPT Connector Setup](#chatgpt-connector-setup)
+- [Claude.ai Connector Setup](#claudeai-connector-setup)
+- [Architecture](#architecture)
+- [Technical Stack](#technical-stack)
+- [System Components](#system-components)
+- [Authentication Flow](#authentication-flow)
+- [API Endpoints](#api-endpoints)
+- [Database Tools](#database-tools)
+- [Deployment](#deployment)
+- [Security](#security)
+- [Monitoring and Maintenance](#monitoring-and-maintenance)
+- [Troubleshooting](#troubleshooting)
 
 ## Overview
 
-This pipeline has been refactored from a veterinary-specific system (BVA/LVA) to a generic, configuration-driven architecture that can handle any type of professional event or conference. The system processes event data to:
+The MSSQL MCP Server is a production-grade Model Context Protocol (MCP) implementation that provides secure, OAuth 2.0-authenticated access to Microsoft SQL Server databases through Claude.ai and other MCP-compatible clients. The server implements the MCP specification version 2025-06-18, enabling natural language database interactions through AI assistants.
 
-- Track visitor registration and demographics across multiple events
-- Analyze session attendance patterns and visitor behavior
-- Generate personalized session recommendations using ML/AI
-- Build comprehensive knowledge graphs in Neo4j
-- Support multiple event types through YAML configuration files
+### Key Features
+- Full MCP protocol implementation with SSE transport
+- OAuth 2.0 authentication with dynamic client registration
+- Comprehensive SQL Server operations (SELECT, INSERT, UPDATE, DELETE)
+- TLS/SSL encryption with Let's Encrypt certificates
+- Container-based deployment with Docker
+- Nginx reverse proxy with optimized SSE handling
+- Production-ready health monitoring
 
-## Architecture Evolution
+## ChatGPT Connector Setup
 
-### From Specific to Generic
+If you're connecting this server to ChatGPT as a custom connector (Deep Research), see:
 
-The pipeline has undergone a complete transformation:
-- **Before**: Hardcoded for veterinary events (BVA/LVA) with embedded business logic
-- **After**: Fully configurable for any event type through YAML configuration files
+- docs/chatgpt-connector-setup.md
 
-Key architectural changes:
-- Separated event-specific configuration from core processing logic
-- Introduced multiple configuration files per event type (`config_vet.yaml`, `config_ecomm.yaml`)
-- Made all processors generic with configuration-driven behavior
-- Removed hardcoded veterinary-specific functions and rules
+It covers OAuth discovery, required NGINX routes for `/.well-known/*`, SSE proxying, security flags, and troubleshooting.
 
-## Project Structure
+## Claude.ai Connector Setup
 
+To connect this server to Claude.ai as a custom MCP server, see:
+
+- docs/claude-connector-setup.md
+
+It explains the `/demo`-scoped endpoints, OAuth discovery, NGINX proxying for SSE, and production hardening tips.
+
+## Architecture
+
+### System Architecture Diagram
 ```
-repo-root/
-├── PA/                                         # Core Python package (renamed from 'app')
-│   ├── main.py                                 # Main orchestrator
-│   ├── pipeline.py                             # Pipeline coordinator
-│   ├── registration_processor.py               # Registration data processing
-│   ├── scan_processor.py                       # Scan data processing
-│   ├── session_processor.py                    # Session data processing
-│   ├── neo4j_visitor_processor.py              # Visitor node creation
-│   ├── neo4j_session_processor.py              # Session node creation
-│   ├── neo4j_job_stream_processor.py           # Job-stream relationships
-│   ├── neo4j_specialization_stream_processor.py# Specialization relationships
-│   ├── neo4j_visitor_relationship_processor.py # Cross-year visitor linking
-│   ├── session_embedding_processor.py          # ML embeddings generation
-│   ├── session_recommendation_processor.py     # Recommendation engine
-│   ├── run_embedding.py                        # Standalone embedding runner
-│   ├── run_recommendations.py                  # Standalone recommendation runner
-│   ├── utils/                                  # Utility modules
-│   │   ├── config_utils.py
-│   │   ├── data_utils.py
-│   │   ├── logging_utils.py
-│   │   ├── neo4j_utils.py
-│   │   ├── summary_utils.py
-│   │   └── mlflow_utils.py
-│   ├── config/                                  # (If using internal packaged configs)
-│   │   ├── config_vet.yaml (optional copy)      # Example veterinary config
-│   │   └── config_ecomm.yaml (optional copy)    # Example e-commerce config
-│   └── logs/                                    # Runtime logs (gitignored typically)
-├── bva/ & ecomm/                                # Jupyter notebooks per domain
-├── data/                                        # Raw & interim data (structured per event)
-├── docs/                                        # Documentation & diagrams
-└── readme.md
+┌─────────────┐         HTTPS/TLS           ┌──────────────┐
+│  Claude.ai  │ ◄─────────────────────────► │    Nginx     │
+│   Client    │         Port 443            │ Reverse Proxy│
+└─────────────┘                             └──────┬───────┘
+                                                    │
+                                             ┌──────▼───────┐
+                                             │  MCP Server  │
+                                             │   (Python)   │
+                                             │   Port 8008  │
+                                             └──────┬───────┘
+                                                    │
+                                             ┌──────▼───────┐
+                                             │ MSSQL Server │
+                                             │   Database   │
+                                             └──────────────┘
 ```
 
-> Migration Note: The package directory was renamed from `app` to `PA`. Update any external scripts, cron jobs, CI/CD pipeline steps, or Azure ML pipeline definitions that referenced `python app/...` to now use `python PA/...`.
+### Component Interaction Flow
+1. Claude.ai initiates HTTPS connection to the server
+2. Nginx handles SSL termination and proxies to MCP server
+3. MCP server authenticates requests via OAuth 2.0
+4. Authorized requests execute database operations
+5. Results stream back through SSE connection
 
-## Configuration System
+## Technical Stack
 
-### Multi-Event Support
+### Core Technologies
+- **Language**: Python 3.11
+- **Framework**: Starlette ASGI
+- **Database**: Microsoft SQL Server 2019+
+- **Driver**: ODBC Driver 18 for SQL Server
+- **Protocol**: Model Context Protocol (MCP) 2025-06-18
+- **Transport**: Server-Sent Events (SSE)
+- **Authentication**: OAuth 2.0 with RFC 9728 discovery
 
-The pipeline now supports multiple event types through separate configuration files:
+### Infrastructure
+- **Container**: Docker with multi-stage builds
+- **Proxy**: Nginx 1.24+ with SSE optimization
+- **SSL**: Let's Encrypt with Certbot auto-renewal
+- **Platform**: Google Cloud Platform (GCP)
 
-#### `config_vet.yaml` - Veterinary Events
-```yaml
-event:
-  name: "vet"
-  main_event_name: "bva"        # Triggers vet-specific processing
-  secondary_event_name: "lva"
-  shows_this_year: [['BVA2025']]
-  shows_last_year_main: "BVA2024"
-  shows_last_year_secondary: "LVS2024"
+## System Components
+
+### 1. MCP Server (`server_oauth.py`)
+
+The core application server implementing:
+
+#### Protocol Handlers
+```python
+# MCP Method Implementations
+- initialize: Server capability negotiation
+- tools/list: Available tool discovery
+- tools/call: Tool execution
+- notifications/initialized: Session establishment
 ```
 
-#### `config_ecomm.yaml` - E-Commerce Events
-```yaml
-event:
-  name: "ecomm"
-  main_event_name: "ecomm"      # Generic processing mode
-  secondary_event_name: "tfm"
-  shows_this_year: [['ECE25','TFM25']]
-  shows_last_year_main: "ECE24"
-  shows_last_year_secondary: "TFM24"
+#### Database Connection Management
+```python
+def get_db_config() -> tuple[dict, str]:
+    """
+    Constructs ODBC connection string from environment variables.
+    Returns configuration dict and connection string.
+    """
 ```
 
-### Configuration Components
+#### Data Serialization
+```python
+def serialize_row_data(data) -> Any:
+    """
+    Converts pyodbc Row objects and SQL Server types to JSON-compatible format.
+    Handles: Decimal, DateTime, Date, Row objects
+    """
+```
 
-Each configuration file contains:
+### 2. Database Tools
 
-1. **Event Configuration**: Event names, years, and show identifiers
-2. **Badge History Columns**: Column mappings for cross-year visitor tracking
-3. **Practice Type Columns**: Dynamic field mapping for different event types
-4. **Output File Configurations**: Standardized output naming conventions
-5. **Pipeline Step Activation**: Enable/disable specific processing steps
-6. **Input File Paths**: Event-specific data source locations
-7. **Processing Parameters**: ML models, batch sizes, similarity thresholds
+#### Available Tools
 
-## Pipeline Processing Steps
+| Tool | Purpose | Parameters |
+|------|---------|------------|
+| `list_tables` | Enumerate all database tables | None |
+| `describe_table` | Get table schema and metadata | `table_name: str` |
+| `execute_sql` | Execute arbitrary SQL queries | `query: str` |
+| `get_table_sample` | Retrieve sample data from table | `table_name: str`, `limit: int` |
 
-![Pipeline Architecture](docs/vet_pipeline_map.svg)
+#### Tool Implementation Example
+```python
+def execute_sql_impl(query: str) -> str:
+    """
+    Executes SQL query with proper transaction handling.
+    Returns JSON-formatted results for SELECT queries,
+    or affected row count for DML operations.
+    """
+```
 
-### Data Processing Phase (Steps 1-3)
+### 3. OAuth 2.0 Implementation
 
-1. **Registration Processing**
-   - Loads registration JSON files for main and secondary events
-   - Identifies returning visitors through badge ID matching
-   - Processes demographic data with configurable field mappings
-   - Outputs standardized CSV files
+#### Discovery Endpoints (RFC 9728)
+- `/.well-known/oauth-authorization-server`: AS metadata
+- `/.well-known/oauth-protected-resource`: RS metadata
 
-2. **Scan Processing**
-   - Processes session attendance scan data
-   - Matches scans with visitor profiles
-   - Creates attendance records for past events
-   - Enriches with demographic information
+#### OAuth Flow
+1. **Dynamic Registration**: `/register` - Client registration
+2. **Authorization**: `/authorize` - Authorization code grant
+3. **Token Exchange**: `/token` - Access token issuance
+4. **Token Validation**: In-memory token store with expiration
 
-3. **Session Processing**
-   - Loads session information from CSV files
-   - Extracts and categorizes content streams
-   - Generates AI descriptions for streams (optional)
-   - Filters sessions based on configurable criteria
+### 4. Nginx Configuration
 
-### Neo4j Integration Phase (Steps 4-8)
+#### SSE Optimization
+```nginx
+location /sse {
+    proxy_pass http://mcp-server:8008;
+    
+    # Critical SSE configurations
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    proxy_buffering off;
+    chunked_transfer_encoding off;
+    proxy_read_timeout 24h;
+    
+    # Response headers
+    add_header Content-Type text/event-stream;
+    add_header Cache-Control no-cache;
+    add_header X-Accel-Buffering no;
+}
+```
 
-4. **Visitor Node Creation**
-   - Creates visitor nodes for current and past years
-   - Sets properties from registration and demographic data
-   - Maintains separate node types per event year
+## Authentication Flow
 
-5. **Session Node Creation**
-   - Creates session nodes with metadata
-   - Links sessions to stream categories
-   - Maintains temporal separation (this_year/past_year)
+### OAuth 2.0 Sequence
+```
+Client                  Server                  Resource
+  │                       │                         │
+  ├──► POST /register     │                         │
+  │◄── client_id/secret   │                         │
+  │                       │                         │
+  ├──► GET /authorize     │                         │
+  │◄── authorization_code │                         │
+  │                       │                         │
+  ├──► POST /token        │                         │
+  │◄── access_token       │                         │
+  │                       │                         │
+  ├──► GET /sse + Bearer  │                         │
+  │                       ├──► Validate Token       │
+  │◄── SSE Stream         │◄── Database Results     │
+```
 
-6. **Job-Stream Relationship Processing**
-   - Maps job roles to relevant content streams
-   - Creates weighted relationships based on relevance
-   - Configurable to skip for non-professional events
+## API Endpoints
 
-7. **Specialization-Stream Processing**
-   - Links practice specializations to appropriate content
-   - Creates domain-specific relationships
-   - Can be disabled for generic events
+### Public Endpoints
 
-8. **Cross-Year Visitor Relationships**
-   - Links same visitors across different years
-   - Creates "Same_Visitor" relationships
-   - Enables historical attendance analysis
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Health check and status |
+| `/.well-known/oauth-authorization-server` | GET | OAuth AS discovery |
+| `/.well-known/oauth-protected-resource` | GET | OAuth RS discovery |
 
-### ML/AI Processing Phase (Steps 9-10)
+### OAuth Endpoints
 
-9. **Session Embedding Generation**
-   - Creates semantic embeddings for session content
-   - Uses sentence-transformers (all-MiniLM-L6-v2)
-   - Generates 384-dimensional vectors
-   - Enables content-based similarity matching
+| Endpoint | Method | Purpose | Request Body |
+|----------|--------|---------|--------------|
+| `/register` | POST | Dynamic client registration | `{client_name, redirect_uris}` |
+| `/authorize` | GET | Authorization code grant | Query: `client_id, redirect_uri, state` |
+| `/token` | POST | Token exchange | `{grant_type, code, client_id, client_secret}` |
 
-10. **Recommendation Generation**
-    - Analyzes visitor profiles and historical attendance
-    - Finds similar visitors using configurable attributes
-    - Generates personalized recommendations
-    - Applies optional business rules filtering
+### MCP Endpoints
 
-## Neo4j Schema
+| Endpoint | Method | Purpose | Authentication |
+|----------|--------|---------|----------------|
+| `/sse` | HEAD | SSE capability check | Optional |
+| `/sse` | POST | MCP message handling | Bearer token |
 
-![Pipeline Architecture](docs/neo4j_vet_database_map.svg)
+## Database Tools
 
-### Node Types
+### Tool Specifications
 
-| Node Type | Description | Key Properties |
-|-----------|-------------|----------------|
-| `Visitor_this_year` | Current year visitors | BadgeId, show, job_role, specialization |
-| `Visitor_last_year_bva` | Past year main event visitors | BadgeId, show, attendance history |
-| `Visitor_last_year_lva` | Past year secondary event visitors | BadgeId, show, attendance history |
-| `Sessions_this_year` | Current year sessions | session_id, title, stream, embedding |
-| `Sessions_past_year` | Historical sessions | session_id, title, stream, embedding |
-| `Stream` | Content categories | stream, description, show |
+#### list_tables
+```json
+{
+  "name": "list_tables",
+  "description": "List all tables in the database",
+  "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  }
+}
+```
 
-### Relationships
+#### describe_table
+```json
+{
+  "name": "describe_table",
+  "description": "Get table structure and metadata",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "table_name": {
+        "type": "string",
+        "description": "Name of the table"
+      }
+    },
+    "required": ["table_name"]
+  }
+}
+```
 
-| Relationship | From → To | Properties |
-|--------------|-----------|------------|
-| `HAS_STREAM` | Session → Stream | - |
-| `attended_session` | Visitor → Session | scan_date, seminar_name |
-| `Same_Visitor` | Visitor → Visitor | type (cross-year link) |
-| `job_to_stream` | Visitor → Stream | weight (relevance score) |
-| `specialization_to_stream` | Visitor → Stream | created_by |
-| `IS_RECOMMENDED` | Visitor → Session | similarity_score, generated_at |
+#### execute_sql
+```json
+{
+  "name": "execute_sql",
+  "description": "Execute SQL query",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "SQL query to execute"
+      }
+    },
+    "required": ["query"]
+  }
+}
+```
 
-## Installation
+### SQL Server Compatibility
+
+#### Supported Operations
+- Data Query: SELECT with TOP, JOINs, CTEs
+- Data Manipulation: INSERT, UPDATE, DELETE
+- Schema Discovery: INFORMATION_SCHEMA queries
+- Transactions: Automatic commit/rollback
+
+#### Data Type Mapping
+| SQL Server Type | Python Type | JSON Serialization |
+|----------------|-------------|-------------------|
+| INT, BIGINT | int | number |
+| DECIMAL, NUMERIC | Decimal | number (float) |
+| VARCHAR, NVARCHAR | str | string |
+| DATETIME, DATE | datetime | ISO 8601 string |
+| BIT | bool | boolean |
+
+## Deployment
 
 ### Prerequisites
+- Docker Engine 20.10+
+- Docker Compose 2.0+
+- Domain with DNS A record
+- GCP VM with firewall rules configured
 
-- Python 3.8+
-- Neo4j Database 4.4+
-- Optional: OpenAI API or Azure OpenAI credentials for AI features
+### Environment Configuration
 
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd PA
-   ```
-
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Configure environment variables**
-   Create `.env` file in `keys/` directory:
-   ```env
-   # Neo4j credentials
-   NEO4J_URI=bolt://localhost:7687
-   NEO4J_USERNAME=neo4j
-   NEO4J_PASSWORD=your-password
-
-   # Optional: OpenAI or Azure OpenAI
-   OPENAI_API_KEY=your-api-key
-   # OR
-   AZURE_API_KEY=your-azure-key
-   AZURE_ENDPOINT=your-azure-endpoint
-   AZURE_DEPLOYMENT=your-deployment-name
-   ```
-
-4. **Select configuration file**
-   Choose the appropriate configuration for your event type:
-   - Veterinary events: `config/config_vet.yaml`
-   - E-commerce events: `config/config_ecomm.yaml`
-   - Create custom: Copy and modify existing config
-
-## Usage
-
-### Running the Complete Pipeline
-
+Create `.env` file:
 ```bash
-# Run with veterinary configuration
-python PA/main.py --config config/config_vet.yaml
+# Database Configuration
+MSSQL_HOST=your-sql-server.database.windows.net
+MSSQL_USER=your_username
+MSSQL_PASSWORD=your_secure_password
+MSSQL_DATABASE=your_database
+MSSQL_DRIVER=ODBC Driver 18 for SQL Server
 
-# Run with e-commerce configuration
-python PA/main.py --config config/config_ecomm.yaml
+# Security
+TrustServerCertificate=yes
+Trusted_Connection=no
 ```
 
-### Selective Processing
+### Docker Deployment
 
+#### Build and Run
 ```bash
-# Run specific steps only
-python PA/main.py --config config/config_vet.yaml --only-steps 1,2,3
+# Build containers
+docker compose build
 
-# Skip Neo4j upload
-python PA/main.py --config config/config_vet.yaml --skip-neo4j
+# Start services
+docker compose up -d
 
-# Process only new visitors without existing recommendations
-python PA/main.py --config config/config_vet.yaml --create-only-new
-
-# Recreate all Neo4j nodes
-python PA/main.py --config config/config_vet.yaml --recreate-all
+# View logs
+docker compose logs -f mcp-server
 ```
 
-### Standalone Components
-
-```bash
-# Generate session embeddings only
-python PA/run_embedding.py --config config/config_vet.yaml
-
-# Generate recommendations only
-python PA/run_recommendations.py --config config/config_vet.yaml \
-   --min-score 0.3 --max-recommendations 10
+#### Container Configuration
+```yaml
+services:
+  mcp-server:
+    build: .
+    expose:
+      - "8008"
+    environment:
+      - MSSQL_HOST=${MSSQL_HOST}
+      - MSSQL_USER=${MSSQL_USER}
+      - MSSQL_PASSWORD=${MSSQL_PASSWORD}
+      - MSSQL_DATABASE=${MSSQL_DATABASE}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 ```
 
-## Creating Custom Event Configurations
+### SSL Certificate Setup
 
-To adapt the pipeline for a new event type:
-
-1. **Copy an existing configuration**
-   ```bash
-   cp config/config_vet.yaml config/config_myevent.yaml
-   ```
-
-2. **Modify event-specific settings**
-   ```yaml
-   event:
-     name: "myevent"
-     main_event_name: "myevent"  # Use event name != "bva" for generic mode
-     shows_this_year: [['MYEVENT2025']]
-   ```
-
-3. **Update input file paths**
-   ```yaml
-   input_files:
-     main_event_registration: "data/myevent/registration.json"
-     main_event_demographic: "data/myevent/demographics.json"
-   ```
-
-4. **Configure field mappings**
-   ```yaml
-   practice_type_columns:
-     current: "your_practice_question_field"
-     past: "your_past_practice_field"
-   ```
-
-5. **Enable/disable pipeline steps**
-   ```yaml
-   pipeline_steps:
-     neo4j_job_stream_processing: false  # Disable if not applicable
-     neo4j_specialization_stream_processing: false
-   ```
-
-## Output Files
-
-The pipeline generates various outputs organized by type:
-
-### CSV Files
-- `Registration_data_[event]_[year]_only_valid.csv` - Validated registrations
-- `df_reg_demo_this.csv` - Current year with demographics
-- `session_this_filtered_valid_cols.csv` - Processed sessions
-- `scan_[year]_filtered_valid_cols_[event].csv` - Attendance records
-
-### JSON Files
-- `streams.json` - Stream catalog with AI descriptions
-- `specializations.json` - Practice specializations mapping
-- `job_roles.json` - Job role classifications
-- `visitor_recommendations_[timestamp].json` - Generated recommendations
-
-### Logs
-- `logs/data_processing.log` - Main processing log
-- `logs/processing_summary.json` - Summary statistics
-- MLflow tracking (if enabled)
-
-## Monitoring and Tracking
-
-### MLflow Integration
-
-The pipeline includes MLflow tracking for:
-- Configuration parameters logging
-- Processing metrics per step
-- Output file artifacts
-- Performance monitoring
-
-Enable MLflow tracking:
+#### Initial Setup
 ```bash
-mlflow ui  # Start MLflow UI
-python PA/main.py --config config/config_vet.yaml  # Tracking enabled by default
+# Run setup script
+./setup-letsencrypt.sh
+
+# Verify certificate
+openssl s_client -connect data.forensic-bot.com:443 -servername data.forensic-bot.com
 ```
 
-Disable MLflow:
+#### Automatic Renewal
+Certbot container runs renewal checks every 12 hours:
+```yaml
+certbot:
+  image: certbot/certbot
+  entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+```
+
+## Security
+
+### Network Security
+
+#### GCP Firewall Rules
 ```bash
-python PA/main.py --config config/config_vet.yaml --skip-mlflow
+# HTTPS traffic
+gcloud compute firewall-rules create allow-mcp-https \
+    --allow tcp:443 \
+    --source-ranges 0.0.0.0/0 \
+    --target-tags mcp-server
+
+# HTTP for Let's Encrypt
+gcloud compute firewall-rules create allow-letsencrypt \
+    --allow tcp:80 \
+    --source-ranges 0.0.0.0/0 \
+    --target-tags mcp-server
+```
+
+### Application Security
+
+#### OAuth 2.0 Protection
+- Dynamic client registration
+- Short-lived access tokens (1 hour)
+- Secure token generation using `secrets.token_urlsafe()`
+
+#### Database Security
+- Parameterized queries (via pyodbc)
+- Read-only user recommended for production
+- Connection string credentials from environment variables
+- TLS encryption for database connections
+
+#### TLS Configuration
+```nginx
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers HIGH:!aNULL:!MD5;
+ssl_prefer_server_ciphers off;
+ssl_session_cache shared:SSL:10m;
+```
+
+### Security Headers
+```nginx
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+add_header X-Content-Type-Options nosniff;
+add_header X-Frame-Options DENY;
+```
+
+## Monitoring and Maintenance
+
+### Health Monitoring
+
+#### Health Check Endpoint
+```bash
+curl https://data.forensic-bot.com/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "transport": "sse",
+  "oauth": "enabled",
+  "database": "your_database"
+}
+```
+
+### Logging
+
+#### Application Logs
+```python
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+```
+
+#### Container Logs
+```bash
+# View all logs
+docker compose logs
+
+# Follow specific service
+docker compose logs -f mcp-server
+
+# Last 100 lines
+docker compose logs --tail=100 mcp-server
+```
+
+### Performance Monitoring
+
+#### Key Metrics
+- Response time per tool execution
+- Active SSE connections
+- OAuth token generation rate
+- Database query performance
+
+#### Monitoring Commands
+```bash
+# Container resource usage
+docker stats mcp-server
+
+# Nginx connections
+docker exec nginx-container nginx -T | grep worker_connections
+
+# Database connections
+docker exec mcp-server python -c "import pyodbc; print(pyodbc.drivers())"
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Neo4j Connection Failed**
-   - Verify Neo4j is running: `neo4j status`
-   - Check credentials in `.env` file
-   - Confirm URI format: `bolt://host:port`
+#### 1. Database Connection Failures
+```bash
+# Test ODBC installation
+docker exec mcp-server odbcinst -j
 
-2. **Missing Input Files**
-   - Verify paths in configuration file
-   - Check JSON file format and structure
-   - Ensure data directory permissions
+# Verify environment variables
+docker exec mcp-server env | grep MSSQL
 
-3. **Memory Issues**
-   - Process in batches: `--only-steps 1,2,3`
-   - Adjust batch sizes in configuration
-   - Increase Python heap size if needed
+# Test connection
+docker exec mcp-server python -c "
+import pyodbc
+from os import getenv
+conn_str = f\"Driver={{ODBC Driver 18 for SQL Server}};Server={getenv('MSSQL_HOST')};...\"
+conn = pyodbc.connect(conn_str)
+print('Connected successfully')
+"
+```
 
-4. **Configuration Errors**
-   - Validate YAML syntax
-   - Check required fields are present
-   - Ensure event names are consistent
+#### 2. SSE Connection Issues
+```bash
+# Test SSE endpoint
+curl -N -H "Accept: text/event-stream" https://data.forensic-bot.com/sse
 
-## Performance Optimization
+# Check Nginx buffering
+docker exec nginx-container cat /etc/nginx/conf.d/default.conf | grep proxy_buffering
+```
 
-### Batch Processing
-- Use `create_only_new` flag for incremental updates
-- Process steps separately for large datasets
-- Adjust `batch_size` in configuration
+#### 3. OAuth Authentication Failures
+```bash
+# Test OAuth discovery
+curl https://data.forensic-bot.com/.well-known/oauth-authorization-server
 
-### Neo4j Optimization
-- Create indexes on frequently queried properties
-- Use constraints for unique identifiers
-- Batch node/relationship creation
+# Register test client
+curl -X POST https://data.forensic-bot.com/register \
+  -H "Content-Type: application/json" \
+  -d '{"client_name": "test"}'
+```
 
-### ML Processing
-- Cache embeddings when possible
-- Use GPU acceleration for embedding generation
-- Adjust `max_recommendations` based on needs
+#### 4. Certificate Renewal Issues
+```bash
+# Test renewal (dry run)
+docker compose exec certbot certbot renew --dry-run
 
-## Development Guidelines
+# Force renewal
+docker compose exec certbot certbot renew --force-renewal
 
-### Adding New Event Types
+# Check certificate expiration
+echo | openssl s_client -servername data.forensic-bot.com -connect data.forensic-bot.com:443 2>/dev/null | openssl x509 -noout -dates
+```
 
-1. Create event-specific configuration file
-2. Ensure input data matches expected format
-3. Map event-specific fields to standard properties
-4. Test with small dataset first
-5. Validate Neo4j schema compatibility
+### Debug Mode
 
-### Extending Processors
+Enable detailed logging:
+```python
+# In server_oauth.py
+logging.basicConfig(level=logging.DEBUG)
 
-When adding new functionality:
-1. Inherit from base processor classes
-2. Use configuration for all event-specific logic
-3. Add new configuration parameters as needed
-4. Update documentation and examples
-5. Ensure backward compatibility
+# Add request/response logging
+logger.debug(f"Request: {method} - Body: {json.dumps(body)}")
+logger.debug(f"Response: {json.dumps(response)}")
+```
 
-### Code Standards
+### Performance Optimization
 
-- Type hints for all function signatures
-- Comprehensive docstrings following Google style
-- PEP 8 compliance
-- Error handling with meaningful messages
-- Logging at appropriate levels
+#### Database Optimization
+```sql
+-- Add indexes for frequently queried columns
+CREATE INDEX idx_table_column ON table_name(column_name);
 
-## Implementation Guide
+-- Update statistics
+UPDATE STATISTICS table_name;
+```
 
-### Phase 1: Data Preparation
-1. Organize input files in event-specific directories
-2. Create configuration file for your event
-3. Validate JSON structure matches expected format
-4. Run registration processing (step 1) to test
+#### Nginx Optimization
+```nginx
+# Increase worker connections
+worker_connections 4096;
 
-### Phase 2: Processing Pipeline
-1. Execute data processing steps (1-3)
-2. Review output CSV files for correctness
-3. Check logs for warnings or errors
-4. Validate data quality metrics
+# Enable HTTP/2
+listen 443 ssl http2;
 
-### Phase 3: Neo4j Integration
-1. Clear existing Neo4j data if needed
-2. Run Neo4j processing steps (4-8)
-3. Verify node and relationship creation
-4. Query Neo4j to validate schema
+# Optimize SSL session cache
+ssl_session_cache shared:SSL:50m;
+ssl_session_timeout 1d;
+```
 
-### Phase 4: Recommendations
-1. Generate session embeddings (step 9)
-2. Run recommendation engine (step 10)
-3. Review recommendation quality
-4. Adjust similarity thresholds as needed
+## Appendix
 
-### Phase 5: Production Deployment
-1. Set up monitoring with MLflow
-2. Configure incremental processing
-3. Schedule pipeline runs
-4. Set up alerting for failures
+### MCP Protocol Reference
+- Specification: https://modelcontextprotocol.io/specification
+- Version: 2025-06-18
+- Transport: Server-Sent Events (SSE)
 
+### SQL Server Function Reference
+| SQL Server | Description |
+|------------|-------------|
+| TOP n | Limit results |
+| GETDATE() | Current timestamp |
+| LEN() | String length |
+| CHARINDEX() | Find substring |
+| ISNULL() | Null handling |
 
-## License
+### Environment Variables Reference
+| Variable | Description | Example |
+|----------|-------------|---------|
+| MSSQL_HOST | Database server | server.database.windows.net |
+| MSSQL_USER | Database username | sa |
+| MSSQL_PASSWORD | Database password | SecurePass123! |
+| MSSQL_DATABASE | Database name | production |
+| MSSQL_DRIVER | ODBC driver | ODBC Driver 18 for SQL Server |
+| TrustServerCertificate | SSL certificate trust | yes |
 
-CSM Propietary
+### Port Reference
+| Port | Service | Purpose |
+|------|---------|---------|
+| 80 | HTTP | Let's Encrypt validation |
+| 443 | HTTPS | Production traffic |
+| 8008 | MCP Server | Internal API |
 
-## Support
+---
 
-For questions or issues:
-- Review logs in `logs/` directory
-- Check configuration syntax and completeness
-- Verify Neo4j connectivity
-- Consult documentation for specific processors
-
+Version: 2.0.0  
+Last Updated: August 2025  
+Protocol: MCP 2025-06-18  
+Compatibility: SQL Server 2019+, Python 3.11+, Docker 20.10+
