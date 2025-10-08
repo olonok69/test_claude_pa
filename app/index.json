@@ -1,8 +1,0 @@
-{
-  "service": "Data Forensic Bot SSE Server",
-  "endpoints": {
-    "health": "/health",
-    "sse": "/sse",
-    "secure_sse": "/secure-sse"
-  }
-}
