@@ -82,10 +82,14 @@ def log_neo4j_step_metrics(mlflow_manager, processors, step_number):
                             step_metrics[f'{metric_prefix}_nodes_created'] = sum(stats['nodes_created'].values())
                         if 'nodes_skipped' in stats:
                             step_metrics[f'{metric_prefix}_nodes_skipped'] = sum(stats['nodes_skipped'].values())
+                        if 'nodes_updated' in stats:
+                            step_metrics[f'{metric_prefix}_nodes_updated'] = sum(stats['nodes_updated'].values())
                     
                     elif step_number == 5:  # Neo4j Session
                         if 'nodes_created' in stats:
                             step_metrics[f'{metric_prefix}_nodes_created'] = sum(stats['nodes_created'].values())
+                        if 'nodes_skipped' in stats:
+                            step_metrics[f'{metric_prefix}_nodes_skipped'] = sum(stats['nodes_skipped'].values())
                         if 'relationships_created' in stats:
                             step_metrics[f'{metric_prefix}_relationships_created'] = sum(stats['relationships_created'].values())
                     
@@ -97,6 +101,9 @@ def log_neo4j_step_metrics(mlflow_manager, processors, step_number):
                     elif step_number == 8:  # Visitor Relationships
                         if 'relationships_created' in stats:
                             step_metrics[f'{metric_prefix}_relationships_created'] = sum(stats['relationships_created'].values())
+                            assisted_value = stats['relationships_created'].get('assisted_this_year')
+                            if assisted_value is not None:
+                                step_metrics[f'{metric_prefix}_assisted_this_year_created'] = assisted_value
                         if 'relationships_failed' in stats:
                             step_metrics[f'{metric_prefix}_relationships_failed'] = sum(stats['relationships_failed'].values())
                     

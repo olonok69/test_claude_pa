@@ -27,6 +27,7 @@ class Neo4jVisitorRelationshipProcessor:
 
         self.config = config
         self.output_dir = os.path.join(config["output_dir"], "output")
+        self.mode = config.get("mode", "personal_agendas")
 
         # Extract Neo4j configuration
         neo4j_config = config.get("neo4j", {})
@@ -64,6 +65,11 @@ class Neo4jVisitorRelationshipProcessor:
             self.statistics["relationships_skipped"][f"attended_session_{relationship_type}"] = 0
             self.statistics["relationships_failed"][f"same_visitor_{relationship_type}"] = 0
             self.statistics["relationships_failed"][f"attended_session_{relationship_type}"] = 0
+
+        # Post-analysis relationship tracking
+        self.statistics["relationships_created"]["assisted_this_year"] = 0
+        self.statistics["relationships_skipped"]["assisted_this_year"] = 0
+        self.statistics["relationships_failed"]["assisted_this_year"] = 0
 
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j Visitor Relationship Processor initialized successfully for show: {self.show_name}"
@@ -137,11 +143,159 @@ class Neo4jVisitorRelationshipProcessor:
                     f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating attended_session relationships for {relationship_type}: {str(e)}"
                 )
 
+        # Post-analysis assisted relationships
+        if self.mode == "post_analysis":
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing assisted_this_year relationships (post-analysis mode)"
+            )
+            try:
+                self._create_assisted_this_year_relationships(create_only_new)
+            except Exception as e:
+                self.logger.error(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating assisted_this_year relationships: {str(e)}"
+                )
+
         # Log summary statistics
         self._log_summary()
 
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j visitor relationship processing completed for show: {self.show_name}"
+        )
+
+    @staticmethod
+    def _clean_text(text: str) -> str:
+        if not isinstance(text, str):
+            return ""
+        return "".join(char for char in text if char.isalnum()).lower()
+
+    def _create_assisted_this_year_relationships(self, create_only_new: bool):
+        """Create assisted_this_year relationships between current-year visitors and sessions."""
+
+        scan_output_files = self.config.get("scan_output_files", {})
+        sessions_visited_config = scan_output_files.get("sessions_visited", {})
+        sessions_file = sessions_visited_config.get("this_year_post", "sessions_visited_this_year.csv")
+        sessions_path = os.path.join(self.output_dir, sessions_file)
+
+        if not os.path.exists(sessions_path):
+            self.logger.warning(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Post-analysis sessions file not found: {sessions_path}"
+            )
+            return
+
+        try:
+            sessions_df = pd.read_csv(sessions_path)
+        except Exception as read_error:
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Unable to read post-analysis sessions file: {read_error}"
+            )
+            return
+
+        if sessions_df.empty:
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Post-analysis sessions file is empty; no relationships to create"
+            )
+            return
+
+        badge_column = None
+        for candidate in ["Badge Id", "BadgeId", "badge_id"]:
+            if candidate in sessions_df.columns:
+                badge_column = candidate
+                break
+
+        if not badge_column:
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No badge column found in {sessions_path}"
+            )
+            return
+
+        if "key_text" not in sessions_df.columns:
+            if "Seminar Name" in sessions_df.columns:
+                sessions_df["key_text"] = sessions_df["Seminar Name"].apply(self._clean_text)
+            else:
+                self.logger.error(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No key_text or Seminar Name column available for matching"
+                )
+                return
+
+        sessions_df["key_text_lower"] = sessions_df["key_text"].astype(str).str.strip().str.lower()
+        sessions_df = sessions_df[sessions_df["key_text_lower"] != ""]
+
+        visitor_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
+        session_label = self.node_labels.get("session_this_year", "Sessions_this_year")
+        relationship_name = self.relationships.get("assisted_this_year", "assisted_this_year")
+        visitor_id_field = self.unique_identifiers.get("visitor", "BadgeId")
+
+        created = 0
+        skipped = 0
+        failed = 0
+
+        driver = None
+        try:
+            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+
+            with driver.session() as session:
+                for _, row in sessions_df.iterrows():
+                    badge_id = str(row.get(badge_column, "")).strip()
+                    if not badge_id:
+                        skipped += 1
+                        continue
+
+                    session_key_lower = str(row.get("key_text_lower", "")).strip()
+                    if not session_key_lower:
+                        skipped += 1
+                        continue
+
+                    scan_date = row.get("Scan Date", "")
+                    file_name = row.get("File", "")
+                    seminar_name = row.get("Seminar Name", row.get("Seminar", ""))
+
+                    query = (
+                        f"MATCH (v:{visitor_label} {{{visitor_id_field}: $badge_id}}) "
+                        f"MATCH (s:{session_label}) "
+                        "WHERE toLower(s.key_text) = $session_key_lower AND v.show = $show_name AND s.show = $show_name "
+                        f"MERGE (v)-[r:{relationship_name}]->(s) "
+                        "SET r.scan_date = coalesce($scan_date, r.scan_date), "
+                        "    r.file = coalesce($file_name, r.file), "
+                        "    r.seminar_name = coalesce($seminar_name, r.seminar_name) "
+                        "RETURN r"
+                    )
+
+                    try:
+                        result = session.run(
+                            query,
+                            badge_id=badge_id,
+                            session_key_lower=session_key_lower,
+                            show_name=self.show_name,
+                            scan_date=str(scan_date) if pd.notna(scan_date) else None,
+                            file_name=str(file_name) if pd.notna(file_name) else None,
+                            seminar_name=str(seminar_name) if pd.notna(seminar_name) else None,
+                        )
+                        summary = result.consume()
+                        if summary.counters.relationships_created > 0:
+                            created += 1
+                        else:
+                            skipped += 1
+                    except Exception as rel_error:
+                        failed += 1
+                        self.logger.error(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Failed to merge assisted relationship for badge {badge_id}: {rel_error}"
+                        )
+
+        except Exception as driver_error:
+            failed += 1
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j driver error during assisted relationship creation: {driver_error}"
+            )
+        finally:
+            if driver:
+                driver.close()
+
+        self.statistics["relationships_created"]["assisted_this_year"] = created
+        self.statistics["relationships_skipped"]["assisted_this_year"] = skipped
+        self.statistics["relationships_failed"]["assisted_this_year"] = failed
+
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - assisted_this_year Relationship Summary: created={created}, skipped={skipped}, failed={failed}"
         )
 
     def _create_same_visitor_relationships(self, relationship_type, properties, create_only_new):
