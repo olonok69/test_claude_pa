@@ -1,10 +1,13 @@
 import logging
 import os
+from typing import Any
+
 import pandas as pd
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
 import inspect
 import textwrap
+
 
 
 class Neo4jVisitorRelationshipProcessor:
@@ -55,6 +58,9 @@ class Neo4jVisitorRelationshipProcessor:
             "relationships_created": {},
             "relationships_skipped": {},
             "relationships_failed": {},
+            "nodes_created": {},
+            "nodes_skipped": {},
+            "nodes_failed": {},
         }
         
         # Initialize statistics for each configured relationship type
@@ -67,9 +73,15 @@ class Neo4jVisitorRelationshipProcessor:
             self.statistics["relationships_failed"][f"attended_session_{relationship_type}"] = 0
 
         # Post-analysis relationship tracking
-        self.statistics["relationships_created"]["assisted_this_year"] = 0
-        self.statistics["relationships_skipped"]["assisted_this_year"] = 0
-        self.statistics["relationships_failed"]["assisted_this_year"] = 0
+        for relationship_key in ["assisted_session_this_year", "registered_to_show"]:
+            self.statistics["relationships_created"][relationship_key] = 0
+            self.statistics["relationships_skipped"][relationship_key] = 0
+            self.statistics["relationships_failed"][relationship_key] = 0
+
+        # Track show node creation (post-analysis entry scans)
+        self.statistics["nodes_created"]["show_this_year"] = 0
+        self.statistics["nodes_skipped"]["show_this_year"] = 0
+        self.statistics["nodes_failed"]["show_this_year"] = 0
 
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j Visitor Relationship Processor initialized successfully for show: {self.show_name}"
@@ -146,13 +158,23 @@ class Neo4jVisitorRelationshipProcessor:
         # Post-analysis assisted relationships
         if self.mode == "post_analysis":
             self.logger.info(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing assisted_this_year relationships (post-analysis mode)"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing assisted_session_this_year relationships (post-analysis mode)"
             )
             try:
-                self._create_assisted_this_year_relationships(create_only_new)
+                self._create_assisted_session_this_year_relationships(create_only_new)
             except Exception as e:
                 self.logger.error(
-                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating assisted_this_year relationships: {str(e)}"
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating assisted_session_this_year relationships: {str(e)}"
+                )
+
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing entry scan show registrations (post-analysis mode)"
+            )
+            try:
+                self._create_entry_scan_show_relationships(create_only_new)
+            except Exception as e:
+                self.logger.error(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating entry scan show registrations: {str(e)}"
                 )
 
         # Log summary statistics
@@ -168,8 +190,51 @@ class Neo4jVisitorRelationshipProcessor:
             return ""
         return "".join(char for char in text if char.isalnum()).lower()
 
-    def _create_assisted_this_year_relationships(self, create_only_new: bool):
-        """Create assisted_this_year relationships between current-year visitors and sessions."""
+    @staticmethod
+    def _sanitize_property_key(key: str) -> str:
+        normalized = "".join(char if char.isalnum() else "_" for char in str(key).strip()).lower()
+        normalized = normalized.strip("_")
+        return normalized or "field"
+
+    @staticmethod
+    def _build_normalized_show_map(entry_scan_config: dict) -> dict:
+        file_show_map_config = entry_scan_config.get("file_show_map", {}) if isinstance(entry_scan_config, dict) else {}
+        normalized_map = {}
+        if isinstance(file_show_map_config, dict):
+            for key, value in file_show_map_config.items():
+                if isinstance(key, str) and isinstance(value, str):
+                    normalized_map[key.lower()] = value
+        return normalized_map
+
+    @staticmethod
+    def _normalize_badge_id(value: Any) -> str:
+        if pd.isna(value):
+            return ""
+
+        value_str = str(value).strip()
+
+        if not value_str or value_str.lower() in {"nan", "none", "null"}:
+            return ""
+
+        if value_str.endswith(".0") and value_str[:-2].replace("-", "").isdigit():
+            value_str = value_str[:-2]
+
+        return value_str
+
+    def _infer_show_from_filename(self, filename: str, normalized_show_map: dict) -> str:
+        basename = os.path.basename(filename).lower()
+        for needle, mapped_show in normalized_show_map.items():
+            if needle in basename:
+                return mapped_show
+
+        if "tfm" in basename:
+            return "tfm"
+        if any(token in basename for token in ["ece", "ecomm"]):
+            return self.show_name
+        return ""
+
+    def _create_assisted_session_this_year_relationships(self, create_only_new: bool):
+        """Create assisted_session_this_year relationships between current-year visitors and sessions."""
 
         scan_output_files = self.config.get("scan_output_files", {})
         sessions_visited_config = scan_output_files.get("sessions_visited", {})
@@ -222,7 +287,9 @@ class Neo4jVisitorRelationshipProcessor:
 
         visitor_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
         session_label = self.node_labels.get("session_this_year", "Sessions_this_year")
-        relationship_name = self.relationships.get("assisted_this_year", "assisted_this_year")
+        relationship_name = self.relationships.get(
+            "assisted_session_this_year", "assisted_session_this_year"
+        )
         visitor_id_field = self.unique_identifiers.get("visitor", "BadgeId")
 
         created = 0
@@ -290,13 +357,337 @@ class Neo4jVisitorRelationshipProcessor:
             if driver:
                 driver.close()
 
-        self.statistics["relationships_created"]["assisted_this_year"] = created
-        self.statistics["relationships_skipped"]["assisted_this_year"] = skipped
-        self.statistics["relationships_failed"]["assisted_this_year"] = failed
+        self.statistics["relationships_created"]["assisted_session_this_year"] = created
+        self.statistics["relationships_skipped"]["assisted_session_this_year"] = skipped
+        self.statistics["relationships_failed"]["assisted_session_this_year"] = failed
 
         self.logger.info(
-            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - assisted_this_year Relationship Summary: created={created}, skipped={skipped}, failed={failed}"
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - assisted_session_this_year Relationship Summary: created={created}, skipped={skipped}, failed={failed}"
         )
+
+    def _create_entry_scan_show_relationships(self, create_only_new: bool):
+        """Create Show nodes and register_to_show relationships from entry scan files."""
+
+        post_analysis_config = self.config.get("post_analysis_mode", {})
+        entry_scan_config = post_analysis_config.get("entry_scan_files", {})
+        entry_scan_files = entry_scan_config.get("entry_scans_this", [])
+        normalized_show_map = self._build_normalized_show_map(entry_scan_config)
+
+        if not entry_scan_files:
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No entry scan files configured; skipping show registration processing"
+            )
+            return
+
+        if isinstance(entry_scan_files, str):
+            entry_scan_files = [entry_scan_files]
+
+        visitor_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
+        show_label = self.node_labels.get("show_this_year", "Show_this_year")
+        visitor_id_field = self.unique_identifiers.get("visitor", "BadgeId")
+        show_unique_field = self.unique_identifiers.get("show", "show_ref")
+        relationship_name = self.relationships.get("registered_to_show", "registered_to_show")
+
+        show_nodes_created = 0
+        show_nodes_skipped = 0
+        show_nodes_failed = 0
+
+        relationships_created = 0
+        relationships_skipped = 0
+        relationships_failed = 0
+        missing_visitors = 0
+        missing_badge_samples = set()
+
+        seen_shows = set()
+
+        def resolve_path(path_candidate: str) -> str:
+            """Attempt to resolve a configured path to an existing file."""
+
+            potential_paths = [path_candidate]
+            base_output_dir = self.config.get("output_dir")
+
+            if base_output_dir:
+                potential_paths.append(os.path.join(base_output_dir, path_candidate))
+
+            # Include processor output directory (typically <output_dir>/output)
+            potential_paths.append(os.path.join(self.output_dir, path_candidate))
+
+            for candidate in potential_paths:
+                if candidate and os.path.exists(candidate):
+                    return candidate
+
+            return ""
+
+        driver = None
+
+        try:
+            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+
+            with driver.session() as session:
+                for configured_path in entry_scan_files:
+                    resolved_path = resolve_path(configured_path)
+
+                    if not resolved_path:
+                        self.logger.warning(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Entry scan file not found: {configured_path}"
+                        )
+                        continue
+
+                    try:
+                        scans_df = pd.read_csv(resolved_path)
+                    except Exception as read_error:
+                        show_nodes_failed += 1
+                        self.logger.error(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Failed to read entry scan file {resolved_path}: {read_error}"
+                        )
+                        continue
+
+                    if scans_df.empty:
+                        self.logger.info(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Entry scan file {resolved_path} is empty; skipping"
+                        )
+                        continue
+
+                    badge_column = None
+                    for candidate in ["Badge Id", "BadgeId", "badge_id"]:
+                        if candidate in scans_df.columns:
+                            badge_column = candidate
+                            break
+
+                    if not badge_column:
+                        self.logger.error(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No badge column found in entry scan file: {resolved_path}"
+                        )
+                        continue
+
+                    show_column = None
+                    for candidate in ["Show Ref", "ShowRef", "Show", "Show Code", "EventCode", "Event Code"]:
+                        if candidate in scans_df.columns:
+                            show_column = candidate
+                            break
+
+                    if not show_column:
+                        # Fallback: find the first column containing "show"
+                        for column in scans_df.columns:
+                            if "show" in column.lower():
+                                show_column = column
+                                break
+
+                    if not show_column:
+                        self.logger.error(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No show reference column found in entry scan file: {resolved_path}"
+                        )
+                        continue
+
+                    show_name_column = None
+                    for candidate in ["Show Name", "Show_Title", "ShowTitle", "EventName", "Event Name"]:
+                        if candidate in scans_df.columns:
+                            show_name_column = candidate
+                            break
+
+                    target_show_code = self._infer_show_from_filename(resolved_path, normalized_show_map)
+                    target_show_code_normalized = target_show_code.lower() if target_show_code else ""
+
+                    visitor_show_candidates = []
+                    if target_show_code_normalized:
+                        visitor_show_candidates.append(target_show_code_normalized)
+                    visitor_show_candidates.append(self.show_name.lower())
+                    visitor_show_candidates = list(dict.fromkeys(visitor_show_candidates))
+
+                    relationship_columns = [
+                        "Show Ref",
+                        "Badge Id",
+                        "Badge Type",
+                        "Attended",
+                        "Virtual Attended",
+                        "Day 1",
+                        "Day 1 Entry",
+                        "Day 2",
+                        "Day 2 Entry",
+                    ]
+
+                    for _, row in scans_df.iterrows():
+                        badge_raw = row.get(badge_column, "")
+                        badge_id = self._normalize_badge_id(badge_raw)
+
+                        show_raw = row.get(show_column, "")
+                        if pd.isna(show_raw):
+                            show_ref = ""
+                        else:
+                            show_ref = str(show_raw).strip()
+                            if show_ref.endswith(".0") and show_ref[:-2].replace("-", "").isdigit():
+                                show_ref = show_ref[:-2]
+
+                        if not badge_id or badge_id.lower() == "nan":
+                            relationships_skipped += 1
+                            continue
+
+                        if not show_ref or show_ref.lower() == "nan":
+                            relationships_skipped += 1
+                            continue
+
+                        show_ref_normalized = show_ref.upper()
+                        show_identifier = show_ref_normalized or (target_show_code.upper() if target_show_code else "")
+
+                        show_properties = {
+                            show_unique_field: show_identifier,
+                            "source_file": os.path.basename(resolved_path),
+                            "parent_show": self.show_name,
+                            "show": target_show_code or self.show_name,
+                        }
+
+                        if show_unique_field != "show_ref":
+                            show_properties.setdefault("show_ref", show_ref_normalized)
+
+                        if show_name_column:
+                            show_name_value = row.get(show_name_column, "")
+                            if pd.notna(show_name_value):
+                                show_properties["show_name"] = str(show_name_value).strip()
+
+                        if target_show_code:
+                            show_properties.setdefault("show_code", target_show_code)
+
+                        if show_identifier not in seen_shows:
+                            try:
+                                result = session.run(
+                                    f"MERGE (s:{show_label} {{{show_unique_field}: $show_value}}) "
+                                    "ON CREATE SET s += $show_properties "
+                                    "ON MATCH SET s += $show_properties "
+                                    "RETURN s",
+                                    show_value=show_identifier,
+                                    show_properties=show_properties,
+                                )
+                                summary = result.consume()
+                                if summary.counters.nodes_created > 0:
+                                    show_nodes_created += summary.counters.nodes_created
+                                else:
+                                    show_nodes_skipped += 1
+                                seen_shows.add(show_identifier)
+                            except Exception as show_error:
+                                show_nodes_failed += 1
+                                self.logger.error(
+                                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Failed to merge show node {show_identifier}: {show_error}"
+                                )
+                                continue
+                        else:
+                            show_nodes_skipped += 1
+
+                        # Confirm visitor exists for this show
+                        visitor_exists_query = (
+                            f"MATCH (v:{visitor_label} {{{visitor_id_field}: $badge_id}}) "
+                            "WHERE toLower(v.show) IN $visitor_shows "
+                            "RETURN count(v) > 0 AS exists"
+                        )
+
+                        visitor_exists = session.run(
+                            visitor_exists_query,
+                            badge_id=badge_id,
+                            visitor_shows=visitor_show_candidates,
+                        ).single()["exists"]
+
+                        if not visitor_exists:
+                            missing_visitors += 1
+                            if len(missing_badge_samples) < 20:
+                                missing_badge_samples.add(badge_id)
+                            relationships_skipped += 1
+                            continue
+
+                        relationship_properties = {
+                            "source_file": os.path.basename(resolved_path),
+                            "show_file_code": target_show_code or "",
+                        }
+
+                        for column in relationship_columns:
+                            if column in scans_df.columns:
+                                value = row.get(column)
+                                if pd.isna(value):
+                                    relationship_properties[self._sanitize_property_key(column)] = None
+                                else:
+                                    relationship_properties[self._sanitize_property_key(column)] = str(value).strip()
+                            else:
+                                relationship_properties[self._sanitize_property_key(column)] = None
+
+                        protected_relationship_keys = {"source_file", "show_file_code"}
+                        for column in scans_df.columns:
+                            sanitized_key = self._sanitize_property_key(column)
+                            if sanitized_key in protected_relationship_keys:
+                                continue
+
+                            value = row.get(column)
+                            if pd.isna(value):
+                                relationship_properties.setdefault(sanitized_key, None)
+                            else:
+                                relationship_properties[sanitized_key] = str(value).strip()
+
+                        for candidate in ["Scan Date", "scan_date", "Entry Date", "entry_date"]:
+                            if candidate in scans_df.columns:
+                                value = row.get(candidate)
+                                if pd.notna(value):
+                                    relationship_properties.setdefault("scan_date", str(value).strip())
+                                    break
+
+                        for candidate in ["Scan Time", "scan_time", "Entry Time", "entry_time"]:
+                            if candidate in scans_df.columns:
+                                value = row.get(candidate)
+                                if pd.notna(value):
+                                    relationship_properties.setdefault("scan_time", str(value).strip())
+                                    break
+
+                        try:
+                            merge_query = (
+                                f"MATCH (v:{visitor_label} {{{visitor_id_field}: $badge_id}}) "
+                                f"MATCH (s:{show_label} {{{show_unique_field}: $show_value}}) "
+                                "WHERE toLower(v.show) IN $visitor_shows "
+                                f"MERGE (v)-[r:{relationship_name}]->(s) "
+                                "SET r += $relationship_properties "
+                                "RETURN r"
+                            )
+
+                            result = session.run(
+                                merge_query,
+                                badge_id=badge_id,
+                                show_value=show_identifier,
+                                visitor_shows=visitor_show_candidates,
+                                relationship_properties=relationship_properties,
+                            )
+                            summary = result.consume()
+
+                            if summary.counters.relationships_created > 0:
+                                relationships_created += summary.counters.relationships_created
+                            else:
+                                relationships_skipped += 1
+
+                        except Exception as rel_error:
+                            relationships_failed += 1
+                            self.logger.error(
+                                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Failed to merge register_to_show relationship for badge {badge_id} -> {show_ref_normalized}: {rel_error}"
+                            )
+
+        except Exception as driver_error:
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j driver error during entry scan processing: {driver_error}"
+            )
+        finally:
+            if driver:
+                driver.close()
+
+        self.statistics["nodes_created"]["show_this_year"] = show_nodes_created
+        self.statistics["nodes_skipped"]["show_this_year"] = show_nodes_skipped
+        self.statistics["nodes_failed"]["show_this_year"] = show_nodes_failed
+
+        self.statistics["relationships_created"]["registered_to_show"] = relationships_created
+        self.statistics["relationships_skipped"]["registered_to_show"] = relationships_skipped
+        self.statistics["relationships_failed"]["registered_to_show"] = relationships_failed
+
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Entry scan processing summary: show_nodes_created={show_nodes_created}, show_nodes_skipped={show_nodes_skipped}, show_nodes_failed={show_nodes_failed}, relationships_created={relationships_created}, relationships_skipped={relationships_skipped}, relationships_failed={relationships_failed}"
+        )
+
+        if missing_visitors:
+            sample_list = ", ".join(sorted(missing_badge_samples))
+            self.logger.warning(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - register_to_show skipped {missing_visitors} rows due to missing visitors. Sample badge IDs: {sample_list}"
+            )
 
     def _create_same_visitor_relationships(self, relationship_type, properties, create_only_new):
         """Create Same_Visitor relationships for a specific visitor segment."""
@@ -694,3 +1085,11 @@ class Neo4jVisitorRelationshipProcessor:
             self.logger.info(
                 f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {key}: {value} created, {skipped} skipped, {failed} failed"
             )
+
+        if self.statistics.get("nodes_created"):
+            for key, value in self.statistics["nodes_created"].items():
+                skipped = self.statistics["nodes_skipped"].get(key, 0)
+                failed = self.statistics["nodes_failed"].get(key, 0)
+                self.logger.info(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - {key} nodes: {value} created, {skipped} skipped, {failed} failed"
+                )

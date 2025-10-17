@@ -478,7 +478,9 @@ class Neo4jSessionProcessor:
 
         visitor_label = node_labels.get("visitor_this_year", "Visitor_this_year")
         session_label = node_labels.get("session_this_year", "Sessions_this_year")
-        relationship_name = relationships.get("assisted_this_year", "assisted_this_year")
+        relationship_name = relationships.get(
+            "assisted_session_this_year", "assisted_session_this_year"
+        )
         visitor_id_field = unique_ids.get("visitor", "BadgeId")
 
         driver = None

@@ -101,9 +101,9 @@ def log_neo4j_step_metrics(mlflow_manager, processors, step_number):
                     elif step_number == 8:  # Visitor Relationships
                         if 'relationships_created' in stats:
                             step_metrics[f'{metric_prefix}_relationships_created'] = sum(stats['relationships_created'].values())
-                            assisted_value = stats['relationships_created'].get('assisted_this_year')
+                            assisted_value = stats['relationships_created'].get('assisted_session_this_year')
                             if assisted_value is not None:
-                                step_metrics[f'{metric_prefix}_assisted_this_year_created'] = assisted_value
+                                step_metrics[f'{metric_prefix}_assisted_session_this_year_created'] = assisted_value
                         if 'relationships_failed' in stats:
                             step_metrics[f'{metric_prefix}_relationships_failed'] = sum(stats['relationships_failed'].values())
                     

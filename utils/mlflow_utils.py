@@ -373,6 +373,13 @@ class MLflowManager:
             
             if hasattr(session, 'streams'):
                 metrics['session_unique_stream_categories'] = len(session.streams)
+
+            if hasattr(session, 'backfill_metrics'):
+                backfill = session.backfill_metrics
+                metrics['session_missing_streams_detected'] = backfill.get('total_missing_streams', 0)
+                metrics['session_missing_streams_backfilled'] = backfill.get('sessions_backfilled', 0)
+                metrics['session_missing_streams_skipped_synopsis'] = backfill.get('sessions_skipped_empty_synopsis', 0)
+                metrics['session_missing_streams_llm_failures'] = backfill.get('sessions_failed_llm', 0)
         
         # Neo4j Visitor processor metrics (Step 4)
         if "neo4j_visitor_processor" in processors:
