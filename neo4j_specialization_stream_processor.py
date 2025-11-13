@@ -24,9 +24,9 @@ class Neo4jSpecializationStreamProcessor:
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Initializing Neo4j Specialization Stream Processor"
         )
-
         self.config = config
-        self.input_dir = os.path.join(config["output_dir"], "output")
+        self.output_dir = config["output_dir"]
+        self.input_dir = os.path.join(self.output_dir, "output")
 
         # Load environment variables
         load_dotenv("keys/.env")
@@ -154,7 +154,8 @@ class Neo4jSpecializationStreamProcessor:
         
         # Check if mapping file exists - try multiple locations
         possible_paths = [
-            os.path.join(self.input_dir, self.specialization_mapping_file),  # output_dir/file
+            os.path.join(self.input_dir, self.specialization_mapping_file),  # output_dir/output/file
+            os.path.join(self.output_dir, self.specialization_mapping_file),  # align with job mapping search path
             self.specialization_mapping_file,  # current directory
             os.path.join("data", "bva", self.specialization_mapping_file),  # data/bva/file
         ]
@@ -180,6 +181,7 @@ class Neo4jSpecializationStreamProcessor:
             # Load specialization to stream mapping from configured file - try multiple locations
             possible_paths = [
                 os.path.join(self.input_dir, self.specialization_mapping_file),
+                os.path.join(self.output_dir, self.specialization_mapping_file),
                 self.specialization_mapping_file,
                 os.path.join("data", "bva", self.specialization_mapping_file),
             ]

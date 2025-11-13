@@ -98,3 +98,4 @@ coverage.xml
 .ipynb_checkpoints
 outputs/
 archive/
+*.pdf

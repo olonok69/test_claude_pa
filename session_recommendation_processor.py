@@ -22,6 +22,7 @@ import time
 import re
 import logging
 import math
+from collections import defaultdict
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -32,6 +33,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from neo4j import GraphDatabase
 from sentence_transformers import SentenceTransformer
 from utils import vet_specific_functions
+
 
 
 # Try to import LangChain for advanced filtering (optional)
@@ -182,6 +184,14 @@ class SessionRecommendationProcessor:
         self._visitor_profile_map = {}
         self._load_registration_demographics_this_year()
 
+        # Theatre capacity enforcement (configured per show)
+        self.theatre_limits_enabled = False
+        self.theatre_capacity_multiplier = 1.0
+        self.theatre_capacity_map: Dict[str, Optional[int]] = {}
+        self.session_slot_index: Dict[str, Dict[str, Any]] = {}
+        self._theatre_capacity_stats: Dict[str, Any] = {}
+        self._initialize_theatre_capacity_limits()
+
         self.logger.info(f"SessionRecommendationProcessor initialized for {self.show_name} show")
         self.logger.info(f"Filtering enabled: {self.enable_filtering}")
         if self.enable_filtering:
@@ -315,6 +325,363 @@ class SessionRecommendationProcessor:
             self.logger.info(f"Loaded enrichment profiles for {len(self._visitor_profile_map)} visitors from {csv_path}")
         except Exception as e:
             self.logger.error(f"Failed to load intermediary CSV enrichment: {str(e)}", exc_info=True)
+
+    @staticmethod
+    def _normalize_theatre_name(name: Any) -> Optional[str]:
+        if not isinstance(name, str):
+            return None
+        normalized = re.sub(r"\s+", " ", name).strip()
+        return normalized.lower() if normalized else None
+
+    @staticmethod
+    def _parse_capacity_value(value: Any) -> Optional[int]:
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        text = text.replace(",", "")
+        try:
+            return int(float(text))
+        except (TypeError, ValueError):
+            return None
+
+    def _build_session_slot_key(
+        self,
+        normalized_theatre: Optional[str],
+        date_value: Any,
+        start_value: Any,
+        session_id: str,
+    ) -> str:
+        theatre_part = normalized_theatre or f"unknown::{session_id}"
+
+        def _clean(value: Any) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, float) and math.isnan(value):
+                return ""
+            return str(value).strip()
+
+        date_part = _clean(date_value)
+        start_part = _clean(start_value)
+
+        if not date_part and not start_part:
+            return f"{theatre_part}|{session_id}"
+        return f"{theatre_part}|{date_part}|{start_part}"
+
+    @staticmethod
+    def _format_slot_label(slot_info: Dict[str, Any]) -> str:
+        theatre_name = slot_info.get("theatre_name") or slot_info.get("normalized_theatre") or "Unknown theatre"
+        date_value = slot_info.get("date")
+        start_value = slot_info.get("start_time")
+
+        parts = [str(theatre_name)]
+        if date_value is not None and not (isinstance(date_value, float) and math.isnan(date_value)):
+            parts.append(str(date_value))
+        if start_value is not None and not (isinstance(start_value, float) and math.isnan(start_value)):
+            parts.append(str(start_value))
+
+        if len(parts) == 1:
+            return parts[0]
+        return " @ ".join(parts)
+
+    def _initialize_theatre_capacity_limits(self) -> None:
+        """Load theatre capacity information and session slots when configured."""
+        config_section = self.recommendation_config.get("theatre_capacity_limits", {})
+        self.theatre_limits_enabled = bool(config_section.get("enabled", False))
+        self._theatre_capacity_stats = {
+            "recommendations_removed": 0,
+            "slots_limited": 0,
+            "sessions_missing_metadata": 0,
+            "sessions_without_capacity": 0,
+            "slots_processed": 0,
+        }
+
+        if not self.theatre_limits_enabled:
+            return
+
+        multiplier = config_section.get("capacity_multiplier", 1.0)
+        try:
+            self.theatre_capacity_multiplier = float(multiplier)
+            if self.theatre_capacity_multiplier < 0:
+                raise ValueError("capacity_multiplier must be non-negative")
+        except (TypeError, ValueError):
+            self.logger.warning(
+                "Invalid theatre capacity multiplier '%s'; defaulting to 1.0",
+                multiplier,
+            )
+            self.theatre_capacity_multiplier = 1.0
+
+        capacity_file = config_section.get("capacity_file")
+        session_file = config_section.get("session_file") or self.config.get("session_files", {}).get("session_this")
+
+        if not capacity_file or not session_file:
+            self.logger.warning(
+                "Theatre capacity limits enabled but capacity_file or session_file not configured; disabling enforcement",
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        capacity_path = Path(capacity_file)
+        if not capacity_path.exists():
+            self.logger.warning(
+                "Theatre capacity file %s not found; disabling capacity enforcement",
+                capacity_path,
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        session_path = Path(session_file)
+        if not session_path.exists():
+            self.logger.warning(
+                "Session file %s not found; disabling theatre capacity enforcement",
+                session_path,
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        try:
+            capacity_df = pd.read_csv(capacity_path)
+        except Exception as exc:  # pragma: no cover - defensive
+            self.logger.error(
+                "Failed to load theatre capacity file %s: %s",
+                capacity_path,
+                exc,
+                exc_info=True,
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        theatre_col = None
+        capacity_col = None
+        lower_columns = {col.lower(): col for col in capacity_df.columns}
+        for candidate in ("theatre__name", "theatre_name", "theatre"):
+            if candidate in capacity_df.columns:
+                theatre_col = candidate
+                break
+            if candidate in lower_columns:
+                theatre_col = lower_columns[candidate]
+                break
+
+        for candidate in ("number_visitors", "capacity", "max_visitors"):
+            if candidate in capacity_df.columns:
+                capacity_col = candidate
+                break
+            if candidate in lower_columns:
+                capacity_col = lower_columns[candidate]
+                break
+
+        if not theatre_col or not capacity_col:
+            self.logger.warning(
+                "Theatre capacity file %s missing required columns; disabling enforcement",
+                capacity_path,
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        capacities: Dict[str, int] = {}
+        for _, row in capacity_df[[theatre_col, capacity_col]].iterrows():
+            theatre_name = row.get(theatre_col)
+            normalized = self._normalize_theatre_name(theatre_name)
+            if not normalized:
+                continue
+            capacity_value = self._parse_capacity_value(row.get(capacity_col))
+            if capacity_value is None:
+                continue
+            capacities[normalized] = capacity_value
+
+        if not capacities:
+            self.logger.warning(
+                "No valid theatre capacity values found in %s; disabling enforcement",
+                capacity_path,
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        self.theatre_capacity_map = capacities
+
+        try:
+            session_df = pd.read_csv(session_path, dtype={"session_id": str})
+        except Exception as exc:  # pragma: no cover - defensive
+            self.logger.error(
+                "Failed to load session file %s: %s",
+                session_path,
+                exc,
+                exc_info=True,
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        if "session_id" not in session_df.columns:
+            self.logger.warning(
+                "Session file %s missing 'session_id' column; disabling theatre capacity enforcement",
+                session_path,
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        session_df["session_id"] = session_df["session_id"].astype(str).str.strip()
+        session_df = session_df.drop_duplicates(subset=["session_id"], keep="first")
+
+        theatre_session_col = None
+        lower_session_cols = {col.lower(): col for col in session_df.columns}
+        for candidate in ("theatre__name", "theatre_name", "theatre"):
+            if candidate in session_df.columns:
+                theatre_session_col = candidate
+                break
+            if candidate in lower_session_cols:
+                theatre_session_col = lower_session_cols[candidate]
+                break
+
+        if not theatre_session_col:
+            self.logger.warning(
+                "Session file %s missing theatre column; disabling capacity enforcement",
+                session_path,
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        date_col = None
+        for candidate in ("date", "session_date", "sessiondate"):
+            if candidate in session_df.columns:
+                date_col = candidate
+                break
+            if candidate in lower_session_cols:
+                date_col = lower_session_cols[candidate]
+                break
+
+        start_col = None
+        for candidate in ("start_time", "session_start_time", "starttime"):
+            if candidate in session_df.columns:
+                start_col = candidate
+                break
+            if candidate in lower_session_cols:
+                start_col = lower_session_cols[candidate]
+                break
+
+        self.session_slot_index = {}
+        for _, row in session_df.iterrows():
+            session_id = str(row.get("session_id", "")).strip()
+            if not session_id:
+                continue
+            if session_id in self.session_slot_index:
+                continue
+
+            theatre_name = row.get(theatre_session_col)
+            normalized_theatre = self._normalize_theatre_name(theatre_name)
+            date_value = row.get(date_col) if date_col else None
+            start_value = row.get(start_col) if start_col else None
+            slot_key = self._build_session_slot_key(normalized_theatre, date_value, start_value, session_id)
+            capacity_value = self.theatre_capacity_map.get(normalized_theatre)
+
+            self.session_slot_index[session_id] = {
+                "session_id": session_id,
+                "theatre_name": theatre_name if isinstance(theatre_name, str) else None,
+                "normalized_theatre": normalized_theatre,
+                "date": date_value,
+                "start_time": start_value,
+                "slot_key": slot_key,
+                "capacity": capacity_value,
+            }
+
+        if not self.session_slot_index:
+            self.logger.warning(
+                "Unable to map any sessions to theatres from %s; disabling theatre capacity enforcement",
+                session_path,
+            )
+            self.theatre_limits_enabled = False
+            return
+
+        self.logger.info(
+            "Theatre capacity enforcement enabled for %d theatres (multiplier %.2f)",
+            len(self.theatre_capacity_map),
+            self.theatre_capacity_multiplier,
+        )
+
+    def _enforce_theatre_capacity_limits(self, recommendations: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, int]]:
+        """Trim recommendations so per-theatre slots respect configured capacity limits."""
+        if not self.theatre_limits_enabled:
+            return None
+
+        slot_recommendations: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        missing_metadata = 0
+        missing_capacity = 0
+
+        for visitor_id, payload in recommendations.items():
+            recs = payload.get("filtered_recommendations", []) or []
+            for rec in recs:
+                session_id = rec.get("session_id")
+                if not session_id:
+                    continue
+                session_meta = self.session_slot_index.get(str(session_id))
+                if not session_meta:
+                    missing_metadata += 1
+                    continue
+                capacity = session_meta.get("capacity")
+                if capacity is None:
+                    missing_capacity += 1
+                    continue
+                slot_key = session_meta.get("slot_key")
+                slot_recommendations[slot_key].append(
+                    {
+                        "visitor_id": visitor_id,
+                        "payload": payload,
+                        "record": rec,
+                        "similarity": rec.get("similarity", 0) or 0,
+                        "session_meta": session_meta,
+                    }
+                )
+
+        adjustments = {
+            "recommendations_removed": 0,
+            "slots_limited": 0,
+            "sessions_missing_metadata": missing_metadata,
+            "sessions_without_capacity": missing_capacity,
+            "slots_processed": len(slot_recommendations),
+        }
+
+        for slot_key, entries in slot_recommendations.items():
+            if not entries:
+                continue
+
+            session_meta = entries[0]["session_meta"]
+            capacity = session_meta.get("capacity")
+            if capacity is None or capacity <= 0:
+                continue
+
+            allowed = int(math.floor(capacity * self.theatre_capacity_multiplier))
+            if allowed < 0:
+                allowed = 0
+
+            if len(entries) <= allowed:
+                continue
+
+            adjustments["slots_limited"] += 1
+
+            entries.sort(key=lambda item: (item.get("similarity", 0),), reverse=True)
+            to_keep = entries[:allowed]
+            keep_set = {id(item) for item in to_keep}
+
+            for entry in entries:
+                if id(entry) in keep_set:
+                    continue
+
+                payload = entry["payload"]
+                rec = entry["record"]
+                filtered_recs = payload.get("filtered_recommendations", [])
+                if rec in filtered_recs:
+                    filtered_recs.remove(rec)
+                    adjustments["recommendations_removed"] += 1
+                    metadata = payload.setdefault("metadata", {})
+                    metadata["filtered_count"] = len(filtered_recs)
+                    notes = metadata.setdefault("notes", [])
+                    slot_label = self._format_slot_label(session_meta)
+                    notes.append(
+                        f"Removed session {rec.get('session_id')} due to theatre capacity limit ({slot_label}, limit {allowed})"
+                    )
+
+        self._theatre_capacity_stats = adjustments
+        return adjustments
 
     def _apply_csv_enrichment(self, visitor: Dict) -> Dict:
         """Override base fields with values from intermediary CSV when present."""
@@ -1840,13 +2207,16 @@ class SessionRecommendationProcessor:
                 return
             
             self.statistics["visitors_processed"] = len(visitors_to_process)
+            # Reset run-scoped counters so repeated runs remain accurate
+            self.statistics["visitors_with_recommendations"] = 0
+            self.statistics["visitors_without_recommendations"] = 0
+            self.statistics["total_recommendations_generated"] = 0
+            self.statistics["total_filtered_recommendations"] = 0
+            self.statistics["unique_recommended_sessions"] = 0
             
             # Process visitors and generate recommendations
             all_recommendations = []
-            successful = 0
             errors = 0
-            total_recommendations = 0
-            unique_sessions = set()
             
             # Create output file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1867,10 +2237,9 @@ class SessionRecommendationProcessor:
                     filtered_recommendations = visitor_payload.get("filtered_recommendations", [])
                     rules_applied = visitor_payload.get("rules_applied", [])
                     metadata = visitor_payload.get("metadata", {})
-                    raw_count = metadata.get("raw_count", len(raw_recommendations))
+                    metadata.setdefault("raw_count", len(raw_recommendations))
+                    metadata.setdefault("filtered_count", len(filtered_recommendations))
                     filtered_count = metadata.get("filtered_count", len(filtered_recommendations))
-
-                    self.statistics["total_filtered_recommendations"] += filtered_count
 
                     payload_for_storage = {
                         "visitor": visitor,
@@ -1883,15 +2252,6 @@ class SessionRecommendationProcessor:
                     can_update_neo4j = bool(visitor.get("BadgeId"))
 
                     if filtered_recommendations:
-                        self.statistics["visitors_with_recommendations"] += 1
-                        successful += 1
-                        total_recommendations += filtered_count
-
-                        for rec in filtered_recommendations:
-                            session_id = rec.get("session_id")
-                            if session_id:
-                                unique_sessions.add(session_id)
-
                         if can_update_neo4j:
                             all_recommendations.append(payload_for_storage)
                         recommendations_dict[badge_id] = payload_for_storage
@@ -1900,7 +2260,6 @@ class SessionRecommendationProcessor:
                             f"Generated {filtered_count} recommendations for visitor {badge_id}"
                         )
                     else:
-                        self.statistics["visitors_without_recommendations"] += 1
                         if can_update_neo4j:
                             all_recommendations.append(payload_for_storage)
                         recommendations_dict[badge_id] = payload_for_storage
@@ -1920,14 +2279,51 @@ class SessionRecommendationProcessor:
                     self.statistics["errors"] += 1
                     self.statistics["error_details"].append(f"{badge_id}: {str(e)}")
                     self.logger.error(f"Error processing visitor {badge_id}: {str(e)}")
-            
-            # Update statistics
+
+            theatre_stats = None
+            if self.theatre_limits_enabled:
+                theatre_stats = self._enforce_theatre_capacity_limits(recommendations_dict)
+                if theatre_stats and theatre_stats.get("recommendations_removed", 0):
+                    self.logger.info(
+                        "Applied theatre capacity limits: removed %s recommendations across %s slot(s)",
+                        theatre_stats.get("recommendations_removed", 0),
+                        theatre_stats.get("slots_limited", 0),
+                    )
+
+            # Ensure metadata counts stay aligned with final recommendation lists
+            for payload in recommendations_dict.values():
+                metadata = payload.get("metadata")
+                if metadata is not None:
+                    metadata["filtered_count"] = len(payload.get("filtered_recommendations", []) or [])
+
+            total_recommendations = 0
+            unique_sessions: Set[Any] = set()
+            successful = 0
+            for payload in recommendations_dict.values():
+                recs = payload.get("filtered_recommendations", []) or []
+                total_recommendations += len(recs)
+                if recs:
+                    successful += 1
+                for rec in recs:
+                    session_id = rec.get("session_id")
+                    if session_id:
+                        unique_sessions.add(session_id)
+
+            visitors_without = len(visitors_to_process) - successful
+
+            # Update statistics post-enforcement
+            self.statistics["visitors_with_recommendations"] = successful
+            self.statistics["visitors_without_recommendations"] = max(visitors_without, 0)
             self.statistics["total_recommendations_generated"] = total_recommendations
+            self.statistics["total_filtered_recommendations"] = total_recommendations
             self.statistics["unique_recommended_sessions"] = len(unique_sessions)
-            
+            if theatre_stats:
+                self.statistics["theatre_capacity_limits"] = theatre_stats
+            else:
+                self.statistics.pop("theatre_capacity_limits", None)
+
             # Add alias for backward compatibility with summary_utils
             self.statistics["total_visitors_processed"] = self.statistics["visitors_processed"]
-            self.statistics["unique_recommended_sessions"] = len(unique_sessions)
             
             # Save recommendations to file
             output_data = {
@@ -1945,8 +2341,11 @@ class SessionRecommendationProcessor:
                         "min_similarity_score": self.min_similarity_score,
                         "max_recommendations": self.max_recommendations,
                         "similar_visitors_count": self.similar_visitors_count,
+                        "theatre_capacity_enforced": self.theatre_limits_enabled,
+                        "theatre_capacity_multiplier": self.theatre_capacity_multiplier if self.theatre_limits_enabled else None,
                     }
                 },
+                "theatre_capacity_stats": theatre_stats,
                 "recommendations": recommendations_dict,
                 "statistics": self.statistics,
             }
