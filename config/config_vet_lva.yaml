@@ -15,6 +15,16 @@ event:
   shows_last_year_secondary:
     - "BVA2025"
 
+post_analysis_mode:
+  registration_shows:
+    this_year_main:
+      - ['LVS25']
+  scan_files:
+    seminars_scan_reference_this: "data/lva/post/lvs25 seminar scans reference.csv"
+    seminars_scans_this: "data/lva/post/lvs25 seminar scans.csv"
+  entry_scan_files:
+    entry_scans_this: ["data/lva/post/lvs25_unfiltered_entry_scans.csv"]  
+
 # Badge history column names
 badge_history_columns:
   main_event: "BadgeId_last_year_bva"
@@ -82,29 +92,30 @@ output_files:
 
 
 # Pipeline control settings
-create_only_new: false  # If true, only process new visitors without recommendations
+create_only_new: true
+  # If true, only process new visitors without recommendations
 
 # Pipeline step activation settings
 pipeline_steps:
   # Data processing steps
-  registration_processing: false
-  scan_processing: false  
-  session_processing: false
+  registration_processing: true
+  scan_processing: true  
+  session_processing: true
   # Neo4j processing steps
   neo4j_visitor_processing: true
   neo4j_session_processing: true
   neo4j_job_stream_processing: true
   neo4j_specialization_stream_processing: true
   neo4j_visitor_relationship_processing: true
-  session_embedding_processing: true
-  session_recommendation_processing: true
+  session_embedding_processing: false
+  session_recommendation_processing: false
 
 # Input file paths
 old_format: true
 input_files:
-  main_event_registration: "data/lva/20251104_eventregistration_LVS24_25_legacy.json"
+  main_event_registration: "data/lva/20251127_eventregistration_LVS24_25_legacy.json"
   secondary_event_registration: "data/lva/20250922_registration_BVA_25.json"
-  main_event_demographic: "data/lva/20251104_eventregistration_LVS24_25_demographics_legacy.json"
+  main_event_demographic: "data/lva/20251127_eventregistration_LVS24_25_demographics_legacy.json"
   secondary_event_demographic: "data/lva/20250922_demographics_BVA_25.json"
   practices: "data/lva/practices_missing.csv"
 
