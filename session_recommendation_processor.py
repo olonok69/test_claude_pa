@@ -22,6 +22,7 @@ import time
 import re
 import logging
 import math
+import random
 from collections import defaultdict
 import pandas as pd
 import numpy as np
@@ -34,6 +35,7 @@ from neo4j import GraphDatabase
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 from utils import vet_specific_functions
+from utils.neo4j_utils import resolve_neo4j_credentials
 
 
 
@@ -60,9 +62,33 @@ class SessionRecommendationProcessor:
         self.logger = self._setup_logging()
         
         # Extract configuration settings
+        self.mode = str(config.get("mode", "personal_agendas") or "personal_agendas").strip().lower()
         self.show_name = config.get("neo4j", {}).get("show_name", "bva")
         self.recommendation_config = config.get("recommendation", {})
         self.neo4j_config = config.get("neo4j", {})
+
+        control_cfg = self.recommendation_config.get("control_group", {}) or {}
+        self.control_group_config = control_cfg
+        self.control_group_enabled = bool(control_cfg.get("enabled", False))
+        self.control_group_percentage = self._normalize_percentage_value(
+            control_cfg.get("percentage", 0.0)
+        )
+        seed_value = control_cfg.get("random_seed")
+        self.control_group_random_seed: Optional[int]
+        if seed_value is None:
+            self.control_group_random_seed = None
+        else:
+            try:
+                self.control_group_random_seed = int(seed_value)
+            except (TypeError, ValueError):
+                self.logger.warning(
+                    "Invalid control_group.random_seed value '%s'; randomness will not be seeded",
+                    seed_value,
+                )
+                self.control_group_random_seed = None
+        self.control_group_file_suffix = str(control_cfg.get("file_suffix", "_control"))
+        self.control_group_output_directory = control_cfg.get("output_directory")
+        self.control_group_property_name = str(control_cfg.get("neo4j_property", "control_group"))
 
         # Cache for Neo4j schema discovery
         self._available_labels: Optional[Set[str]] = None
@@ -70,15 +96,16 @@ class SessionRecommendationProcessor:
         # Load Neo4j connection parameters from .env for consistency with other processors
         env_file = config.get("env_file", "keys/.env")
         load_dotenv(env_file)
-        self.uri = os.getenv("NEO4J_URI")
-        self.username = os.getenv("NEO4J_USERNAME")
-        self.password = os.getenv("NEO4J_PASSWORD")
-
-        if not self.uri or not self.username or not self.password:
-            raise ValueError(
-                f"Missing Neo4j credentials in env file '{env_file}'. "
-                "Please set NEO4J_URI, NEO4J_USERNAME and NEO4J_PASSWORD."
-            )
+        credentials = resolve_neo4j_credentials(config, logger=self.logger)
+        self.uri = credentials["uri"]
+        self.username = credentials["username"]
+        self.password = credentials["password"]
+        self.neo4j_environment = credentials["environment"]
+        self.logger.info(
+            "Using Neo4j environment '%s' for show %s",
+            self.neo4j_environment,
+            self.show_name,
+        )
         
         # Recommendation parameters
         self.min_similarity_score = self.recommendation_config.get("min_similarity_score", 0.3)
@@ -334,6 +361,23 @@ class SessionRecommendationProcessor:
             self.logger.info(f"Loaded enrichment profiles for {len(self._visitor_profile_map)} visitors from {csv_path}")
         except Exception as e:
             self.logger.error(f"Failed to load intermediary CSV enrichment: {str(e)}", exc_info=True)
+
+    @staticmethod
+    def _normalize_percentage_value(value: Any) -> float:
+        """Normalize percentage inputs supporting 0-1 fractions or 0-100 percentages."""
+
+        try:
+            percentage = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+        if percentage < 0:
+            return 0.0
+
+        if percentage > 1:
+            percentage = percentage / 100.0
+
+        return min(percentage, 1.0)
 
     @staticmethod
     def _normalize_theatre_name(name: Any) -> Optional[str]:
@@ -1745,8 +1789,12 @@ class SessionRecommendationProcessor:
             result["metadata"]["notes"].append("Error while generating recommendations")
             return result
 
-    def _update_visitor_recommendations(self, recommendations_data: List[Dict]):
-        """Update visitors with has_recommendation flag and create IS_RECOMMENDED relationships."""
+    def _update_visitor_recommendations(
+        self,
+        recommendations_data: List[Dict],
+        control_group_map: Optional[Dict[str, int]] = None,
+    ):
+        """Update visitors with recommendation metadata and control group assignment."""
         try:
             with GraphDatabase.driver(
                 self.uri, auth=(self.username, self.password)
@@ -1754,9 +1802,11 @@ class SessionRecommendationProcessor:
                 with driver.session() as session:
                     updated_with_recs = 0
                     updated_without_recs = 0
+                    control_group_map = control_group_map or {}
                     
                     for rec in recommendations_data:
                         visitor_id = rec["visitor"]["BadgeId"]
+                        control_value = control_group_map.get(visitor_id, 0)
                         recommended_sessions = rec.get("filtered_recommendations", [])
                         
                         if recommended_sessions:
@@ -1766,12 +1816,14 @@ class SessionRecommendationProcessor:
                             WHERE v.show = $show_name OR v.show IS NULL
                             SET v.has_recommendation = "1",
                                 v.show = $show_name,
-                                v.recommendations_generated_at = $timestamp
+                                v.recommendations_generated_at = $timestamp,
+                                v.{self.control_group_property_name} = $control_group
                             """
                             session.run(update_query, 
                                        visitor_id=visitor_id, 
                                        show_name=self.show_name,
-                                       timestamp=datetime.now().isoformat())
+                                       timestamp=datetime.now().isoformat(),
+                                       control_group=control_value)
                             updated_with_recs += 1
                             
                             # Create IS_RECOMMENDED relationships
@@ -1803,12 +1855,14 @@ class SessionRecommendationProcessor:
                             WHERE v.show = $show_name OR v.show IS NULL
                             SET v.has_recommendation = "0",
                                 v.show = $show_name,
-                                v.recommendations_generated_at = $timestamp
+                                v.recommendations_generated_at = $timestamp,
+                                v.{self.control_group_property_name} = $control_group
                             """
                             session.run(update_query, 
                                        visitor_id=visitor_id, 
                                        show_name=self.show_name,
-                                       timestamp=datetime.now().isoformat())
+                                       timestamp=datetime.now().isoformat(),
+                                       control_group=control_value)
                             updated_without_recs += 1
                     
                     self.logger.info(f"Updated {updated_with_recs} visitors with recommendations, {updated_without_recs} without")
@@ -2192,6 +2246,109 @@ class SessionRecommendationProcessor:
                 "error": str(exc),
             }
 
+    def _should_apply_control_group(self) -> bool:
+        """Determine if the control group logic should run for the current execution."""
+
+        if not self.control_group_enabled:
+            return False
+
+        if self.control_group_percentage <= 0:
+            return False
+
+        return self.mode == "personal_agendas"
+
+    def _split_control_group(
+        self, recommendations: Dict[str, Dict[str, Any]]
+    ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]], Dict[str, Any], Dict[str, int]]:
+        """
+        Split visitors into primary and control groups.
+
+        Returns:
+            remaining: Visitors to keep in the main output
+            control: Visitors held out for the control group
+            summary: Metadata about the allocation
+            assignment: Mapping of visitor_id -> 1 (control) or 0 (primary)
+        """
+
+        remaining: Dict[str, Dict[str, Any]] = {}
+        control: Dict[str, Dict[str, Any]] = {}
+        assignment: Dict[str, int] = {}
+
+        if not recommendations:
+            return remaining, control, {
+                "enabled": self._should_apply_control_group(),
+                "applied": False,
+                "percentage": self.control_group_percentage,
+                "selected_visitors": 0,
+                "eligible_visitors": 0,
+                "mode": self.mode,
+                "random_seed": self.control_group_random_seed,
+            }, assignment
+
+        eligible_ids = [
+            visitor_id
+            for visitor_id, payload in recommendations.items()
+            if payload.get("filtered_recommendations")
+        ]
+
+        summary = {
+            "enabled": self._should_apply_control_group(),
+            "applied": False,
+            "percentage": self.control_group_percentage,
+            "selected_visitors": 0,
+            "eligible_visitors": len(eligible_ids),
+            "mode": self.mode,
+            "random_seed": self.control_group_random_seed,
+        }
+
+        selected_ids: Set[str] = set()
+        if self._should_apply_control_group() and eligible_ids:
+            target_count = max(1, int(round(len(eligible_ids) * self.control_group_percentage)))
+            target_count = min(target_count, len(eligible_ids))
+
+            rng = random.Random(self.control_group_random_seed)
+            selected_ids = set(rng.sample(eligible_ids, target_count))
+            summary["applied"] = bool(selected_ids)
+            summary["selected_visitors"] = len(selected_ids)
+        else:
+            summary["enabled"] = False
+
+        for visitor_id, payload in recommendations.items():
+            if visitor_id in selected_ids:
+                control[visitor_id] = payload
+                assignment[visitor_id] = 1
+            else:
+                remaining[visitor_id] = payload
+                assignment[visitor_id] = 0
+
+        if summary["applied"]:
+            self.logger.info(
+                "Control group enabled: withholding %d of %d eligible visitors (%.2f%% configured)",
+                summary["selected_visitors"],
+                summary["eligible_visitors"],
+                self.control_group_percentage * 100,
+            )
+        elif summary["enabled"]:
+            self.logger.info(
+                "Control group configuration enabled but no eligible visitors were selected"
+            )
+
+        return remaining, control, summary, assignment
+
+    def _get_control_output_path(self, base_output_file: Path) -> Path:
+        """Build the path for the control group export file."""
+
+        if self.control_group_output_directory:
+            candidate = Path(self.control_group_output_directory)
+            if not candidate.is_absolute():
+                candidate = self.output_dir / candidate
+            candidate.mkdir(parents=True, exist_ok=True)
+            return candidate / f"{base_output_file.stem}{self.control_group_file_suffix}{base_output_file.suffix}"
+
+        return base_output_file.with_name(
+            f"{base_output_file.stem}{self.control_group_file_suffix}{base_output_file.suffix}"
+        )
+
     def process(self, create_only_new: bool = False):
         """
         Main processing method to generate recommendations for all visitors.
@@ -2305,27 +2462,27 @@ class SessionRecommendationProcessor:
                 if metadata is not None:
                     metadata["filtered_count"] = len(payload.get("filtered_recommendations", []) or [])
 
-            total_recommendations = 0
-            unique_sessions: Set[Any] = set()
-            successful = 0
+            total_recommendations_all = 0
+            unique_sessions_all: Set[Any] = set()
+            successful_total = 0
             for payload in recommendations_dict.values():
                 recs = payload.get("filtered_recommendations", []) or []
-                total_recommendations += len(recs)
+                total_recommendations_all += len(recs)
                 if recs:
-                    successful += 1
+                    successful_total += 1
                 for rec in recs:
                     session_id = rec.get("session_id")
                     if session_id:
-                        unique_sessions.add(session_id)
+                        unique_sessions_all.add(session_id)
 
-            visitors_without = len(visitors_to_process) - successful
+            visitors_without = len(visitors_to_process) - successful_total
 
-            # Update statistics post-enforcement
-            self.statistics["visitors_with_recommendations"] = successful
+            # Update statistics post-enforcement with overall totals
+            self.statistics["visitors_with_recommendations"] = successful_total
             self.statistics["visitors_without_recommendations"] = max(visitors_without, 0)
-            self.statistics["total_recommendations_generated"] = total_recommendations
-            self.statistics["total_filtered_recommendations"] = total_recommendations
-            self.statistics["unique_recommended_sessions"] = len(unique_sessions)
+            self.statistics["total_recommendations_generated"] = total_recommendations_all
+            self.statistics["total_filtered_recommendations"] = total_recommendations_all
+            self.statistics["unique_recommended_sessions"] = len(unique_sessions_all)
             if theatre_stats:
                 self.statistics["theatre_capacity_limits"] = theatre_stats
             else:
@@ -2333,52 +2490,137 @@ class SessionRecommendationProcessor:
 
             # Add alias for backward compatibility with summary_utils
             self.statistics["total_visitors_processed"] = self.statistics["visitors_processed"]
-            
-            # Save recommendations to file
-            output_data = {
-                "metadata": {
-                    "generated_at": datetime.now().isoformat(),
-                    "show": self.show_name,
-                    "visitors_processed": len(visitors_to_process),
-                    "successful": successful,
-                    "errors": errors,
-                    "total_recommendations": total_recommendations,
-                    "unique_sessions": len(unique_sessions),
-                    "filtering_enabled": self.enable_filtering,
-                    "create_only_new": create_only_new,
-                    "configuration": {
-                        "min_similarity_score": self.min_similarity_score,
-                        "max_recommendations": self.max_recommendations,
-                        "similar_visitors_count": self.similar_visitors_count,
-                        "theatre_capacity_enforced": self.theatre_limits_enabled,
-                        "theatre_capacity_multiplier": self.theatre_capacity_multiplier if self.theatre_limits_enabled else None,
-                    }
+
+            (
+                recommendations_dict,
+                control_recommendations,
+                control_summary,
+                control_assignment_map,
+            ) = self._split_control_group(recommendations_dict)
+
+            main_total_recommendations = 0
+            main_unique_sessions: Set[Any] = set()
+            main_successful = 0
+            for payload in recommendations_dict.values():
+                recs = payload.get("filtered_recommendations", []) or []
+                main_total_recommendations += len(recs)
+                if recs:
+                    main_successful += 1
+                for rec in recs:
+                    session_id = rec.get("session_id")
+                    if session_id:
+                        main_unique_sessions.add(session_id)
+
+            control_total_recommendations = 0
+            control_unique_sessions: Set[Any] = set()
+            control_successful = 0
+            for payload in control_recommendations.values():
+                recs = payload.get("filtered_recommendations", []) or []
+                control_total_recommendations += len(recs)
+                if recs:
+                    control_successful += 1
+                for rec in recs:
+                    session_id = rec.get("session_id")
+                    if session_id:
+                        control_unique_sessions.add(session_id)
+
+            control_summary["withheld_visitors"] = len(control_recommendations)
+            control_summary["withheld_recommendations"] = control_total_recommendations
+            control_summary["withheld_successful"] = control_successful
+
+            self.statistics["control_group"] = control_summary
+
+            output_metadata = {
+                "generated_at": datetime.now().isoformat(),
+                "show": self.show_name,
+                "visitors_processed": len(visitors_to_process),
+                "successful": main_successful,
+                "successful_before_control": successful_total,
+                "errors": errors,
+                "total_recommendations": main_total_recommendations,
+                "total_recommendations_before_control": total_recommendations_all,
+                "unique_sessions": len(main_unique_sessions),
+                "filtering_enabled": self.enable_filtering,
+                "create_only_new": create_only_new,
+                "control_group": control_summary,
+                "configuration": {
+                    "min_similarity_score": self.min_similarity_score,
+                    "max_recommendations": self.max_recommendations,
+                    "similar_visitors_count": self.similar_visitors_count,
+                    "theatre_capacity_enforced": self.theatre_limits_enabled,
+                    "theatre_capacity_multiplier": self.theatre_capacity_multiplier
+                    if self.theatre_limits_enabled
+                    else None,
                 },
+            }
+
+            # Update Neo4j before writing any outputs so control visitors stay tracked in graph
+            if all_recommendations:
+                self.logger.info("Updating Neo4j with recommendation data")
+                self._update_visitor_recommendations(all_recommendations, control_assignment_map)
+                self.logger.info("Completed Neo4j updates")
+
+            # Save recommendations to file (primary dataset)
+            output_data = {
+                "metadata": output_metadata,
                 "theatre_capacity_stats": theatre_stats,
                 "recommendations": recommendations_dict,
                 "statistics": self.statistics,
             }
-            
+
             with open(output_file, "w") as f:
                 json.dump(output_data, f, indent=2, default=str)
-            
+
             self.logger.info(f"Saved recommendations to {output_file}")
             self.logger.info(
-                f"Generated recommendations for {successful} visitors with {errors} errors"
+                "Generated recommendations for %d visitors (%d withheld for control) with %d errors",
+                main_successful,
+                control_summary.get("withheld_visitors", 0),
+                errors,
             )
-            
+
             # Save as CSV if configured
             if self.recommendation_config.get("save_csv", True):
                 df = self.json_to_dataframe(output_file)
                 csv_file = str(output_file).replace(".json", ".csv")
                 df.to_csv(csv_file, index=False)
                 self.logger.info(f"Saved recommendations DataFrame to {csv_file}")
-            
-            # Update Neo4j with recommendations
-            if len(all_recommendations) > 0:
-                self.logger.info("Updating Neo4j with recommendation data")
-                self._update_visitor_recommendations(all_recommendations)
-                self.logger.info("Completed Neo4j updates")
+
+            # Persist control group outputs separately when applicable
+            if control_recommendations:
+                control_output_file = self._get_control_output_path(output_file)
+                control_metadata = {
+                    "generated_at": output_metadata["generated_at"],
+                    "show": self.show_name,
+                    "visitors_processed": len(visitors_to_process),
+                    "successful": control_successful,
+                    "errors": errors,
+                    "total_recommendations": control_total_recommendations,
+                    "unique_sessions": len(control_unique_sessions),
+                    "filtering_enabled": self.enable_filtering,
+                    "create_only_new": create_only_new,
+                    "control_group_dataset": True,
+                    "control_group": control_summary,
+                    "configuration": output_metadata["configuration"],
+                }
+
+                control_output = {
+                    "metadata": control_metadata,
+                    "theatre_capacity_stats": theatre_stats,
+                    "recommendations": control_recommendations,
+                    "statistics": self.statistics,
+                }
+
+                with open(control_output_file, "w") as f:
+                    json.dump(control_output, f, indent=2, default=str)
+
+                self.logger.info("Saved control group recommendations to %s", control_output_file)
+
+                if self.recommendation_config.get("save_csv", True):
+                    df_control = self.json_to_dataframe(control_output_file)
+                    control_csv = str(control_output_file).replace(".json", ".csv")
+                    df_control.to_csv(control_csv, index=False)
+                    self.logger.info("Saved control group DataFrame to %s", control_csv)
             
             # Calculate processing time
             self.statistics["processing_time"] = time.time() - start_time

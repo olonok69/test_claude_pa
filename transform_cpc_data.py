@@ -388,24 +388,23 @@ def main(include_legacy: bool = False) -> None:
         ref_reg_keys.append("show_ref")
 
     output_files = {
-        "cpcn_demographics": DATA_DIR / "20251007_CPCN24_25_demographics_graphql.json",
-        "cpcn_registration": DATA_DIR / "20251006_eventregistration_CPCN24_25_graphql.json",
-        "cpc_demographics": DATA_DIR / "20251006_eventregistration_CPC25_demographics_graphql.json",
-        "cpc_registration": DATA_DIR / "20251006_eventregistration_CPC25_graphql.json",
+        "cpcn_demographics": DATA_DIR / "20251201_CPCN24_25_demographics_graphql.json",
+        "cpcn_registration": DATA_DIR / "20251201_eventregistration_CPCN24_25_graphql.json",
+        "cpc_demographics": DATA_DIR / "20251201_eventregistration_CPC25_demographics_graphql.json",
+        "cpc_registration": DATA_DIR / "20251201_eventregistration_CPC25_graphql.json",
     }
 
     legacy_output_files = {
-        "cpcn_demographics": DATA_DIR / "20251007_CPCN24_25_demographics_legacy.json",
-        "cpcn_registration": DATA_DIR / "20251006_eventregistration_CPCN24_25_legacy.json",
-        "cpc_demographics": DATA_DIR / "20251006_eventregistration_CPC25_demographics_legacy.json",
-        "cpc_registration": DATA_DIR / "20251006_eventregistration_CPC25_legacy.json",
+        "cpcn_demographics": DATA_DIR / "20251201_CPCN24_25_demographics_legacy.json",
+        "cpcn_registration": DATA_DIR / "20251201_eventregistration_CPCN24_25_legacy.json",
+        "cpc_demographics": DATA_DIR / "20251201_eventregistration_CPC25_demographics_legacy.json",
+        "cpc_registration": DATA_DIR / "20251201_eventregistration_CPC25_legacy.json",
     }
 
     LOGGER.info("Processing CPCN demographic datasets")
     cpcn24_demo_path = DATA_DIR / "20241007_CPCN24_demographics.json"
     cpcn25_demo_path = select_input_file(
-        "20251112_eventregistration_CPCN25_demographics.json",
-        "20251007_CPCN25_demographics.json",
+        "20251201_eventregistration_CPCN25_demographics.json",
     )
 
     cpcn24_demo = load_json_array(cpcn24_demo_path)
@@ -436,8 +435,8 @@ def main(include_legacy: bool = False) -> None:
     LOGGER.info("Processing CPCN registration datasets")
     cpcn24_reg_path = DATA_DIR / "20251006_eventregistration_CPCN24.json"
     cpcn25_reg_path = select_input_file(
-        "20251112_eventregistration_CPCN25.json",
-        "20251006_eventregistration_CPCN25.json",
+
+        "20251201_eventregistration_CPCN25.json",
     )
 
     cpcn24_reg = load_json_array(cpcn24_reg_path)

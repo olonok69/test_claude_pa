@@ -16,6 +16,8 @@ from neo4j import GraphDatabase
 from dotenv import load_dotenv
 from typing import Dict, Any, Tuple, List
 
+from utils.neo4j_utils import resolve_neo4j_credentials
+
 class Neo4jSessionProcessor:
     """
     A processor for loading session data into Neo4j and creating relationships with streams.
@@ -37,9 +39,12 @@ class Neo4jSessionProcessor:
         load_dotenv(config.get("env_file", "keys/.env"))
         
         # Neo4j connection details
-        self.uri = os.getenv("NEO4J_URI")
-        self.username = os.getenv("NEO4J_USERNAME") 
-        self.password = os.getenv("NEO4J_PASSWORD")
+        credentials = resolve_neo4j_credentials(config, logger=self.logger)
+        self.uri = credentials["uri"]
+        self.username = credentials["username"] 
+        self.password = credentials["password"]
+        self.neo4j_environment = credentials["environment"]
+        self.logger.info("Neo4j session processor using '%s' environment", self.neo4j_environment)
         
         # Configuration
         self.output_dir = config.get("output_dir", "data/bva")

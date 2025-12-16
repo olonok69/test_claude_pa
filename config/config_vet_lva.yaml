@@ -1,6 +1,7 @@
 # Event-specific configuration for BVA events
 # This configuration file contains all event-specific settings and output file names
-mode: "post_analysis"  # can be engagement or personal_agendas
+# 15122025 test control group
+mode: "personal_agendas"  # can be engagement or personal_agendas
 # Event configuration 
 event:
   name: "lva"
@@ -14,6 +15,11 @@ event:
     - "LVS24"
   shows_last_year_secondary:
     - "BVA2025"
+
+# Documentation assets surfaced by the application
+documentation:
+  generic_pipeline_map: "docs/generic_pipeline_map.svg"
+  show_pipeline_map: "docs/vet_pipeline_map.svg"
 
 post_analysis_mode:
   registration_shows:
@@ -92,7 +98,7 @@ output_files:
 
 
 # Pipeline control settings
-create_only_new: true
+create_only_new: false
   # If true, only process new visitors without recommendations
 
 # Pipeline step activation settings
@@ -107,8 +113,8 @@ pipeline_steps:
   neo4j_job_stream_processing: true
   neo4j_specialization_stream_processing: true
   neo4j_visitor_relationship_processing: true
-  session_embedding_processing: false
-  session_recommendation_processing: false
+  session_embedding_processing: true
+  session_recommendation_processing: true
 
 # Input file paths
 old_format: true
@@ -222,6 +228,14 @@ recommendation:
   max_recommendations: 10         # Maximum number of recommendations per visitor
   similar_visitors_count: 3       # Number of similar visitors to consider for new visitors
   resolve_overlapping_sessions_by_similarity: true  # Resolve clashing sessions by keeping the highest similarity ones
+  control_group:                  # Control-group defaults (only active in personal_agendas mode)
+    enabled: true
+    percentage: 5                 # Expressed as percent (5 => 5%)
+    random_seed: 42
+    file_suffix: "_control"
+    output_directory: "recommendations/control"
+    neo4j_property: "control_group"
+    
   returning_without_history:
     enabled: true                  # Adjust similarity scores for returning visitors with no past attendance
     similarity_exponent: 1.5       # Exponent applied to similarity values when triggered
@@ -304,6 +318,7 @@ recommendation:
 
 # Neo4j configuration
 neo4j:
+  environment: "prod"
   show_name: "lva"  
   node_labels:
     visitor_this_year: "Visitor_this_year"

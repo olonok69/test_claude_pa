@@ -15,6 +15,11 @@ event:
   shows_last_year_secondary:
     - "LVS2024"
 
+# Documentation assets surfaced by the application
+documentation:
+  generic_pipeline_map: "docs/generic_pipeline_map.svg"
+  show_pipeline_map: "docs/vet_pipeline_map.svg"
+
 # Badge history column names
 badge_history_columns:
   main_event: "BadgeId_last_year_bva"
@@ -197,6 +202,13 @@ recommendation:
   max_recommendations: 10         # Maximum number of recommendations per visitor
   similar_visitors_count: 3       # Number of similar visitors to consider for new visitors
   resolve_overlapping_sessions_by_similarity: true 
+  control_group:                  # Control-group defaults (only active in personal_agendas mode)
+    enabled: false
+    percentage: 5                 # Expressed as percent (5 => 5%)
+    random_seed: 42
+    file_suffix: "_control"
+    output_directory: "recommendations/control"
+    neo4j_property: "control_group"
   use_langchain: false            # Whether to use LangChain for filtering (requires LangChain)
   enable_filtering: true          # Enable/disable filtering rules (true for vet shows)
   
@@ -242,6 +254,7 @@ recommendation:
 
 # Neo4j configuration
 neo4j:
+  environment: "prod"
   show_name: "bva"  
   node_labels:
     visitor_this_year: "Visitor_this_year"

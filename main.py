@@ -41,6 +41,44 @@ def configure_azure_logging():
         azure_logger.setLevel(logging.WARNING)  # Only show warnings and errors
 
 
+def log_documentation_assets(config, logger, mlflow_manager=None):
+    """Log documentation metadata and upload SVG assets when available."""
+    doc_cfg = config.get("documentation")
+    if not doc_cfg:
+        logger.info("No documentation assets declared in configuration")
+        return
+
+    logged_artifacts = set()
+
+    for label, doc_path in doc_cfg.items():
+        if not doc_path:
+            continue
+
+        resolved_path = os.path.abspath(doc_path)
+        exists = os.path.exists(resolved_path)
+        status = "found" if exists else "missing"
+        logger.info(
+            "Documentation asset '%s': %s (%s)",
+            label,
+            doc_path,
+            status,
+        )
+
+        if mlflow_manager:
+            mlflow_manager.log_param(f"documentation_{label}", doc_path)
+            if exists and resolved_path not in logged_artifacts:
+                try:
+                    mlflow.log_artifact(resolved_path)
+                    logged_artifacts.add(resolved_path)
+                    logger.info("Uploaded documentation artifact for '%s'", label)
+                except Exception as artifact_error:  # pragma: no cover - defensive
+                    logger.warning(
+                        "Could not upload documentation asset '%s': %s",
+                        label,
+                        artifact_error,
+                    )
+
+
 def log_neo4j_step_metrics(mlflow_manager, processors, step_number):
     """
     Log metrics for specific Neo4j processing steps.
@@ -204,6 +242,9 @@ def main():
             mlflow_manager = None
     else:
         logger.info("MLflow tracking is disabled (--skip-mlflow flag)")
+
+    # Surface documentation assets via logs and MLflow params/artifacts
+    log_documentation_assets(config, logger, mlflow_manager)
 
     # Get create_only_new from config, but allow command line to override
     if args.recreate_all:

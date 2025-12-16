@@ -6,6 +6,8 @@ from neo4j import GraphDatabase
 from dotenv import load_dotenv
 import inspect
 
+from utils.neo4j_utils import resolve_neo4j_credentials
+
 
 class Neo4jSpecializationStreamProcessor:
     """
@@ -29,12 +31,17 @@ class Neo4jSpecializationStreamProcessor:
         self.input_dir = os.path.join(self.output_dir, "output")
 
         # Load environment variables
-        load_dotenv("keys/.env")
+        load_dotenv(config.get("env_file", "keys/.env"))
 
         # Neo4j connection details
-        self.uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        self.username = os.getenv("NEO4J_USERNAME", "neo4j")
-        self.password = os.getenv("NEO4J_PASSWORD", "password")
+        credentials = resolve_neo4j_credentials(config, logger=self.logger)
+        self.uri = credentials["uri"]
+        self.username = credentials["username"]
+        self.password = credentials["password"]
+        self.neo4j_environment = credentials["environment"]
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Using Neo4j environment: {self.neo4j_environment}"
+        )
 
         # Get configuration for specialization stream mapping
         neo4j_config = config.get("neo4j", {})

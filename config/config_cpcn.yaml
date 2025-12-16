@@ -1,7 +1,11 @@
 # Event-specific configuration for CPCN runs
 # This configuration file contains all event-specific settings and output file names
 
-mode: "personal_agendas"  # can be engagement or personal_agendas
+mode: "post_analysis"  # can be engagement or personal_agendas or post_analysis
+# Documentation assets surfaced by the application
+documentation:
+  generic_pipeline_map: "docs/generic_pipeline_map.svg"
+  show_pipeline_map: "docs/generic_pipeline_map.svg"
 # Event configuration 
 event:
   name: "cpcn"
@@ -27,6 +31,16 @@ event:
   shows_last_year_secondary:
     - "CPC2025"
     - "CPC25"
+
+post_analysis_mode:
+  registration_shows:
+    this_year_main:
+      - ['CPCN25']
+  scan_files:
+    seminars_scan_reference_this: "data/cpcn/post/cpcn25 seminar scans reference.csv"
+    seminars_scans_this: "data/cpcn/post/cpcn25 seminar scans.csv"
+  entry_scan_files:
+    entry_scans_this: ["data/cpcn/post/cpcn25_unfiltered_entry_scans.csv"]  
 
 # Engagement-specific overrides applied when mode: "engagement"
 engagement_mode:
@@ -109,7 +123,7 @@ output_files:
 
 
 # Pipeline control settings
-create_only_new: false  # If true, only process new visitors without recommendations
+create_only_new: true  # If true, only process new visitors without recommendations
 
 # Pipeline step activation settings
 pipeline_steps:
@@ -124,14 +138,14 @@ pipeline_steps:
   neo4j_specialization_stream_processing: true
   neo4j_visitor_relationship_processing: true
   session_embedding_processing: true
-  session_recommendation_processing: true
+  session_recommendation_processing: false
 
 # Input file paths
 old_format: false  # Set to true if using old CSV format for registration and demographic data
 input_files:
-  main_event_registration: "data/cpcn/20251006_eventregistration_CPCN24_25_graphql.json"
+  main_event_registration: "data/cpcn/20251201_eventregistration_CPCN24_25_graphql.json"
   secondary_event_registration: "data/cpcn/20251006_eventregistration_CPC25_graphql.json"
-  main_event_demographic: "data/cpcn/20251007_CPCN24_25_demographics_graphql.json"
+  main_event_demographic: "data/cpcn/20251201_CPCN24_25_demographics_graphql.json"
   secondary_event_demographic: "data/cpcn/20251006_eventregistration_CPC25_demographics_graphql.json"
   practices: "data/cpcn/practices_missing.csv"
 
@@ -191,40 +205,9 @@ titles_to_remove:
 
 # BVA-specific veterinary abbreviation mappings
 map_vets:
-  "UKBPA": "Royal College of Veterinary Surgeons"
-  "VPG": "Veterinary Pathology Group"
-  "IDEXX": "IDEXX Laboratories"
-  "VCMS": "Veterinary Client Mediation Service"
-  "NVS": "National Veterinary Services"
-  "ACD": "ACD Labs"
-  "VMD": "The Veterinary Medicines Directorate"
-  "TVM": "TVM Uk"
-  "IVAMP": "International Veterinary Academy of Pain Management"
-  "JAK": "JAK Marketing"
-  "DMS": "DMS Veterinary"
-  "VRS": "Veterinarian Recommended Solutions"
+
   "No Data": "Not Sponsored"
-  "BVZS": "British Veterinary Zoological Society"
-  "BSAVA": "British Small Animal Veterinary Association"
-  "BCVA": "Bristol Commercial Valuers and Auctioneers"
-  "PVS": "Pig Veterinary Society"
-  "BVPA": "British Veterinary Poultry Association"
-  "BBVA": "British Bee Veterinary Association"
-  "BVCS": "Bachelor of Veterinary Science"
-  "BVDA": "British Veterinary Dental Association"
-  "DEFRA": "Department for Environment, Food & Rural Affairs"
-  "Agria": "Agria Pet Insurance Limited"
-  "Cubex": "Veterinary Practice Software"
-  "Forte": "Forte Healthcare Ltd"
-  "Lupa": "LUPA PETS LTD"
-  "iM3": "iM3 The Global Name in Veterinary Dentistry"
-  "Omni": "Omni Pet Limited"
-  "WVS" : "Worldwide Veterinary Service"
-  "BVCIS": "British Veterinary Chronic Illness Support"
-  "Covet": "Copolit for Veterinary"
-  "IVAPM": "International Veterinary Academy of Pain Management"
-  "KRKA": "KRKA Pharmaceutical"
-  "VESH": "VETERINARY EMERGENCY AND SPECIALTY HOSPITAL LONDON"
+
 
 # Embedding configuration
 embeddings:
@@ -239,9 +222,18 @@ recommendation:
   max_recommendations: 10         # Maximum number of recommendations per visitor
   similar_visitors_count: 3       # Number of similar visitors to consider for new visitors
   resolve_overlapping_sessions_by_similarity: true 
+  control_group:                  # Control-group defaults (only active in personal_agendas mode)
+    enabled: false
+    percentage: 5                 # Expressed as percent (5 => 5%)
+    random_seed: 42
+    file_suffix: "_control"
+    output_directory: "recommendations/control"
+    neo4j_property: "control_group"
+    
   returning_without_history:
     enabled: false                # Set to true if you want to boost returning visitors without scans
     similarity_exponent: 1.0      # Only applied when enabled
+
   use_langchain: false            # Whether to use LangChain for filtering (requires LangChain)
   enable_filtering: false          # Enable/disable filtering rules (true for vet shows)
   theatre_capacity_limits:
@@ -283,6 +275,7 @@ recommendation:
 
 # Neo4j configuration for CPCN event
 neo4j:
+  environment: "test"
   show_name: "cpcn"  
   node_labels:
     visitor_this_year: "Visitor_this_year"

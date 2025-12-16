@@ -1,6 +1,10 @@
 # Event-specific configuration for ECOMM events
 # This configuration file contains all event-specific settings and output file names
 mode: "post_analysis"  # can be engagement | personal_agendas | post_analysis
+# Documentation assets surfaced by the application
+documentation:
+  generic_pipeline_map: "docs/generic_pipeline_map.svg"
+  show_pipeline_map: "docs/ecomm_pipeline_complete.svg"
 # Event configuration - CHANGED FOR ECOMM
 event:
   name: "ecomm"
@@ -208,6 +212,13 @@ recommendation:
   max_recommendations: 20         # Maximum number of recommendations per visitor
   similar_visitors_count: 3       # Number of similar visitors to consider for new visitors
   resolve_overlapping_sessions_by_similarity: true 
+  control_group:                  # Control-group defaults (only active in personal_agendas mode)
+    enabled: false
+    percentage: 5                 # Expressed as percent (5 => 5%)
+    random_seed: 42
+    file_suffix: "_control"
+    output_directory: "recommendations/control"
+    neo4j_property: "control_group"
   use_langchain: false            # Whether to use LangChain for filtering
   enable_filtering: false         # Disable filtering for ECOMM shows
   # Additional visitor fields to include directly in exported recommendations CSV (enrichment)
@@ -240,6 +251,7 @@ recommendation:
 
 # Neo4j configuration (SAME STRUCTURE - different database)
 neo4j:
+  environment: "prod"
   show_name: "ecomm"  # ADDED: Show attribute for ECOMM nodes
   node_labels:
     visitor_this_year: "Visitor_this_year"
