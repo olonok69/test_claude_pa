@@ -647,7 +647,7 @@ class RegistrationProcessor:
     @staticmethod
     def remove_punctuation(text):
         """
-        Removes punctuation from a string, excluding hyphens and forward slashes.
+        Removes punctuation and converts dash-like characters to spaces (keeps forward slashes).
 
         Args:
             text: Input string
@@ -658,10 +658,10 @@ class RegistrationProcessor:
         if not isinstance(text, str):
             return text
 
-        custom_punctuation = (
-            string.punctuation.replace("-", "").replace("/", "") + "''" "…" + "â€™Â"
-        )
-        return text.translate(str.maketrans("", "", custom_punctuation))
+        dash_chars = ["-", "\u2013", "\u2014", "\u2011"]
+        normalized = "".join(" " if ch in dash_chars else ch for ch in text)
+        custom_punctuation = string.punctuation.replace("/", "") + "''" "…" + "â€™Â"
+        return normalized.translate(str.maketrans("", "", custom_punctuation))
 
     @staticmethod
     def calculate_date_difference(

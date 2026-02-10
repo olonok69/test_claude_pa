@@ -66,6 +66,14 @@ class SessionRecommendationProcessor:
         self.show_name = config.get("neo4j", {}).get("show_name", "bva")
         self.recommendation_config = config.get("recommendation", {})
         self.neo4j_config = config.get("neo4j", {})
+        self.project_root = Path(self.config.get("project_root", ".")).resolve()
+
+        # Optional external recommendations merge (e.g., exhibitor recs)
+        ext_cfg = self.recommendation_config.get("external_recommendations", {}) or {}
+        self.external_recommendations_enabled = bool(ext_cfg.get("enabled", False))
+        self.external_recommendations_path = ext_cfg.get("file")
+        self._external_recommendations_map: Dict[str, List[Dict[str, Any]]] = {}
+        self._external_recommendations_attached = 0
 
         control_cfg = self.recommendation_config.get("control_group", {}) or {}
         self.control_group_config = control_cfg
@@ -220,6 +228,10 @@ class SessionRecommendationProcessor:
         self._visitor_profile_map = {}
         self._load_registration_demographics_this_year()
 
+        # Load optional external recommendations payload once
+        if self.external_recommendations_enabled:
+            self._load_external_recommendations()
+
         # Theatre capacity enforcement (configured per show)
         self.theatre_limits_enabled = False
         self.theatre_capacity_multiplier = 1.0
@@ -245,6 +257,43 @@ class SessionRecommendationProcessor:
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)
         return logger
+
+    def _load_external_recommendations(self) -> None:
+        """Load optional external recommendations keyed by BadgeId."""
+
+        path = self.external_recommendations_path
+        if not path:
+            self.logger.info("External recommendations enabled but no file path provided; skipping load")
+            return
+
+        try:
+            resolved = Path(path)
+            if not resolved.is_absolute():
+                resolved = self.project_root.joinpath(path)
+            if not resolved.exists():
+                self.logger.warning("External recommendations file not found: %s", resolved)
+                return
+
+            with resolved.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+
+            entries = payload.get("recommendations", []) if isinstance(payload, dict) else []
+            count = 0
+            for item in entries:
+                badge_id = str(item.get("badgeID") or item.get("badgeId") or "").strip()
+                recs = item.get("exhibitors") or item.get("recommendations") or []
+                if not badge_id or not isinstance(recs, list):
+                    continue
+                self._external_recommendations_map[badge_id] = recs
+                count += 1
+
+            self.logger.info(
+                "Loaded external recommendations for %d visitors from %s",
+                count,
+                resolved,
+            )
+        except Exception as exc:
+            self.logger.warning("Failed to load external recommendations: %s", exc)
 
     def _init_model(self):
         """Initialize the sentence transformer model."""
@@ -1870,27 +1919,21 @@ class SessionRecommendationProcessor:
         except Exception as e:
             self.logger.error(f"Error updating visitor recommendations: {str(e)}")
 
-    def json_to_dataframe(self, json_file: str) -> pd.DataFrame:
-        """
-        Convert recommendations JSON to DataFrame for analysis.
-        Includes ALL similarity attributes configured for the show.
-        """
+    def _recommendations_to_dataframe(self, recommendations: Dict[str, Any]) -> pd.DataFrame:
+        """Build a recommendations DataFrame from an in-memory payload."""
+
         try:
-            with open(json_file, 'r') as f:
-                data = json.load(f)
-            
-            rows = []
-            # Config-driven additional visitor fields for enrichment
+            rows: List[Dict[str, Any]] = []
+
             extra_fields = self.recommendation_config.get("export_additional_visitor_fields", [])
             extra_fields = [f for f in extra_fields if isinstance(f, str) and f]
-            # Always include common contact fields if present in visitor profile
             for f in ["Email", "Forename", "Surname", "Tel", "Mobile"]:
                 if f not in extra_fields:
                     extra_fields.append(f)
 
-            for visitor_id, recs in data.get("recommendations", {}).items():
-                visitor_info = recs.get("visitor", {})
-                metadata = recs.get("metadata", {})
+            for visitor_id, recs in recommendations.items():
+                visitor_info = recs.get("visitor", {}) or {}
+                metadata = recs.get("metadata", {}) or {}
                 notes = metadata.get("notes", [])
                 if isinstance(notes, list):
                     metadata_list = [str(n) for n in notes if n]
@@ -1899,36 +1942,29 @@ class SessionRecommendationProcessor:
                 else:
                     metadata_list = []
                 metadata_summary = json.dumps(metadata_list)
-                
-                for rec in recs.get("filtered_recommendations", []):
-                    # Start with basic fields
+
+                for rec in recs.get("filtered_recommendations", []) or []:
                     row = {
                         "visitor_id": visitor_id,
                         "assist_year_before": visitor_info.get("assist_year_before", "0"),
                         "show": self.show_name,
                     }
-                    
-                    # Add ALL configured similarity attributes dynamically
+
                     for attr_name in self.similarity_attributes.keys():
-                        # Clean column name for CSV (replace spaces and special chars)
                         col_name = attr_name.replace(" ", "_").replace(".", "")
                         row[col_name] = visitor_info.get(attr_name, "NA")
-                    
-                    # Add base context fields (if not part of similarity attributes)
+
                     base_context_fields = ["Company", "JobTitle", "Email_domain", "Country", "Source"]
                     for field in base_context_fields:
                         if field not in self.similarity_attributes:
                             row[field] = visitor_info.get(field, "NA")
 
-                    # Add configured extra enrichment fields (Email, Forename, Surname, Tel, Mobile, etc.)
                     for field in extra_fields:
-                        # Only add if not already present (avoid overwrite) and value exists
                         if field not in row:
                             row[field] = visitor_info.get(field, "NA")
-                    
+
                     row["overlapping_sessions"] = rec.get("overlapping_sessions", "")
 
-                    # Add session recommendation details
                     row.update({
                         "session_id": rec.get("session_id"),
                         "session_title": rec.get("title"),
@@ -1945,41 +1981,52 @@ class SessionRecommendationProcessor:
                     })
 
                     row["recommendation_metadata"] = metadata_summary
-                    
                     rows.append(row)
-            
-            df = pd.DataFrame(rows)
 
-            # Flag overlapping sessions so we can identify concurrent recommendations per visitor
+            df = pd.DataFrame(rows)
             df = self._flag_overlapping_sessions(df)
-            
-            # Reorder columns for better readability
+
             priority_cols = ["visitor_id", "show", "assist_year_before"]
-            similarity_cols = [col for col in df.columns if col in [
-                attr.replace(" ", "_").replace(".", "") for attr in self.similarity_attributes.keys()
-            ]]
+            similarity_cols = [
+                col
+                for col in df.columns
+                if col in [attr.replace(" ", "_").replace(".", "") for attr in self.similarity_attributes.keys()]
+            ]
             session_cols = [col for col in df.columns if col.startswith("session_")]
             if "overlapping_sessions" in df.columns:
                 session_cols.append("overlapping_sessions")
 
-            # Keep extra/enrichment fields grouped after priority + similarity
-            enrichment_cols = [c for c in ["Company", "JobTitle", "Email_domain", "Country", "Source"] if c in df.columns]
-            # Append configured extra fields preserving order
+            enrichment_cols = [
+                c for c in ["Company", "JobTitle", "Email_domain", "Country", "Source"] if c in df.columns
+            ]
             for f in extra_fields:
                 if f in df.columns and f not in enrichment_cols:
                     enrichment_cols.append(f)
 
-            # Other cols are anything not already categorized
             categorized = set(priority_cols + similarity_cols + session_cols + enrichment_cols)
             other_cols = [c for c in df.columns if c not in categorized]
-            
+
             ordered_cols = priority_cols + similarity_cols + enrichment_cols + other_cols + session_cols
             df = df[[col for col in ordered_cols if col in df.columns]]
-            
             return df
-            
+
+        except Exception as exc:
+            self.logger.error("Failed to build DataFrame from recommendations", exc_info=True)
+            return pd.DataFrame()
+
+    def json_to_dataframe(self, json_file: str) -> pd.DataFrame:
+        """Convert recommendations JSON to DataFrame for analysis."""
+
+        try:
+            with open(json_file, "r") as f:
+                data = json.load(f)
+            payload = data.get("recommendations", {}) or {}
+            return self._recommendations_to_dataframe(payload)
         except Exception as e:
-            self.logger.error(f"Error converting JSON to DataFrame: {str(e)}")
+            self.logger.error(
+                f"Error converting JSON to DataFrame: {str(e)}",
+                exc_info=True,
+            )
             return pd.DataFrame()
 
     def _flag_overlapping_sessions(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -2407,6 +2454,13 @@ class SessionRecommendationProcessor:
                     metadata.setdefault("filtered_count", len(filtered_recommendations))
                     filtered_count = metadata.get("filtered_count", len(filtered_recommendations))
 
+                    if self.external_recommendations_enabled:
+                        external_recs = self._external_recommendations_map.get(str(badge_id))
+                        if external_recs:
+                            payload_for_storage["external_recommendations"] = external_recs
+                            metadata["external_recommendations_count"] = len(external_recs)
+                            self._external_recommendations_attached += 1
+
                     payload_for_storage = {
                         "visitor": visitor,
                         "raw_recommendations": raw_recommendations,
@@ -2542,6 +2596,7 @@ class SessionRecommendationProcessor:
                 "unique_sessions": len(main_unique_sessions),
                 "filtering_enabled": self.enable_filtering,
                 "create_only_new": create_only_new,
+                "external_recommendations_attached": self._external_recommendations_attached,
                 "control_group": control_summary,
                 "configuration": {
                     "min_similarity_score": self.min_similarity_score,
@@ -2566,6 +2621,7 @@ class SessionRecommendationProcessor:
                 "theatre_capacity_stats": theatre_stats,
                 "recommendations": recommendations_dict,
                 "statistics": self.statistics,
+                "external_recommendations_attached": self._external_recommendations_attached,
             }
 
             with open(output_file, "w") as f:
@@ -2581,7 +2637,7 @@ class SessionRecommendationProcessor:
 
             # Save as CSV if configured
             if self.recommendation_config.get("save_csv", True):
-                df = self.json_to_dataframe(output_file)
+                df = self._recommendations_to_dataframe(recommendations_dict)
                 csv_file = str(output_file).replace(".json", ".csv")
                 df.to_csv(csv_file, index=False)
                 self.logger.info(f"Saved recommendations DataFrame to {csv_file}")
@@ -2617,7 +2673,7 @@ class SessionRecommendationProcessor:
                 self.logger.info("Saved control group recommendations to %s", control_output_file)
 
                 if self.recommendation_config.get("save_csv", True):
-                    df_control = self.json_to_dataframe(control_output_file)
+                    df_control = self._recommendations_to_dataframe(control_recommendations)
                     control_csv = str(control_output_file).replace(".json", ".csv")
                     df_control.to_csv(control_csv, index=False)
                     self.logger.info("Saved control group DataFrame to %s", control_csv)

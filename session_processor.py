@@ -855,7 +855,7 @@ class SessionProcessor:
                 )
 
     @staticmethod
-    def find_short_labels(input_set: Set[str]) -> List[str]:
+    def find_short_labels(input_set: Set[str], longitude: int = 3) -> List[str]:
         """
         Finds a list of labels in a set that have 5 characters or less.
 
@@ -866,7 +866,7 @@ class SessionProcessor:
           A list containing the labels from the input set with a length of 5 or less.
         """
         short_labels = [
-            label for label in input_set if isinstance(label, str) and len(label) <= 5
+            label for label in input_set if isinstance(label, str) and len(label) <= longitude
         ]
         return short_labels
 

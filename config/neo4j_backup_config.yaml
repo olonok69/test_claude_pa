@@ -1,0 +1,23 @@
+# Centralized Aura backup configuration.
+# Replace the env: placeholders with environment variables that contain the
+# actual Aura instance identifiers. Example:
+#   setx AURA_INSTANCE_ID_PROD 00000000-0000-0000-0000-000000000000
+# "env:VAR_NAME" entries will be resolved at runtime.
+neo4j:
+  environment: "prod"
+  backup:
+    aura_cli_path: "D:\\repos\\PA\\aura-cli\\aura-cli.exe"  # Override if aura-cli is not on PATH
+    poll_interval_seconds: 30
+    command_timeout_seconds: 900
+    reset_workflow:
+      snapshot_id: "env:AURA_BLANK_SNAPSHOT_ID"  # Optional: blank template snapshot id
+      source_instance_id: "env:AURA_BLANK_SOURCE_ID"  # Optional: instance that owns the blank snapshot
+    instances:
+      prod:
+        instance_id: "env:NEO4J_URI_PROD"
+        source_instance_id: "env:NEO4J_URI_PROD"
+        restore_target_id: "env:NEO4J_URI_PROD"
+      test:
+        instance_id: "env:NEO4J_URI_TEST"
+      dev:
+        instance_id: "env:NEO4J_URI_DEV"
