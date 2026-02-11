@@ -663,9 +663,8 @@ class RegistrationProcessor:
         custom_punctuation = string.punctuation.replace("/", "") + "''" "…" + "â€™Â"
         return normalized.translate(str.maketrans("", "", custom_punctuation))
 
-    @staticmethod
     def calculate_date_difference(
-        df: pd.DataFrame, date_column: str, given_date_str: str
+        self, df: pd.DataFrame, date_column: str, given_date_str: str
     ) -> pd.DataFrame:
         """
         Calculate the number of days between registration date and event date.
@@ -679,6 +678,9 @@ class RegistrationProcessor:
             DataFrame with an additional 'Days_since_registration' column
         """
         logger = logging.getLogger(__name__)
+
+        # Check config for using calculated days
+        use_calculated = self.config.get("recommendation", {}).get("use_calculated_days_since_registration", True)
 
         # Create a copy of the DataFrame to avoid SettingWithCopyWarning
         df_copy = df.copy()
@@ -695,6 +697,10 @@ class RegistrationProcessor:
                 f"Date column '{date_column}' not found in DataFrame. Adding dummy values."
             )
             return df_copy.assign(Days_since_registration=0)
+
+        if not use_calculated:
+            # Set all to 1 if not using calculated values
+            return df_copy.assign(Days_since_registration=1)
 
         # Convert the given date to datetime
         given_date = datetime.strptime(given_date_str, "%Y-%m-%d")

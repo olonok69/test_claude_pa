@@ -217,9 +217,10 @@ recommendation:
   max_recommendations: 10         # Maximum number of recommendations per visitor
   similar_visitors_count: 3       # Number of similar visitors to consider for new visitors
   resolve_overlapping_sessions_by_similarity: true  # Resolve clashing sessions by keeping the highest similarity ones
+  use_calculated_days_since_registration: false  # If true, use calculated Days_since_registration; if false, set all to 1
   external_recommendations:
     enabled: false
-    file: "data/tsl/v2e_recommendations 1.json"
+    file: "data/tsl/v2e_recommendations_2.json"
   control_group:                  # Control-group defaults (only active in personal_agendas mode)
     enabled: true
     percentage: 5                 # Expressed as percent (5 => 5%)
@@ -250,17 +251,38 @@ recommendation:
     - Email_domain
     - Country
     - Source
+    - BadgeType
+    - Days_since_registration
 
-  # Similarity attributes for finding similar visitors (vet-specific)
+  # Minimal CSV export configuration
+  export_csv_minimal:
+    enabled: true  # If true, export only the specified fields; if false, export all fields
+    fields:
+      - visitor_id
+      - Email
+      - session_title
+      - session_date
+      - session_start_time
+      - BadgeType
+      - session_theatre_name
+
+  # Similarity attributes for finding similar visitors and calculating similarity scores (with weights for each attribute)
   similarity_attributes:
-    what_is_your_primary_show_of_interest_your_badge_will_work_for_all_colocated_shows: .8 # Weight for job role matching
-    within_the_tech_ecosystem_my_public_sector_organisation_primarily_operates_as_please_select_the_option_that_best_describes_your_main_role: .8     # Weight for practice type
-    which_sector_does_your_company_primarily_operate_in: .8                             # Weight for organization type
-    Country: .5                                          # Weight for country
-    what_is_your_involvment_in_the_decision_making_process: .5               # Weight for decision-making involvement
-    which_of_the_following_best_describes_your_current_seniority_level: .5          # Weight for seniority level
-    you_are_representing: .5                             # Weight for representation type
-    which_of_the_following_best_describes_your_primary_professional_function_if_you_are_a_consultant_please_select_the_main_area_in_which_you_provide_expertise_or_services_select_one: .5  # Weight for professional function
+    # Weights for similarity attributes (sum should ideally be 1.0, but can be adjusted based on importance)
+    # REMOVED: Low fill rate (13.2%) - what_is_your_primary_show_of_interest_your_badge_will_work_for_all_colocated_shows: .1 
+    # REMOVED: Low fill rate (8.5%) - within_the_tech_ecosystem_my_public_sector_organisation_primarily_operates_as_please_select_the_option_that_best_describes_your_main_role: .1    
+    # For TSL, sector is a key differentiator among attendees, so we assign it a higher weight to reflect its importance in determining similarity. The exact value can be fine-tuned based on testing and domain expertise.
+    which_sector_does_your_company_primarily_operate_in: .8     
+    # For TSL, Country is not a major factor in attendee similarity due to the international nature of the event and the dominance of UK-based attendees, so we assign it a low weight. The exact value can be adjusted based on testing and domain knowledge.
+    Country: .3  
+    # For TSL, involvement in decision-making is an important factor for similarity as it can indicate the level of influence and engagement of the attendee, so we assign it a moderate weight. The exact value can be fine-tuned based on testing and domain expertise.
+    what_is_your_involvment_in_the_decision_making_process: .5      
+    # For TSL, seniority level is a significant factor in determining similarity among attendees, as it can reflect their level of experience and influence within their organizations, so we assign it a moderate to high weight. The exact value can be adjusted based on testing and domain knowledge.
+    which_of_the_following_best_describes_your_current_seniority_level: .6
+    # For TSL, representation type is less critical for similarity compared to other attributes, as attendees from various representation types can have similar interests and behaviors at the event, so we assign it a lower weight. The exact value can be fine-tuned based on testing and domain expertise.
+    you_are_representing: .4
+    # For TSL, professional function is an important factor for similarity as it can indicate the attendee's area of expertise and the type of sessions they may be interested in, so we assign it a moderate weight. The exact value can be adjusted based on testing and domain knowledge.
+    which_of_the_following_best_describes_your_primary_professional_function_if_you_are_a_consultant_please_select_the_main_area_in_which_you_provide_expertise_or_services_select_one: .9  # Weight for professional function
 
   role_groups: {}
 

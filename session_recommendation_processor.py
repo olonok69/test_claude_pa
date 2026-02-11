@@ -218,6 +218,8 @@ class SessionRecommendationProcessor:
             "Email_domain",
             "Country",
             "Source",
+            "BadgeType",
+            "Days_since_registration",
             # Contact fields expected by ecomm/email.ipynb and export_additional_visitor_fields
             "Email",
             "Forename",
@@ -953,8 +955,15 @@ class SessionRecommendationProcessor:
             self.logger.error(f"Error getting this year sessions: {str(e)}")
             return []
 
-    def _find_similar_visitors(self, visitor: Dict, limit: int = 3) -> List[str]:
-        """Find similar visitors based on configuration-driven similarity criteria."""
+    def _find_similar_visitors(self, visitor: Dict, limit: int = 3, find_from_this_year_returning: bool = False) -> List[str]:
+        """Find similar visitors based on configuration-driven similarity criteria.
+        
+        Args:
+            visitor: Visitor dictionary
+            limit: Maximum number of similar visitors to return
+            find_from_this_year_returning: If True, find similar visitors from this year's returning visitors.
+                                         If False, find from past year visitors.
+        """
         import random
 
         visitor_id = visitor.get("BadgeId")
@@ -966,7 +975,7 @@ class SessionRecommendationProcessor:
             self.logger.warning(f"No valid similarity attributes for visitor {visitor_id}")
             return []
 
-        cache_key = (visitor_id, tuple((c["attribute"], str(c["value"])) for c in criteria), limit)
+        cache_key = (visitor_id, tuple((c["attribute"], str(c["value"])) for c in criteria), limit, find_from_this_year_returning)
         if cache_key in self._similar_visitors_cache:
             return self._similar_visitors_cache[cache_key]
 
@@ -995,21 +1004,29 @@ class SessionRecommendationProcessor:
 
                     base_similarity_expr = " + ".join(case_clauses)
 
-                    available_past_labels = self._get_available_past_labels()
-                    if not available_past_labels:
-                        self.logger.warning(
-                            "No past-year visitor labels available in Neo4j; skipping similar visitor lookup."
-                        )
-                        return []
-
-                    if len(available_past_labels) == 1:
-                        match_v2_clause = f"MATCH (v2:{available_past_labels[0]})"
-                        label_condition = ""
+                    if find_from_this_year_returning:
+                        # Find similar visitors from this year's returning visitors
+                        match_v2_clause = f"MATCH (v2:{self.visitor_this_year_label})"
+                        label_condition = " AND v2.assist_year_before = '1'"
+                        session_match_clause = f"MATCH (v2)-[:Same_Visitor]->(past_v)-[:attended_session]->(s:{self.session_past_year_label})"
                     else:
-                        match_v2_clause = "MATCH (v2)"
-                        label_condition = " AND (" + " OR ".join(
-                            f"v2:{label}" for label in available_past_labels
-                        ) + ")"
+                        # Find similar visitors from past year visitors (original logic)
+                        available_past_labels = self._get_available_past_labels()
+                        if not available_past_labels:
+                            self.logger.warning(
+                                "No past-year visitor labels available in Neo4j; skipping similar visitor lookup."
+                            )
+                            return []
+
+                        if len(available_past_labels) == 1:
+                            match_v2_clause = f"MATCH (v2:{available_past_labels[0]})"
+                            label_condition = ""
+                        else:
+                            match_v2_clause = "MATCH (v2)"
+                            label_condition = " AND (" + " OR ".join(
+                                f"v2:{label}" for label in available_past_labels
+                            ) + ")"
+                        session_match_clause = f"MATCH (v2)-[:attended_session]->(s:{self.session_past_year_label})"
 
                     query = f"""
                     MATCH (v1:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
@@ -1018,7 +1035,7 @@ class SessionRecommendationProcessor:
                     WHERE v2.BadgeId <> $visitor_id AND (v2.show = $show_name OR v2.show IS NULL){label_condition}
                     WITH v2, {base_similarity_expr} AS base_similarity
                     WHERE base_similarity > 0
-                    MATCH (v2)-[:attended_session]->(s:{self.session_past_year_label})
+                    {session_match_clause}
                     WITH v2.BadgeId AS similar_visitor, base_similarity, COUNT(DISTINCT s) AS sessions_attended
                     WHERE sessions_attended > 0
                     RETURN similar_visitor, sessions_attended, base_similarity
@@ -1611,11 +1628,11 @@ class SessionRecommendationProcessor:
             else:
                 generation_notes.append("New visitor")
                 similar_visitors = self._find_similar_visitors(
-                    visitor, self.similar_visitors_count
+                    visitor, self.similar_visitors_count, find_from_this_year_returning=True
                 )
                 if similar_visitors:
                     past_sessions = self._get_past_sessions_for_visitors(
-                        similar_visitors, is_returning=False
+                        similar_visitors, is_returning=True
                     )
                     generation_strategy = "new_similar_visitors"
                     generation_notes.append(
@@ -2008,6 +2025,24 @@ class SessionRecommendationProcessor:
 
             ordered_cols = priority_cols + similarity_cols + enrichment_cols + other_cols + session_cols
             df = df[[col for col in ordered_cols if col in df.columns]]
+
+            # Check for minimal CSV export configuration
+            minimal_config = self.recommendation_config.get("export_csv_minimal", {})
+            if minimal_config.get("enabled", False):
+                minimal_fields = minimal_config.get("fields", [])
+                if minimal_fields:
+                    # Verify that all minimal fields are present
+                    missing_fields = [f for f in minimal_fields if f not in df.columns]
+                    if missing_fields:
+                        self.logger.warning(f"Minimal CSV export fields missing from DataFrame: {missing_fields}")
+                        # Still proceed with available fields
+                    available_fields = [f for f in minimal_fields if f in df.columns]
+                    if available_fields:
+                        df = df[available_fields]
+                        self.logger.info(f"Filtered CSV export to minimal fields: {available_fields}")
+                    else:
+                        self.logger.warning("No minimal fields available in DataFrame, exporting all columns")
+
             return df
 
         except Exception as exc:
@@ -2454,13 +2489,6 @@ class SessionRecommendationProcessor:
                     metadata.setdefault("filtered_count", len(filtered_recommendations))
                     filtered_count = metadata.get("filtered_count", len(filtered_recommendations))
 
-                    if self.external_recommendations_enabled:
-                        external_recs = self._external_recommendations_map.get(str(badge_id))
-                        if external_recs:
-                            payload_for_storage["external_recommendations"] = external_recs
-                            metadata["external_recommendations_count"] = len(external_recs)
-                            self._external_recommendations_attached += 1
-
                     payload_for_storage = {
                         "visitor": visitor,
                         "raw_recommendations": raw_recommendations,
@@ -2468,6 +2496,13 @@ class SessionRecommendationProcessor:
                         "metadata": metadata,
                         "rules_applied": rules_applied,
                     }
+
+                    if self.external_recommendations_enabled:
+                        external_recs = self._external_recommendations_map.get(str(badge_id))
+                        if external_recs:
+                            payload_for_storage["external_recommendations"] = external_recs
+                            metadata["external_recommendations_count"] = len(external_recs)
+                            self._external_recommendations_attached += 1
 
                     can_update_neo4j = bool(visitor.get("BadgeId"))
 
