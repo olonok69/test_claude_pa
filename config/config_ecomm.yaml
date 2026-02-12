@@ -105,6 +105,7 @@ output_files:
     output_directory: "recommendations"  # Subdirectory for recommendations
     filename_pattern: "visitor_recommendations_{timestamp}"  # Pattern for output files
     save_csv: true
+    save_json: true
 # Pipeline control settings (SAME AS VET)
 create_only_new: true  # If true, only process new visitors without recommendations for Personal Agendas true
 
@@ -122,6 +123,7 @@ pipeline_steps:
   neo4j_visitor_relationship_processing: true
   session_embedding_processing: true
   session_recommendation_processing: true  # Enable session recommendation processing
+  output_processing: true
 
 # Input file paths - CHANGED FOR ECOMM
 old_format: true

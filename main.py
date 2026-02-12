@@ -21,6 +21,7 @@ from pipeline import (
     run_session_processing,
     run_neo4j_processing,
     run_session_recommendation_processing,
+    run_output_processing,
 )
 
 
@@ -385,6 +386,10 @@ def main():
                 if config.get("pipeline_steps", {}).get("session_recommendation_processing", True):
                     neo4j_steps_to_run.append(10)
 
+            # Check if output processing is enabled as a separate step
+            output_processing_enabled = config.get("pipeline_steps", {}).get("output_processing", True)
+            skip_output_in_recommendations = output_processing_enabled
+
             # Pre-execution diagnostic matrix of Neo4j steps
             neo4j_step_names = {
                 4: "Neo4j Visitor",
@@ -424,7 +429,7 @@ def main():
                 for step_num in sorted(neo4j_steps_to_run):
                     step_start = datetime.now()
                     neo4j_processors = run_neo4j_processing(
-                        config, create_only_new, [step_num]
+                        config, create_only_new, [step_num], skip_output=skip_output_in_recommendations
                     )
                     processors.update(neo4j_processors)
                     
@@ -444,6 +449,24 @@ def main():
                 logger.info("Completed Neo4j data processing")
             else:
                 logger.info("Skipping Neo4j processing (all Neo4j steps disabled in config or not in selected steps)")
+
+        # Step 11: Output processing (if enabled as separate step)
+        if not steps_to_run or 11 in steps_to_run:
+            if output_processing_enabled:
+                logger.info("Starting step 11: Output processing")
+                step_start = datetime.now()
+                
+                processors["output_processor"] = run_output_processing(config, create_only_new)
+                
+                # Log step timing
+                if mlflow_manager:
+                    step_time = (datetime.now() - step_start).total_seconds()
+                    mlflow_manager.log_metric("step11_output_time_seconds", step_time)
+                
+                steps_completed.append(11)
+                logger.info("Completed step 11: Output processing")
+            else:
+                logger.info("Skipping step 11: Output processing (disabled in config)")
 
         # Generate and save summary statistics
         logger.info("Generating summary statistics")

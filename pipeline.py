@@ -111,7 +111,7 @@ def run_session_processing(config):
     return session_processor
 
 
-def run_neo4j_processing(config, create_only_new=True, steps_to_run=None):
+def run_neo4j_processing(config, create_only_new=True, steps_to_run=None, skip_output=False):
     """
     Run all Neo4j data processing steps.
 
@@ -119,6 +119,7 @@ def run_neo4j_processing(config, create_only_new=True, steps_to_run=None):
         config: Configuration dictionary
         create_only_new: If True, only create new nodes if they don't already exist
         steps_to_run: List of step numbers to run (if None, run all enabled steps)
+        skip_output: If True, skip output processing in session recommendations
 
     Returns:
         Dictionary of processor instances
@@ -233,7 +234,7 @@ def run_neo4j_processing(config, create_only_new=True, steps_to_run=None):
         if config.get("pipeline_steps", {}).get("session_recommendation_processing", True):
             logger.info("Starting step 10: Session recommendation processing")
             session_recommendation_processor = SessionRecommendationProcessor(config)
-            session_recommendation_processor.process(create_only_new=create_only_new)
+            session_recommendation_processor.process(create_only_new=create_only_new, skip_output=skip_output)
             processors["session_recommendation_processor"] = session_recommendation_processor
             logger.info("Completed step 10: Session recommendation processing")
         else:
@@ -244,13 +245,14 @@ def run_neo4j_processing(config, create_only_new=True, steps_to_run=None):
     return processors
 
 
-def run_session_recommendation_processing(config, create_only_new=True):
+def run_session_recommendation_processing(config, create_only_new=True, skip_output=False):
     """
     Run session recommendation processing step.
 
     Args:
         config: Configuration dictionary
         create_only_new: If True, only create new recommendations if they don't already exist
+        skip_output: If True, skip the output processing step
 
     Returns:
         SessionRecommendationProcessor instance
@@ -259,7 +261,52 @@ def run_session_recommendation_processing(config, create_only_new=True):
     logger.info("Starting session recommendation processing")
 
     session_recommendation_processor = SessionRecommendationProcessor(config)
-    session_recommendation_processor.process(create_only_new=create_only_new)
+    session_recommendation_processor.process(create_only_new=create_only_new, skip_output=skip_output)
 
     logger.info("Completed session recommendation processing")
+    return session_recommendation_processor
+
+
+def run_output_processing(config, create_only_new=True):
+    """
+    Run output processing step (separate from recommendation processing).
+
+    Args:
+        config: Configuration dictionary
+        create_only_new: If True, only process new visitors without recommendations
+
+    Returns:
+        SessionRecommendationProcessor instance (for output processing)
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("Starting output processing")
+
+    # First run recommendation processing with output skipped
+    session_recommendation_processor = SessionRecommendationProcessor(config)
+    session_recommendation_processor.process(create_only_new=create_only_new, skip_output=True)
+
+    # Then run output processing separately
+    # We need to get the recommendations data that was generated
+    # For now, we'll create a new processor instance and run output processing
+    # This is a bit of a workaround - ideally we'd pass the data directly
+
+    # Get the recommendations data from the processor
+    recommendations_dict = session_recommendation_processor.recommendations_dict if hasattr(session_recommendation_processor, 'recommendations_dict') else {}
+    all_recommendations = session_recommendation_processor.all_recommendations if hasattr(session_recommendation_processor, 'all_recommendations') else []
+    theatre_stats = getattr(session_recommendation_processor, 'theatre_stats', None)
+    control_assignment_map = getattr(session_recommendation_processor, 'control_assignment_map', None)
+    external_recommendations_attached = getattr(session_recommendation_processor, '_external_recommendations_attached', 0)
+
+    # Process outputs
+    session_recommendation_processor.statistics = session_recommendation_processor.output_processor.process_outputs(
+        recommendations_dict,
+        all_recommendations,
+        session_recommendation_processor.statistics,
+        theatre_stats,
+        create_only_new,
+        control_assignment_map,
+        external_recommendations_attached
+    )
+
+    logger.info("Completed output processing")
     return session_recommendation_processor

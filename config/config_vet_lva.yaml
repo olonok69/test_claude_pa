@@ -94,6 +94,7 @@ output_files:
     output_directory: "recommendations"  # Subdirectory for recommendations
     filename_pattern: "visitor_recommendations_{timestamp}"  # Pattern for output files
     save_csv: true
+    save_json: true
 
 
 
@@ -115,6 +116,7 @@ pipeline_steps:
   neo4j_visitor_relationship_processing: true
   session_embedding_processing: true
   session_recommendation_processing: true
+  output_processing: true
 
 # Input file paths
 old_format: true

@@ -94,6 +94,7 @@ output_files:
     output_directory: "recommendations"  # Subdirectory for recommendations
     filename_pattern: "visitor_recommendations_{timestamp}"  # Pattern for output files
     save_csv: true
+    save_json: false  # New parameter to control big JSON export
 
 
 
@@ -104,9 +105,9 @@ create_only_new: false
 # Pipeline step activation settings
 pipeline_steps:
   # Data processing steps
-  registration_processing: true
-  scan_processing: true  
-  session_processing: true
+  registration_processing: false
+  scan_processing: false  
+  session_processing: false
   # Neo4j processing steps
   neo4j_visitor_processing: true
   neo4j_session_processing: true
@@ -115,6 +116,7 @@ pipeline_steps:
   neo4j_visitor_relationship_processing: true
   session_embedding_processing: true
   session_recommendation_processing: true
+  output_processing: true
 
 # Input file paths
 old_format: true
@@ -191,6 +193,7 @@ titles_to_remove:
   - 'sponsored session to be confirmed'
   - 'sponsored session tbc'
   - 'opening remarks - theatre chair'
+  - 'closing remarks - theatre chair'
 
 # TSL abbreviation mappings
 map_vets:
@@ -234,6 +237,7 @@ recommendation:
     similarity_exponent: 1.5       # Exponent applied to similarity values when triggered
   use_langchain: false            # Whether to use LangChain for filtering (requires LangChain)
   enable_filtering: false          # Enable/disable filtering rules (true for vet shows)
+  # ENHANCED: Theatre capacity limits configuration 
   theatre_capacity_limits:
     enabled: false
     capacity_file: "data/tsl/teatres.csv"
