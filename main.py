@@ -388,7 +388,7 @@ def main():
 
             # Check if output processing is enabled as a separate step
             output_processing_enabled = config.get("pipeline_steps", {}).get("output_processing", True)
-            skip_output_in_recommendations = output_processing_enabled
+            skip_output_in_recommendations = output_processing_enabled and (not steps_to_run or 11 in steps_to_run)
 
             # Pre-execution diagnostic matrix of Neo4j steps
             neo4j_step_names = {

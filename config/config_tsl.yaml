@@ -221,6 +221,9 @@ recommendation:
   similar_visitors_count: 3       # Number of similar visitors to consider for new visitors
   resolve_overlapping_sessions_by_similarity: true  # Resolve clashing sessions by keeping the highest similarity ones
   use_calculated_days_since_registration: false  # If true, use calculated Days_since_registration; if false, set all to 1
+  parallel_processing:
+    enabled: true                 # Enable parallel processing of visitors
+    max_workers: 4                # Maximum number of parallel workers (adjust based on system resources)
   external_recommendations:
     enabled: false
     file: "data/tsl/v2e_recommendations_2.json"

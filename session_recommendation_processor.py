@@ -120,6 +120,15 @@ class SessionRecommendationProcessor:
         self.min_similarity_score = self.recommendation_config.get("min_similarity_score", 0.3)
         self.max_recommendations = self.recommendation_config.get("max_recommendations", 10)
         self.similar_visitors_count = self.recommendation_config.get("similar_visitors_count", 3)
+        
+        # Parallel processing configuration
+        parallel_cfg = self.recommendation_config.get("parallel_processing", {})
+        self.parallel_processing_enabled = parallel_cfg.get("enabled", False)
+        self.max_parallel_workers = parallel_cfg.get("max_workers", 4)
+        
+        self.logger.info(f"Parallel processing config: enabled={self.parallel_processing_enabled}, max_workers={self.max_parallel_workers}")
+        self.logger.info(f"Recommendation config keys: {list(self.recommendation_config.keys())}")
+        
         self.use_langchain = self.recommendation_config.get("use_langchain", False) and has_langchain
         self.enable_filtering = self.recommendation_config.get("enable_filtering", False)
         self.resolve_overlaps_by_similarity = self.recommendation_config.get(
@@ -190,6 +199,7 @@ class SessionRecommendationProcessor:
         self._visitor_cache = {}
         self._similar_visitors_cache = {}
         self._this_year_sessions_cache = None
+        self._popular_sessions_cache = None
         
         # Initialize the sentence transformer model
         self.model = None
@@ -927,6 +937,9 @@ class SessionRecommendationProcessor:
                         visitor_data = self._apply_csv_enrichment(visitor_data)
                         self._visitor_cache[badge_id] = visitor_data
                         return visitor_data
+                    else:
+                        self.logger.warning(f"Visitor {badge_id} not found in database")
+                        return None
                     
         except Exception as e:
             self.logger.error(f"Error getting visitor info for {badge_id}: {str(e)}")
@@ -952,7 +965,9 @@ class SessionRecommendationProcessor:
                     sessions = [dict(record["s"]) for record in result]
                     
                     self._this_year_sessions_cache = sessions
-                    self.logger.info(f"Loaded {len(sessions)} sessions for this year")
+                    self.logger.info(f"Loaded {len(sessions)} sessions for this year (show: {self.show_name})")
+                    if len(sessions) == 0:
+                        self.logger.warning(f"No sessions found for this year with query: {query} and show_name: {self.show_name}")
                     return sessions
                     
         except Exception as e:
@@ -1208,6 +1223,7 @@ class SessionRecommendationProcessor:
             List of recommended sessions with similarity scores
         """
         if not past_sessions or not this_year_sessions or not self.model:
+            self.logger.warning(f"calculate_session_similarities: missing requirements - past_sessions: {len(past_sessions) if past_sessions else 0}, this_year_sessions: {len(this_year_sessions) if this_year_sessions else 0}, model: {self.model is not None}")
             return []
         
         try:
@@ -1226,7 +1242,10 @@ class SessionRecommendationProcessor:
                     this_year_embeddings.append(embedding)
                     this_year_sessions_filtered.append(session)
             
+            self.logger.info(f"Session embeddings - past: {len(past_embeddings)}/{len(past_sessions)}, this_year: {len(this_year_embeddings)}/{len(this_year_sessions)}")
+            
             if not past_embeddings or not this_year_embeddings:
+                self.logger.warning("No embeddings found in sessions")
                 return []
             
             # Calculate cosine similarities
@@ -1450,6 +1469,10 @@ class SessionRecommendationProcessor:
         """
         import random
         
+        # Check cache first
+        if self._popular_sessions_cache is not None:
+            return self._popular_sessions_cache
+        
         try:
             with GraphDatabase.driver(
                 self.uri, auth=(self.username, self.password)
@@ -1567,11 +1590,40 @@ class SessionRecommendationProcessor:
                             f"(fewer than max_recommendations={self.max_recommendations} available)"
                         )
                     
+                    # Cache the result
+                    self._popular_sessions_cache = selected_sessions
                     return selected_sessions
                     
         except Exception as e:
             self.logger.error(f"Error getting popular sessions for show '{self.show_name}': {str(e)}")
             return []
+
+    def _process_single_visitor(self, badge_id: str) -> Tuple[str, Optional[Dict[str, Any]], Optional[Exception]]:
+        """
+        Process a single visitor for parallel execution.
+        
+        Returns:
+            Tuple of (badge_id, result_dict, error)
+        """
+        try:
+            visitor_payload = self.generate_recommendations_for_visitor(badge_id)
+            return badge_id, visitor_payload, None
+        except Exception as e:
+            return badge_id, None, e
+
+    def _process_visitor_result(self, badge_id: str, visitor_payload: Dict[str, Any], 
+                               recommendations_dict: Dict, all_recommendations: List) -> None:
+        """
+        Process a single visitor for parallel execution.
+        
+        Returns:
+            Tuple of (badge_id, result_dict, error)
+        """
+        try:
+            visitor_payload = self.generate_recommendations_for_visitor(badge_id)
+            return badge_id, visitor_payload, None
+        except Exception as e:
+            return badge_id, None, e
 
     def generate_recommendations_for_visitor(self, badge_id: str) -> Dict[str, Any]:
         """Generate a rich recommendation payload for a single visitor."""
@@ -1601,8 +1653,8 @@ class SessionRecommendationProcessor:
 
             this_year_sessions = self._get_this_year_sessions()
             if not this_year_sessions:
-                self.logger.warning("No sessions available for this year")
-                result["metadata"]["notes"] = ["No sessions available for this year"]
+                self.logger.warning(f"No sessions available for this year (show: {self.show_name})")
+                result["metadata"]["notes"] = [f"No sessions available for this year (show: {self.show_name})"]
                 return result
 
             assist_year_before = visitor.get("assist_year_before", "0")
@@ -1694,6 +1746,9 @@ class SessionRecommendationProcessor:
                 raw_recommendations = self.calculate_session_similarities(
                     past_sessions, this_year_sessions, self.min_similarity_score
                 )
+                self.logger.info(f"Generated {len(raw_recommendations)} raw recommendations for visitor {badge_id}")
+            else:
+                self.logger.info(f"No past sessions found for visitor {badge_id}, generation_strategy: {generation_strategy}")
 
             raw_count = len(raw_recommendations)
             generation_notes.append(f"Retrieved {raw_count} raw recommendations")
@@ -2106,6 +2161,7 @@ class SessionRecommendationProcessor:
         try:
             self.logger.info(f"Starting session recommendation processing for {self.show_name} show")
             self.logger.info(f"Mode: {'Incremental (new only)' if create_only_new else 'Full (all visitors)'}")
+            self.logger.info(f"Config: parallel_processing_enabled={self.parallel_processing_enabled}, max_workers={self.max_parallel_workers}")
             
             # Get visitors to process
             visitors_to_process = self._get_visitors_to_process(create_only_new)
@@ -2137,66 +2193,51 @@ class SessionRecommendationProcessor:
             # Process each visitor
             recommendations_dict = {}
             
-            for i, badge_id in enumerate(visitors_to_process, 1):
-                if i % 100 == 0:
-                    self.logger.info(f"Processing visitor {i}/{len(visitors_to_process)}")
+            if self.parallel_processing_enabled and len(visitors_to_process) > 1:
+                # Parallel processing
+                self.logger.info(f"Processing {len(visitors_to_process)} visitors using {self.max_parallel_workers} parallel workers (enabled: {self.parallel_processing_enabled})")
                 
-                try:
-                    visitor_payload = self.generate_recommendations_for_visitor(badge_id)
-                    visitor = visitor_payload.get("visitor", {})
-                    raw_recommendations = visitor_payload.get("raw_recommendations", [])
-                    filtered_recommendations = visitor_payload.get("filtered_recommendations", [])
-                    rules_applied = visitor_payload.get("rules_applied", [])
-                    metadata = visitor_payload.get("metadata", {})
-                    metadata.setdefault("raw_count", len(raw_recommendations))
-                    metadata.setdefault("filtered_count", len(filtered_recommendations))
-                    filtered_count = metadata.get("filtered_count", len(filtered_recommendations))
-
-                    payload_for_storage = {
-                        "visitor": visitor,
-                        "raw_recommendations": raw_recommendations,
-                        "filtered_recommendations": filtered_recommendations,
-                        "metadata": metadata,
-                        "rules_applied": rules_applied,
+                with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel_workers) as executor:
+                    # Submit all tasks
+                    future_to_badge = {
+                        executor.submit(self._process_single_visitor, badge_id): badge_id 
+                        for badge_id in visitors_to_process
                     }
-
-                    if self.external_recommendations_enabled:
-                        external_recs = self._external_recommendations_map.get(str(badge_id))
-                        if external_recs:
-                            payload_for_storage["external_recommendations"] = external_recs
-                            metadata["external_recommendations_count"] = len(external_recs)
-                            self._external_recommendations_attached += 1
-
-                    can_update_neo4j = bool(visitor.get("BadgeId"))
-
-                    if filtered_recommendations:
-                        if can_update_neo4j:
-                            all_recommendations.append(payload_for_storage)
-                        recommendations_dict[badge_id] = payload_for_storage
-
-                        self.logger.debug(
-                            f"Generated {filtered_count} recommendations for visitor {badge_id}"
-                        )
-                    else:
-                        if can_update_neo4j:
-                            all_recommendations.append(payload_for_storage)
-                        recommendations_dict[badge_id] = payload_for_storage
+                    
+                    # Process completed tasks
+                    completed_count = 0
+                    for future in concurrent.futures.as_completed(future_to_badge):
+                        completed_count += 1
+                        if completed_count % 100 == 0:
+                            self.logger.info(f"Completed processing {completed_count}/{len(visitors_to_process)} visitors")
                         
-                        if not visitor:
+                        badge_id, visitor_payload, error = future.result()
+                        
+                        if error:
                             errors += 1
                             self.statistics["errors"] += 1
-                            self.statistics["error_details"].append(
-                                f"{badge_id}: visitor context missing"
-                            )
-                            self.logger.error(
-                                f"Visitor context missing for badge {badge_id}; unable to update Neo4j"
-                            )
+                            self.statistics["error_details"].append(f"{badge_id}: {str(error)}")
+                            self.logger.error(f"Error processing visitor {badge_id}: {str(error)}")
+                            continue
                         
-                except Exception as e:
-                    errors += 1
-                    self.statistics["errors"] += 1
-                    self.statistics["error_details"].append(f"{badge_id}: {str(e)}")
-                    self.logger.error(f"Error processing visitor {badge_id}: {str(e)}")
+                        if visitor_payload:
+                            self._process_visitor_result(badge_id, visitor_payload, recommendations_dict, all_recommendations)
+            else:
+                # Sequential processing
+                self.logger.info(f"Processing {len(visitors_to_process)} visitors sequentially")
+                
+                for i, badge_id in enumerate(visitors_to_process, 1):
+                    if i % 100 == 0:
+                        self.logger.info(f"Processing visitor {i}/{len(visitors_to_process)}")
+                    
+                    try:
+                        visitor_payload = self.generate_recommendations_for_visitor(badge_id)
+                        self._process_visitor_result(badge_id, visitor_payload, recommendations_dict, all_recommendations)
+                    except Exception as e:
+                        errors += 1
+                        self.statistics["errors"] += 1
+                        self.statistics["error_details"].append(f"{badge_id}: {str(e)}")
+                        self.logger.error(f"Error processing visitor {badge_id}: {str(e)}")
 
             theatre_stats = None
             if self.theatre_limits_enabled:
