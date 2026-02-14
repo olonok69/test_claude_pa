@@ -94,7 +94,7 @@ output_files:
     output_directory: "recommendations"  # Subdirectory for recommendations
     filename_pattern: "visitor_recommendations_{timestamp}"  # Pattern for output files
     save_csv: true
-    save_json: false  # New parameter to control big JSON export
+    save_json: true  # New parameter to control big JSON export
 
 
 
@@ -105,9 +105,9 @@ create_only_new: false
 # Pipeline step activation settings
 pipeline_steps:
   # Data processing steps
-  registration_processing: false
-  scan_processing: false  
-  session_processing: false
+  registration_processing: true
+  scan_processing: true  
+  session_processing: true
   # Neo4j processing steps
   neo4j_visitor_processing: true
   neo4j_session_processing: true
@@ -121,9 +121,9 @@ pipeline_steps:
 # Input file paths
 old_format: true
 input_files:
-  main_event_registration: "data/tsl/20260120_tsl25_26_registration_legacy.json"
+  main_event_registration: "data/tsl/20260213_tsl25_26_registration_legacy.json"
   secondary_event_registration: "data/tsl/20260120_tsl24_registration_legacy.json"
-  main_event_demographic: "data/tsl/20260120_tsl25_26_demographics_legacy.json"
+  main_event_demographic: "data/tsl/20260213_tsl25_26_demographics_legacy.json"
   secondary_event_demographic: "data/tsl/20260120_tsl24_demographics_legacy.json"
   practices: "data/tsl/practices_missing.csv"
 
@@ -171,7 +171,13 @@ scan_output_files:
 stream_processing:
   use_cached_descriptions: false
   create_missing_streams: true
-  use_enhanced_streams_catalog: true 
+  use_enhanced_streams_catalog: true
+  backfill_require_nonempty_title: true
+  backfill_skip_title_contains:
+    - "streamed from"
+    - "session sponsored"
+    - "panel sponsored"
+    - "dcw awards"
   
 # Session processing configuration
 # BVA-specific titles to remove during session filtering
@@ -192,8 +198,20 @@ titles_to_remove:
   - "chair's closing remarks"
   - 'sponsored session to be confirmed'
   - 'sponsored session tbc'
+  - 'tbc sponsored session'
+  - 'fireside chat to be confirmed'
   - 'opening remarks - theatre chair'
   - 'closing remarks - theatre chair'
+  - 'dcw awards'
+  - 'streamed from devops keynote theatre'
+  - 'streamed from mainstage'
+titles_contains_remove:
+  - "streamed from mainstage"
+  - "streamed from devops keynote theatre"
+  - "session sponsored"
+  - "panel sponsored"
+titles_regex_remove: []
+
 
 # TSL abbreviation mappings
 map_vets:
@@ -206,6 +224,9 @@ map_vets:
     "R&M": "Reichle & De-Massari AG"
     "RIT": "RIT Tech"
     "SAP": "SAP"
+    "DCA": "DCA Technology Partners"
+    "IMI": "IMI PLC"
+    "NTT": "NTT DATA UK"
 
 # Embedding configuration
 embeddings:
@@ -218,12 +239,15 @@ embeddings:
 recommendation:
   min_similarity_score: 0.3       # Minimum similarity score (0.0-1.0) for recommendations
   max_recommendations: 10         # Maximum number of recommendations per visitor
+  balance_recommendations_across_days:
+    enabled: false                # If true, split max_recommendations across day1/day2
+    strict: false                 # If true, do not backfill from other days when one day has shortage
   similar_visitors_count: 3       # Number of similar visitors to consider for new visitors
   resolve_overlapping_sessions_by_similarity: true  # Resolve clashing sessions by keeping the highest similarity ones
   use_calculated_days_since_registration: false  # If true, use calculated Days_since_registration; if false, set all to 1
   parallel_processing:
     enabled: true                 # Enable parallel processing of visitors
-    max_workers: 4                # Maximum number of parallel workers (adjust based on system resources)
+    max_workers: 12                # Maximum number of parallel workers (adjust based on system resources)
   external_recommendations:
     enabled: false
     file: "data/tsl/v2e_recommendations_2.json"
@@ -265,9 +289,11 @@ recommendation:
   export_csv_minimal:
     enabled: true  # If true, export only the specified fields; if false, export all fields
     fields:
+      - session_id
       - visitor_id
       - Email
       - session_title
+      - session_speaker_id
       - session_date
       - session_start_time
       - BadgeType
@@ -300,7 +326,7 @@ recommendation:
     job_role_field: "job_role"
   
   # Filtering rules configuration (vet-specific)
-    rules_config: {}
+  rules_config: {}
 
 
 # Neo4j configuration

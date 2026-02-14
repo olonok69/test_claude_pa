@@ -222,6 +222,7 @@ def main():
     # Load configuration
     logger.info(f"Loading configuration from {args.config}")
     config = load_config(args.config)
+    config.setdefault("project_root", os.path.dirname(os.path.abspath(__file__)))
     
     # ADDED: Store config file path for MLflow logging
     config['config_file_path'] = args.config
@@ -307,6 +308,8 @@ def main():
         # Run pipeline steps as configured
         processors = {}
         steps_completed = []
+        output_processing_enabled = config.get("pipeline_steps", {}).get("output_processing", True)
+        skip_output_in_recommendations = output_processing_enabled and (not steps_to_run or 11 in steps_to_run)
 
         # Step 1: Registration data processing
         if not steps_to_run or 1 in steps_to_run:
@@ -386,10 +389,6 @@ def main():
                 if config.get("pipeline_steps", {}).get("session_recommendation_processing", True):
                     neo4j_steps_to_run.append(10)
 
-            # Check if output processing is enabled as a separate step
-            output_processing_enabled = config.get("pipeline_steps", {}).get("output_processing", True)
-            skip_output_in_recommendations = output_processing_enabled and (not steps_to_run or 11 in steps_to_run)
-
             # Pre-execution diagnostic matrix of Neo4j steps
             neo4j_step_names = {
                 4: "Neo4j Visitor",
@@ -456,7 +455,11 @@ def main():
                 logger.info("Starting step 11: Output processing")
                 step_start = datetime.now()
                 
-                processors["output_processor"] = run_output_processing(config, create_only_new)
+                processors["output_processor"] = run_output_processing(
+                    config,
+                    create_only_new,
+                    processors.get("session_recommendation_processor"),
+                )
                 
                 # Log step timing
                 if mlflow_manager:

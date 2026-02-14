@@ -104,7 +104,10 @@ class SessionRecommendationProcessor:
         
         # Load Neo4j connection parameters from .env for consistency with other processors
         env_file = config.get("env_file", "keys/.env")
-        load_dotenv(env_file)
+        env_path = Path(env_file)
+        if not env_path.is_absolute():
+            env_path = self.project_root.joinpath(env_file)
+        load_dotenv(env_path)
         credentials = resolve_neo4j_credentials(config, logger=self.logger)
         self.uri = credentials["uri"]
         self.username = credentials["username"]
@@ -120,6 +123,15 @@ class SessionRecommendationProcessor:
         self.min_similarity_score = self.recommendation_config.get("min_similarity_score", 0.3)
         self.max_recommendations = self.recommendation_config.get("max_recommendations", 10)
         self.similar_visitors_count = self.recommendation_config.get("similar_visitors_count", 3)
+        day_balance_cfg = self.recommendation_config.get(
+            "balance_recommendations_across_days", {}
+        )
+        self.balance_recommendations_across_days = bool(
+            day_balance_cfg.get("enabled", False)
+        )
+        self.balance_recommendations_across_days_strict = bool(
+            day_balance_cfg.get("strict", False)
+        )
         
         # Parallel processing configuration
         parallel_cfg = self.recommendation_config.get("parallel_processing", {})
@@ -1614,16 +1626,13 @@ class SessionRecommendationProcessor:
     def _process_visitor_result(self, badge_id: str, visitor_payload: Dict[str, Any], 
                                recommendations_dict: Dict, all_recommendations: List) -> None:
         """
-        Process a single visitor for parallel execution.
-        
-        Returns:
-            Tuple of (badge_id, result_dict, error)
+        Aggregate a processed visitor payload into run-level collections.
         """
-        try:
-            visitor_payload = self.generate_recommendations_for_visitor(badge_id)
-            return badge_id, visitor_payload, None
-        except Exception as e:
-            return badge_id, None, e
+        if not visitor_payload:
+            return
+
+        recommendations_dict[badge_id] = visitor_payload
+        all_recommendations.append(visitor_payload)
 
     def generate_recommendations_for_visitor(self, badge_id: str) -> Dict[str, Any]:
         """Generate a rich recommendation payload for a single visitor."""
@@ -1861,8 +1870,30 @@ class SessionRecommendationProcessor:
             else:
                 generation_notes.append("Overlap resolution disabled")
 
-            # Apply max recommendations cap
-            filtered_recommendations = filtered_recommendations[: self.max_recommendations]
+            # Apply max recommendations cap (optionally balanced across day1/day2)
+            (
+                filtered_recommendations,
+                day_balance_metadata,
+            ) = self._apply_day_balanced_cap(filtered_recommendations)
+
+            if day_balance_metadata.get("enabled"):
+                if day_balance_metadata.get("applied"):
+                    generation_notes.append(
+                        "Day-balanced cap applied: "
+                        f"{day_balance_metadata.get('day1')}="
+                        f"{day_balance_metadata.get('selected_day1')}/"
+                        f"{day_balance_metadata.get('target_day1')}, "
+                        f"{day_balance_metadata.get('day2')}="
+                        f"{day_balance_metadata.get('selected_day2')}/"
+                        f"{day_balance_metadata.get('target_day2')}"
+                    )
+                else:
+                    generation_notes.append(
+                        "Day-balanced cap enabled but not applied: "
+                        f"{day_balance_metadata.get('reason')}"
+                    )
+            else:
+                generation_notes.append("Day-balanced cap disabled")
 
             similarity_exponent_applied = False
             if should_adjust_similarity and filtered_recommendations:
@@ -1875,6 +1906,13 @@ class SessionRecommendationProcessor:
             filtered_recommendations = self._annotate_overlaps_for_recommendations(
                 filtered_recommendations, badge_id
             )
+
+            # Ensure required output identifiers are always present
+            for rec in filtered_recommendations:
+                session_id_value = str(rec.get("session_id", "")).strip()
+                rec["session_id"] = session_id_value if session_id_value else "NA"
+                speaker_id_value = str(rec.get("speaker_id", "")).strip()
+                rec["speaker_id"] = speaker_id_value if speaker_id_value else "NA"
             filtered_count = len(filtered_recommendations)
 
             if similarity_exponent_applied:
@@ -1925,6 +1963,7 @@ class SessionRecommendationProcessor:
                 "overlap_resolution": overlap_metadata,
                 "similarity_adjustment": similarity_adjustment_metadata,
                 "custom_rules": custom_rules_metadata,
+                "day_balancing": day_balance_metadata,
             }
 
             result.update(
@@ -2097,6 +2136,132 @@ class SessionRecommendationProcessor:
 
         return adjusted
 
+    def _extract_recommendation_day(self, recommendation: Dict[str, Any]) -> Optional[str]:
+        """Return normalized day value from a recommendation record."""
+
+        day_value = recommendation.get("date") or recommendation.get("session_date")
+        if day_value is None:
+            return None
+
+        day_text = str(day_value).strip()
+        if not day_text:
+            return None
+
+        return day_text
+
+    def _sort_day_values(self, day_values: List[str]) -> List[str]:
+        """Sort day labels chronologically when possible, else lexicographically."""
+
+        def _sort_key(day_text: str) -> Tuple[int, Any]:
+            parsed = pd.to_datetime(day_text, errors="coerce")
+            if pd.isna(parsed):
+                return (1, day_text)
+            return (0, parsed)
+
+        return sorted(day_values, key=_sort_key)
+
+    def _apply_day_balanced_cap(
+        self, recommendations: List[Dict[str, Any]]
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """Apply max cap while splitting recommendations across day1/day2."""
+
+        max_recommendations = int(self.max_recommendations or 0)
+        metadata: Dict[str, Any] = {
+            "enabled": self.balance_recommendations_across_days,
+            "strict": self.balance_recommendations_across_days_strict,
+            "applied": False,
+            "reason": "disabled",
+            "max_recommendations": max_recommendations,
+            "available_days": 0,
+            "day1": "",
+            "day2": "",
+            "target_day1": 0,
+            "target_day2": 0,
+            "selected_day1": 0,
+            "selected_day2": 0,
+        }
+
+        if max_recommendations <= 0:
+            metadata["reason"] = "max_recommendations<=0"
+            return [], metadata
+
+        if len(recommendations) <= max_recommendations:
+            metadata["reason"] = "already_within_cap"
+            return recommendations, metadata
+
+        if not self.balance_recommendations_across_days:
+            return recommendations[:max_recommendations], metadata
+
+        day_buckets: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        undated: List[Dict[str, Any]] = []
+
+        for rec in recommendations:
+            day_key = self._extract_recommendation_day(rec)
+            if day_key is None:
+                undated.append(rec)
+            else:
+                day_buckets[day_key].append(rec)
+
+        sorted_days = self._sort_day_values(list(day_buckets.keys()))
+        metadata["available_days"] = len(sorted_days)
+
+        if len(sorted_days) < 2:
+            metadata["reason"] = "insufficient_distinct_days"
+            return recommendations[:max_recommendations], metadata
+
+        day1 = sorted_days[0]
+        day2 = sorted_days[1]
+        metadata["day1"] = day1
+        metadata["day2"] = day2
+
+        target_day1 = max_recommendations // 2
+        target_day2 = max_recommendations - target_day1
+        metadata["target_day1"] = target_day1
+        metadata["target_day2"] = target_day2
+
+        day1_recs = day_buckets.get(day1, [])
+        day2_recs = day_buckets.get(day2, [])
+
+        selected: List[Dict[str, Any]] = []
+        selected.extend(day1_recs[:target_day1])
+        selected.extend(day2_recs[:target_day2])
+
+        remaining_slots = max_recommendations - len(selected)
+        if remaining_slots > 0:
+            fallback_pool: List[Dict[str, Any]] = []
+            fallback_pool.extend(day1_recs[target_day1:])
+            fallback_pool.extend(day2_recs[target_day2:])
+
+            if not self.balance_recommendations_across_days_strict:
+                for extra_day in sorted_days[2:]:
+                    fallback_pool.extend(day_buckets.get(extra_day, []))
+                fallback_pool.extend(undated)
+
+            fallback_pool.sort(
+                key=lambda x: float(x.get("similarity", 0) or 0), reverse=True
+            )
+            selected.extend(fallback_pool[:remaining_slots])
+
+        selected.sort(key=lambda x: float(x.get("similarity", 0) or 0), reverse=True)
+        selected = selected[:max_recommendations]
+
+        metadata["applied"] = True
+        metadata["reason"] = "balanced"
+
+        final_day1 = 0
+        final_day2 = 0
+        for rec in selected:
+            day_key = self._extract_recommendation_day(rec)
+            if day_key == day1:
+                final_day1 += 1
+            elif day_key == day2:
+                final_day2 += 1
+
+        metadata["selected_day1"] = final_day1
+        metadata["selected_day2"] = final_day2
+
+        return selected, metadata
+
     def _apply_custom_recommendation_rules(
         self, visitor: Dict, sessions: List[Dict]
     ) -> Tuple[List[Dict], Dict[str, Any]]:
@@ -2146,6 +2311,24 @@ class SessionRecommendationProcessor:
 
         return self.mode == "personal_agendas"
 
+    def _build_control_assignment_map(self, visitor_ids: List[str]) -> Dict[str, int]:
+        """Build a deterministic visitor->control flag map for the current run."""
+
+        if not visitor_ids or not self._should_apply_control_group():
+            return {}
+
+        unique_ids = sorted({str(visitor_id) for visitor_id in visitor_ids if visitor_id})
+        if not unique_ids:
+            return {}
+
+        target_count = int(len(unique_ids) * self.control_group_percentage)
+        if target_count <= 0:
+            return {}
+
+        rng = random.Random(self.control_group_random_seed)
+        selected_ids = set(rng.sample(unique_ids, min(target_count, len(unique_ids))))
+        return {visitor_id: 1 for visitor_id in selected_ids}
+
 
 
     def process(self, create_only_new: bool = False, skip_output: bool = False):
@@ -2170,6 +2353,10 @@ class SessionRecommendationProcessor:
                 # Ensure summary utilities have the expected alias key even when nothing processed
                 self.statistics["visitors_processed"] = 0
                 self.statistics["total_visitors_processed"] = 0
+                self.recommendations_dict = {}
+                self.all_recommendations = []
+                self.theatre_stats = None
+                self.control_assignment_map = None
                 self.logger.info("No visitors to process for recommendations.")
                 return
             
@@ -2249,6 +2436,24 @@ class SessionRecommendationProcessor:
                         theatre_stats.get("slots_limited", 0),
                     )
 
+            control_assignment_map = self._build_control_assignment_map(
+                list(recommendations_dict.keys())
+            )
+
+            if self._should_apply_control_group():
+                self.logger.info(
+                    "Control group enabled: assigned %d/%d visitors (%.2f%%)",
+                    len(control_assignment_map),
+                    len(recommendations_dict),
+                    self.control_group_percentage * 100.0,
+                )
+
+            # Persist run artifacts for optional downstream output-only orchestration
+            self.recommendations_dict = recommendations_dict
+            self.all_recommendations = all_recommendations
+            self.theatre_stats = theatre_stats
+            self.control_assignment_map = control_assignment_map
+
             # Ensure metadata counts stay aligned with final recommendation lists
             for payload in recommendations_dict.values():
                 metadata = payload.get("metadata")
@@ -2292,7 +2497,7 @@ class SessionRecommendationProcessor:
                     self.statistics,
                     theatre_stats,
                     create_only_new,
-                    None,  # control_assignment_map will be handled by output_processor
+                    control_assignment_map,
                     self._external_recommendations_attached
                 )
                 self.logger.info("Output processing completed")

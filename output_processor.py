@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple, Set
 import pandas as pd
 from neo4j import GraphDatabase
+from dotenv import load_dotenv
 
 from utils.neo4j_utils import resolve_neo4j_credentials
 
@@ -43,10 +44,16 @@ class OutputProcessor:
         self.show_name = config.get("neo4j", {}).get("show_name", "bva")
         self.recommendation_config = config.get("recommendation", {})
         self.output_dir = Path(config.get("output_dir", "data/output"))
+        self.project_root = Path(config.get("project_root", ".")).resolve()
 
         # Neo4j connection for updates
+        env_file = config.get("env_file", "keys/.env")
+        env_path = Path(env_file)
+        if not env_path.is_absolute():
+            env_path = self.project_root.joinpath(env_file)
+        load_dotenv(env_path)
         neo4j_config = config.get("neo4j", {})
-        credentials = resolve_neo4j_credentials(neo4j_config, logger=self.logger)
+        credentials = resolve_neo4j_credentials(config, logger=self.logger)
         self.uri = credentials["uri"]
         self.username = credentials["username"]
         self.password = credentials["password"]
@@ -110,6 +117,10 @@ class OutputProcessor:
                 control_assignment_map,
             ) = self._split_control_group(recommendations_dict, control_assignment_map or {})
 
+            # Guardrail checks: ensure final payloads respect per-visitor limits and have no time clashes
+            guardrail_summary = self._evaluate_recommendation_guardrails(recommendations_dict)
+            statistics["recommendation_guardrails"] = guardrail_summary
+
             # Update statistics with control group info
             self._update_statistics_with_control_group(
                 statistics, main_recommendations, control_recommendations, control_summary
@@ -168,6 +179,120 @@ class OutputProcessor:
             self.logger.error(f"Error in output processing: {str(e)}", exc_info=True)
             statistics["processing_time"] = time.time() - start_time
             return statistics
+
+    def _evaluate_recommendation_guardrails(
+        self,
+        recommendations_dict: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Run hard guardrails over final recommendation payloads and log violations."""
+
+        max_recommendations = int(self.recommendation_config.get("max_recommendations", 10) or 10)
+        over_limit_violations: List[Dict[str, Any]] = []
+        overlap_violations: List[Dict[str, Any]] = []
+
+        for visitor_id, payload in recommendations_dict.items():
+            recs = payload.get("filtered_recommendations", []) or []
+            rec_count = len(recs)
+
+            if rec_count > max_recommendations:
+                over_limit_violations.append(
+                    {
+                        "visitor_id": visitor_id,
+                        "recommendation_count": rec_count,
+                        "max_recommendations": max_recommendations,
+                    }
+                )
+
+            overlap_pairs = self._count_overlapping_pairs(recs)
+            if overlap_pairs > 0:
+                overlap_violations.append(
+                    {
+                        "visitor_id": visitor_id,
+                        "overlap_pairs": overlap_pairs,
+                        "recommendation_count": rec_count,
+                    }
+                )
+
+        if over_limit_violations:
+            self.logger.warning(
+                "GUARDRAIL: %d visitor(s) exceed max_recommendations=%d",
+                len(over_limit_violations),
+                max_recommendations,
+            )
+            for violation in over_limit_violations[:20]:
+                self.logger.warning(
+                    "GUARDRAIL over-limit visitor=%s recommendations=%d max=%d",
+                    violation["visitor_id"],
+                    violation["recommendation_count"],
+                    violation["max_recommendations"],
+                )
+            if len(over_limit_violations) > 20:
+                self.logger.warning(
+                    "GUARDRAIL over-limit additional visitors not shown: %d",
+                    len(over_limit_violations) - 20,
+                )
+
+        if overlap_violations:
+            self.logger.warning(
+                "GUARDRAIL: %d visitor(s) still have overlapping recommendation slots",
+                len(overlap_violations),
+            )
+            for violation in overlap_violations[:20]:
+                self.logger.warning(
+                    "GUARDRAIL overlap visitor=%s overlap_pairs=%d recommendations=%d",
+                    violation["visitor_id"],
+                    violation["overlap_pairs"],
+                    violation["recommendation_count"],
+                )
+            if len(overlap_violations) > 20:
+                self.logger.warning(
+                    "GUARDRAIL overlap additional visitors not shown: %d",
+                    len(overlap_violations) - 20,
+                )
+
+        return {
+            "max_recommendations": max_recommendations,
+            "visitors_checked": len(recommendations_dict),
+            "violations": {
+                "over_limit": len(over_limit_violations),
+                "overlap_conflicts": len(overlap_violations),
+                "total": len(over_limit_violations) + len(overlap_violations),
+            },
+            "over_limit_visitors": over_limit_violations,
+            "overlap_visitors": overlap_violations,
+        }
+
+    def _count_overlapping_pairs(self, recommendations: List[Dict[str, Any]]) -> int:
+        """Count time-overlap pairs inside a single visitor recommendation list."""
+
+        if len(recommendations) <= 1:
+            return 0
+
+        intervals: List[Tuple[pd.Timestamp, pd.Timestamp]] = []
+        for rec in recommendations:
+            date_value = rec.get("date") or rec.get("session_date")
+            start_value = rec.get("start_time") or rec.get("session_start_time")
+            end_value = rec.get("end_time") or rec.get("session_end_time")
+
+            if not date_value or not start_value or not end_value:
+                continue
+
+            start_dt = pd.to_datetime(f"{date_value} {start_value}", errors="coerce")
+            end_dt = pd.to_datetime(f"{date_value} {end_value}", errors="coerce")
+            if pd.isna(start_dt) or pd.isna(end_dt):
+                continue
+
+            intervals.append((start_dt, end_dt))
+
+        overlap_pairs = 0
+        for i in range(len(intervals)):
+            start_a, end_a = intervals[i]
+            for j in range(i + 1, len(intervals)):
+                start_b, end_b = intervals[j]
+                if start_a < end_b and end_a > start_b:
+                    overlap_pairs += 1
+
+        return overlap_pairs
 
     def _split_control_group(
         self,
@@ -424,10 +549,15 @@ class OutputProcessor:
                             row[field] = visitor_info.get(field, "NA")
 
                     # Add session information
+                    session_id_value = str(rec.get("session_id", "")).strip()
+                    if not session_id_value:
+                        session_id_value = "NA"
+
                     row.update({
-                        "session_id": rec.get("session_id"),
+                        "session_id": session_id_value,
                         "session_title": rec.get("title"),
                         "session_stream": rec.get("stream"),
+                        "session_speaker_id": rec.get("speaker_id", "NA"),
                         "session_date": rec.get("date"),
                         "session_start_time": rec.get("start_time"),
                         "session_end_time": rec.get("end_time"),
@@ -475,7 +605,9 @@ class OutputProcessor:
             # Apply minimal CSV export if configured
             minimal_config = self.recommendation_config.get("export_csv_minimal", {})
             if minimal_config.get("enabled", False):
-                minimal_fields = minimal_config.get("fields", [])
+                minimal_fields = list(minimal_config.get("fields", []))
+                if "session_id" not in minimal_fields:
+                    minimal_fields.insert(0, "session_id")
                 if minimal_fields:
                     missing_fields = [f for f in minimal_fields if f not in df.columns]
                     if missing_fields:
@@ -576,6 +708,22 @@ class OutputProcessor:
                         visitor_id = rec["visitor"]["BadgeId"]
                         control_value = control_group_map.get(visitor_id, 0)
                         recommended_sessions = rec.get("filtered_recommendations", [])
+                        timestamp = datetime.now().isoformat()
+
+                        # Replace recommendation set for this visitor/show to avoid stale
+                        # recommendations accumulating across reruns.
+                        clear_query = f"""
+                        MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
+                        WHERE v.show = $show_name OR v.show IS NULL
+                        OPTIONAL MATCH (v)-[r:IS_RECOMMENDED]->(s:{self.session_this_year_label})
+                        WHERE r.show = $show_name OR r.show IS NULL OR s.show = $show_name OR s.show IS NULL
+                        DELETE r
+                        """
+                        session.run(
+                            clear_query,
+                            visitor_id=visitor_id,
+                            show_name=self.show_name,
+                        )
 
                         if recommended_sessions:
                             # Update visitor with has_recommendation flag
@@ -590,7 +738,7 @@ class OutputProcessor:
                             session.run(update_query,
                                        visitor_id=visitor_id,
                                        show_name=self.show_name,
-                                       timestamp=datetime.now().isoformat(),
+                                       timestamp=timestamp,
                                        control_group=control_value)
                             updated_with_recs += 1
 
@@ -614,7 +762,7 @@ class OutputProcessor:
                                         show_name=self.show_name,
                                         session_id=session_id,
                                         score=rec_session.get("similarity", 0),
-                                        timestamp=datetime.now().isoformat()
+                                        timestamp=timestamp
                                     )
                         else:
                             # Mark visitor as processed but without recommendations
@@ -629,7 +777,7 @@ class OutputProcessor:
                             session.run(update_query,
                                        visitor_id=visitor_id,
                                        show_name=self.show_name,
-                                       timestamp=datetime.now().isoformat(),
+                                       timestamp=timestamp,
                                        control_group=control_value)
                             updated_without_recs += 1
 

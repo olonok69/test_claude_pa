@@ -83,6 +83,8 @@ class SessionProcessor:
         # Load map_vets and titles_to_remove from config
         self.map_vets = self.config.get("map_vets", {})
         self.titles_to_remove = self.config.get("titles_to_remove", [])
+        self.titles_contains_remove = self.config.get("titles_contains_remove", [])
+        self.titles_regex_remove = self.config.get("titles_regex_remove", [])
         self.session_output_config = self.config.get("session_output_files", {})
         self.session_processed_files = self.session_output_config.get(
             "processed_sessions", {}
@@ -95,6 +97,14 @@ class SessionProcessor:
         self.use_enhanced_streams_catalog = self.stream_processing_config.get(
             "use_enhanced_streams_catalog", False
         )
+        self.backfill_require_nonempty_title = bool(
+            self.stream_processing_config.get("backfill_require_nonempty_title", True)
+        )
+        self.backfill_skip_title_contains = [
+            str(x).strip().lower()
+            for x in self.stream_processing_config.get("backfill_skip_title_contains", [])
+            if x is not None and str(x).strip()
+        ]
 
         self.session_file_paths: Dict[str, str] = {}
         self.backfill_metrics: Dict[str, int] = {
@@ -103,10 +113,40 @@ class SessionProcessor:
             "total_missing_streams": 0,
             "sessions_backfilled": 0,
             "sessions_skipped_empty_synopsis": 0,
+            "sessions_skipped_empty_title": 0,
+            "sessions_skipped_title_pattern": 0,
             "sessions_skipped_no_candidates": 0,
             "sessions_failed_llm": 0,
         }
         self._streams_by_theatre: Optional[Dict[str, Set[str]]] = None
+
+        self._titles_exact_remove_set = {
+            str(title).strip().lower()
+            for title in self.titles_to_remove
+            if title is not None and str(title).strip()
+        }
+        self._titles_contains_remove_list = [
+            str(title).strip().lower()
+            for title in self.titles_contains_remove
+            if title is not None and str(title).strip()
+        ]
+        self._titles_regex_remove_compiled: List[re.Pattern] = []
+        for regex_text in self.titles_regex_remove:
+            if regex_text is None:
+                continue
+            pattern_text = str(regex_text).strip()
+            if not pattern_text:
+                continue
+            try:
+                self._titles_regex_remove_compiled.append(
+                    re.compile(pattern_text, flags=re.IGNORECASE)
+                )
+            except re.error as exc:
+                self.logger.warning(
+                    "Ignoring invalid titles_regex_remove pattern '%s': %s",
+                    pattern_text,
+                    exc,
+                )
 
     def load_env_variables(self) -> None:
         """Load environment variables for API access."""
@@ -176,32 +216,51 @@ class SessionProcessor:
 
     def filter_session_data(self) -> None:
         """Filter and clean session data - MATCHES PRODUCTION EXACTLY."""
-        # Convert titles_to_remove to lowercase for case-insensitive comparison
-        titles_to_remove_lower = [title.lower() for title in self.titles_to_remove]
         try:
             # Apply filters for each dataset
             self.session_this_filtered = self.session_this.copy()
             self.session_last_filtered_bva = self.session_past_bva.copy()
             self.session_last_filtered_lva = self.session_past_lva.copy()
 
-            # Apply title filters
-            # Filter out rows where the title EXACTLY matches any in titles_to_remove (case-insensitive)
+            def _normalized_title_series(df: pd.DataFrame) -> pd.Series:
+                return (
+                    df["title"]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                )
+
+            def _build_title_exclusion_mask(df: pd.DataFrame) -> pd.Series:
+                normalized_titles = _normalized_title_series(df)
+                mask = normalized_titles.isin(self._titles_exact_remove_set)
+
+                if self._titles_contains_remove_list:
+                    contains_mask = pd.Series(False, index=df.index)
+                    for pattern in self._titles_contains_remove_list:
+                        contains_mask = contains_mask | normalized_titles.str.contains(
+                            pattern, regex=False
+                        )
+                    mask = mask | contains_mask
+
+                if self._titles_regex_remove_compiled:
+                    regex_mask = pd.Series(False, index=df.index)
+                    for compiled in self._titles_regex_remove_compiled:
+                        regex_mask = regex_mask | normalized_titles.str.contains(compiled)
+                    mask = mask | regex_mask
+
+                return mask
+
             self.session_this_filtered = self.session_this_filtered[
-                ~self.session_this_filtered["title"]
-                .str.lower()
-                .isin(titles_to_remove_lower)
+                ~_build_title_exclusion_mask(self.session_this_filtered)
             ]
 
             self.session_last_filtered_bva = self.session_last_filtered_bva[
-                ~self.session_last_filtered_bva["title"]
-                .str.lower()
-                .isin(titles_to_remove_lower)
+                ~_build_title_exclusion_mask(self.session_last_filtered_bva)
             ]
 
             self.session_last_filtered_lva = self.session_last_filtered_lva[
-                ~self.session_last_filtered_lva["title"]
-                .str.lower()
-                .isin(titles_to_remove_lower)
+                ~_build_title_exclusion_mask(self.session_last_filtered_lva)
             ]
 
             # Create text keys for matching - FROM TITLE FIELD
@@ -250,6 +309,18 @@ class SessionProcessor:
     def select_relevant_columns(self) -> None:
         """Select only relevant columns from session data."""
         try:
+            # Ensure required columns exist even when missing from source exports.
+            # speaker_id is required downstream and should default to NA when absent.
+            for df_name in [
+                "session_this_filtered",
+                "session_last_filtered_bva",
+                "session_last_filtered_lva",
+            ]:
+                df = getattr(self, df_name)
+                if "speaker_id" not in df.columns:
+                    df["speaker_id"] = "NA"
+                setattr(self, df_name, df)
+
             # Define the columns we want to keep - maintain consistent order
             cols_to_keep = [
                 "session_id",
@@ -259,6 +330,7 @@ class SessionProcessor:
                 "theatre__name",
                 "title",
                 "stream",
+                "speaker_id",
                 "synopsis_stripped",
                 "sponsored_session",
                 "sponsored_by",
@@ -286,6 +358,22 @@ class SessionProcessor:
             self.session_last_filtered_valid_cols_lva = (
                 self.session_last_filtered_valid_cols_lva.fillna("")
             )
+
+            # Enforce explicit default for speaker_id when empty.
+            for df_name in [
+                "session_this_filtered_valid_cols",
+                "session_last_filtered_valid_cols_bva",
+                "session_last_filtered_valid_cols_lva",
+            ]:
+                df = getattr(self, df_name)
+                if "speaker_id" in df.columns:
+                    df["speaker_id"] = (
+                        df["speaker_id"]
+                        .astype(str)
+                        .str.strip()
+                        .replace("", "NA")
+                    )
+                setattr(self, df_name, df)
 
             # Upstream data-quality gate: drop and quarantine placeholder rows (e.g., blank titles)
             def drop_and_quarantine(df: pd.DataFrame, name: str) -> pd.DataFrame:
@@ -807,6 +895,19 @@ class SessionProcessor:
 
             for idx in missing_indices:
                 row = df.loc[idx]
+                title = str(row.get("title", "")).strip()
+                title_lower = title.lower()
+
+                if self.backfill_require_nonempty_title and not title:
+                    self.backfill_metrics["sessions_skipped_empty_title"] += 1
+                    continue
+
+                if self.backfill_skip_title_contains and any(
+                    pattern in title_lower for pattern in self.backfill_skip_title_contains
+                ):
+                    self.backfill_metrics["sessions_skipped_title_pattern"] += 1
+                    continue
+
                 synopsis = str(row.get("synopsis_stripped", "")).strip()
                 if not synopsis:
                     self.backfill_metrics["sessions_skipped_empty_synopsis"] += 1

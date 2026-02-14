@@ -153,6 +153,10 @@ class Neo4jSessionProcessor:
                                 else:
                                     val_str = str(val)
                                 properties[node_prop] = val_str
+
+                        # Ensure speaker_id is always present on Session nodes
+                        speaker_id_value = str(properties.get("speaker_id", "")).strip()
+                        properties["speaker_id"] = speaker_id_value if speaker_id_value else "NA"
                         
                         # Add show attribute
                         properties['show'] = self.show_name
@@ -653,6 +657,8 @@ class Neo4jSessionProcessor:
 
                         # Build properties dictionary (stringify to keep consistency)
                         props = {c: ("" if pd.isna(row[c]) else str(row[c])) for c in all_columns if c != "session_id"}
+                        speaker_id_value = str(props.get("speaker_id", "")).strip()
+                        props["speaker_id"] = speaker_id_value if speaker_id_value else "NA"
                         props["show"] = self.show_name
 
                         # Skip placeholder sessions with no meaningful text

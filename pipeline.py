@@ -267,7 +267,7 @@ def run_session_recommendation_processing(config, create_only_new=True, skip_out
     return session_recommendation_processor
 
 
-def run_output_processing(config, create_only_new=True):
+def run_output_processing(config, create_only_new=True, recommendation_processor=None):
     """
     Run output processing step (separate from recommendation processing).
 
@@ -281,16 +281,14 @@ def run_output_processing(config, create_only_new=True):
     logger = logging.getLogger(__name__)
     logger.info("Starting output processing")
 
-    # First run recommendation processing with output skipped
-    session_recommendation_processor = SessionRecommendationProcessor(config)
-    session_recommendation_processor.process(create_only_new=create_only_new, skip_output=True)
+    if recommendation_processor is not None:
+        session_recommendation_processor = recommendation_processor
+        logger.info("Using existing session recommendation results for output processing")
+    else:
+        # Fallback for standalone step-11 execution
+        session_recommendation_processor = SessionRecommendationProcessor(config)
+        session_recommendation_processor.process(create_only_new=create_only_new, skip_output=True)
 
-    # Then run output processing separately
-    # We need to get the recommendations data that was generated
-    # For now, we'll create a new processor instance and run output processing
-    # This is a bit of a workaround - ideally we'd pass the data directly
-
-    # Get the recommendations data from the processor
     recommendations_dict = session_recommendation_processor.recommendations_dict if hasattr(session_recommendation_processor, 'recommendations_dict') else {}
     all_recommendations = session_recommendation_processor.all_recommendations if hasattr(session_recommendation_processor, 'all_recommendations') else []
     theatre_stats = getattr(session_recommendation_processor, 'theatre_stats', None)
