@@ -1,0 +1,64 @@
+{
+  "registration": {
+    "id": ["id", "Id"],
+    "title": ["title", "Title"],
+    "forename": ["forename", "Forename"],
+    "surname": ["surname", "Surname"],
+    "email": ["email", "Email"],
+    "tel": ["tel", "Tel"],
+    "mobile": ["mobile", "Mobile"],
+    "fax": ["fax", "Fax"],
+    "company": ["company", "Company"],
+    "job_title": ["jobTitle", "JobTitle", "jobtitle", "job_title"],
+    "addr1": ["addr1", "address1", "Addr1", "Address1"],
+    "addr2": ["addr2", "address2", "Addr2", "Address2"],
+    "addr3": ["addr3", "address3", "Addr3", "Address3"],
+    "town": ["town", "city", "Town", "City"],
+    "county": ["county", "state", "County", "State"],
+    "postcode": ["postcode", "postal_code", "zip", "Postcode", "Postal_code", "Zip"],
+    "country": ["country", "Country"],
+    "status": ["status", "Status"],
+    "badge_type": ["badgeType", "badge_type", "BadgeType"],
+    "event_id": ["eventId", "event_id", "EventId"],
+    "event_identifier": ["eventIdentifier", "event_identifier", "EventIdentifier"],
+    "show_ref": ["show_ref", "showRef", "showref", "ShowRef"],
+    "registration_date": ["registrationDate", "registration_date", "RegistrationDate"],
+    "badge_id": ["badgeId", "badge_id", "BadgeId"],
+    "reg_code": ["regCode", "reg_code", "RegCode"],
+    "source": ["source", "Source"],
+    "attended": ["attended", "Attended"],
+    "last_modified_date": ["lastModifiedDate", "last_modified_date", "LastModifiedDate"],
+    "segment_from_reg": ["segmentFromReg", "segment_from_reg", "SegmentFromReg"],
+    "upgrade": ["upgrade", "Upgrade"]
+  },
+  "demographics": {
+    "flat": {
+      "badge_id": ["badge_id", "badgeId", "BadgeId"],
+      "event_id": ["event_id", "eventId", "EventId"],
+      "show_ref": ["show_ref", "showRef", "showref", "ShowRef"],
+      "question_type": ["question_type", "questionType", "QuestionType"],
+      "question_id": ["question_id", "questionId", "QuestionId"],
+      "question_text": ["question_text", "questionText", "QuestionText"],
+      "answer_id": ["answer_id", "answerId", "AnswerId"],
+      "answer_text": ["answer_text", "answerText", "AnswerText"],
+      "is_positive": ["is_positive", "isPositive", "IsPositive"],
+      "response_text": ["answer_specification_text", "response_text", "responseText", "ResponseText"]
+    },
+    "nested_base": {
+      "badge_id": ["badgeId", "badge_id"],
+      "event_id": ["eventId", "event_id"],
+      "show_ref": ["show_ref", "showRef"],
+      "source": ["source"],
+      "question_responses": ["questionResponses", "question_responses"]
+    },
+    "nested_response": {
+      "question_type": ["questionType", "question_type"],
+      "question_id": ["questionId", "question_id"],
+      "question_text": ["questionText", "question_text"],
+      "answer_id": ["answerId", "answer_id"],
+      "answer_text": ["answerText", "answer_text"],
+      "is_positive": ["isPositive", "is_positive"],
+      "response_text": ["responseText", "response_text"]
+    }
+  }
+}

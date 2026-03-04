@@ -120,16 +120,38 @@ class ScanProcessor:
                 seminars_scan_reference_this_path = pa_scan_files.get("seminars_scan_reference_this")
                 seminars_scans_this_path = pa_scan_files.get("seminars_scans_this")
 
-                if seminars_scan_reference_this_path and seminars_scans_this_path:
-                    self.seminars_scan_reference_this_year = pd.read_csv(seminars_scan_reference_this_path)
-                    self.seminars_scans_this_year = pd.read_csv(seminars_scans_this_path)
-                    self.logger.info(
-                        f"Loaded post-analysis seminar scans for this year: reference={len(self.seminars_scan_reference_this_year)} records, scans={len(self.seminars_scans_this_year)} records"
-                    )
+                self.seminars_scan_reference_this_year = pd.DataFrame()
+                self.seminars_scans_this_year = pd.DataFrame()
+
+                if seminars_scans_this_path:
+                    if os.path.exists(seminars_scans_this_path):
+                        self.seminars_scans_this_year = pd.read_csv(seminars_scans_this_path)
+                    else:
+                        self.logger.warning(
+                            "Post-analysis seminars_scans_this file not found: %s",
+                            seminars_scans_this_path,
+                        )
                 else:
-                    self.logger.warning("Post-analysis scan files not fully configured; skipping this-year seminar load")
-                    self.seminars_scan_reference_this_year = pd.DataFrame()
-                    self.seminars_scans_this_year = pd.DataFrame()
+                    self.logger.warning("Post-analysis seminars_scans_this is not configured")
+
+                if seminars_scan_reference_this_path:
+                    if os.path.exists(seminars_scan_reference_this_path):
+                        self.seminars_scan_reference_this_year = pd.read_csv(seminars_scan_reference_this_path)
+                    else:
+                        self.logger.warning(
+                            "Post-analysis seminars_scan_reference_this file not found: %s (continuing without reference merge)",
+                            seminars_scan_reference_this_path,
+                        )
+                else:
+                    self.logger.warning(
+                        "Post-analysis seminars_scan_reference_this is not configured (continuing with scans-only enrichment)"
+                    )
+
+                self.logger.info(
+                    "Loaded post-analysis seminar scans for this year: reference=%d records, scans=%d records",
+                    len(self.seminars_scan_reference_this_year),
+                    len(self.seminars_scans_this_year),
+                )
 
             self.logger.info(
                 f"Loaded session data: {len(self.session_this)} records this year, "
@@ -286,12 +308,29 @@ class ScanProcessor:
             )
 
             if self.mode == "post_analysis" and hasattr(self, "seminars_scans_this_year") and not self.seminars_scans_this_year.empty:
-                self.seminars_scans_this_year_enhanced = pd.merge(
-                    self.seminars_scans_this_year,
-                    self.seminars_scan_reference_this_year[["Short Name", "Seminar Name"]],
-                    on=["Short Name"],
-                    how="left",
-                )
+                if (
+                    hasattr(self, "seminars_scan_reference_this_year")
+                    and not self.seminars_scan_reference_this_year.empty
+                    and "Short Name" in self.seminars_scans_this_year.columns
+                    and "Short Name" in self.seminars_scan_reference_this_year.columns
+                    and "Seminar Name" in self.seminars_scan_reference_this_year.columns
+                ):
+                    self.seminars_scans_this_year_enhanced = pd.merge(
+                        self.seminars_scans_this_year,
+                        self.seminars_scan_reference_this_year[["Short Name", "Seminar Name"]],
+                        on=["Short Name"],
+                        how="left",
+                    )
+                else:
+                    self.seminars_scans_this_year_enhanced = self.seminars_scans_this_year.copy()
+                    if "Seminar Name" not in self.seminars_scans_this_year_enhanced.columns:
+                        if "Seminar" in self.seminars_scans_this_year_enhanced.columns:
+                            self.seminars_scans_this_year_enhanced["Seminar Name"] = self.seminars_scans_this_year_enhanced["Seminar"]
+                        elif "Short Name" in self.seminars_scans_this_year_enhanced.columns:
+                            self.seminars_scans_this_year_enhanced["Seminar Name"] = self.seminars_scans_this_year_enhanced["Short Name"]
+                        else:
+                            self.seminars_scans_this_year_enhanced["Seminar Name"] = ""
+
                 self.seminars_scans_this_year_enhanced["key_text"] = (
                     self.seminars_scans_this_year_enhanced["Seminar Name"].apply(self.clean_text)
                 )

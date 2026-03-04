@@ -2,6 +2,7 @@ import os
 import json
 import string
 import logging
+import glob
 import pandas as pd
 import functools
 from typing import Dict, List, Optional, Set
@@ -101,6 +102,24 @@ class RegistrationProcessor:
         )
         self.shows_last_year_secondary = self._normalize_show_codes(
             self.event_config.get("shows_last_year_secondary", [])
+        )
+
+        # Preserve baseline show mappings for cross-mode calculations
+        self._base_shows_this_year = list(self.shows_this_year)
+        self._base_shows_this_year_exclude = list(self.shows_this_year_exclude)
+        self._base_shows_last_year_main = list(self.shows_last_year_main)
+        self._base_shows_last_year_secondary = list(self.shows_last_year_secondary)
+
+        suppression_cfg = (self.engagement_config.get("mailing_suppression") or {})
+        self._engagement_mailing_suppression_enabled = bool(
+            self.is_engagement_mode and suppression_cfg.get("enabled", False)
+        )
+        self._engagement_mailing_suppression_files = suppression_cfg.get("files", []) or []
+        self._engagement_mailing_suppression_require_assisted = bool(
+            suppression_cfg.get("require_assisted_last_year", True)
+        )
+        self._engagement_mailing_suppression_report_file = suppression_cfg.get(
+            "report_file", "engagement_previously_mailed_exclusions.csv"
         )
 
         # Get output file configurations with backward compatibility
@@ -765,6 +784,282 @@ class RegistrationProcessor:
         return (
             f"{row['Forename'].lower()}_{row['Surname'].lower()}_{row['Email'].lower()}"
         )
+
+    @staticmethod
+    def _normalize_identity_value(value: object) -> str:
+        """Normalize identity token components (name/email/BadgeId) to lowercase text."""
+        if value is None:
+            return ""
+        text = str(value).strip().lower()
+        return "" if text in {"", "nan", "none", "na"} else text
+
+    def _build_identity_from_values(self, forename: object, surname: object, email: object) -> Optional[str]:
+        """Build canonical identity key used across registration matching."""
+        f = self._normalize_identity_value(forename)
+        s = self._normalize_identity_value(surname)
+        e = self._normalize_identity_value(email)
+        if not (f and s and e):
+            return None
+        return f"{f}_{s}_{e}"
+
+    def _extract_suppression_tokens_from_file(self, file_path: str) -> Dict[str, Set[str]]:
+        """Extract visitor tokens from a personal-agendas export file (CSV/JSON)."""
+        tokens = {
+            "badge_ids": set(),
+            "emails": set(),
+            "identities": set(),
+        }
+
+        try:
+            path_lower = file_path.lower()
+            if path_lower.endswith(".csv"):
+                df = pd.read_csv(file_path, dtype=str)
+                if df.empty:
+                    return tokens
+
+                for badge_col in ["visitor_id", "BadgeId", "badge_id", "badgeID"]:
+                    if badge_col in df.columns:
+                        tokens["badge_ids"].update(
+                            self._normalize_identity_value(v) for v in df[badge_col].dropna().tolist()
+                        )
+
+                if "Email" in df.columns:
+                    tokens["emails"].update(
+                        self._normalize_identity_value(v) for v in df["Email"].dropna().tolist()
+                    )
+
+                required_identity_cols = {"Forename", "Surname", "Email"}
+                if required_identity_cols.issubset(df.columns):
+                    for _, row in df[list(required_identity_cols)].iterrows():
+                        identity = self._build_identity_from_values(
+                            row.get("Forename"), row.get("Surname"), row.get("Email")
+                        )
+                        if identity:
+                            tokens["identities"].add(identity)
+
+            elif path_lower.endswith(".json"):
+                with open(file_path, "r", encoding="utf-8") as handle:
+                    payload = json.load(handle)
+
+                recommendations = payload.get("recommendations") if isinstance(payload, dict) else None
+                if isinstance(recommendations, dict):
+                    iterable = recommendations.items()
+                elif isinstance(recommendations, list):
+                    iterable = []
+                    for item in recommendations:
+                        visitor_key = None
+                        if isinstance(item, dict):
+                            visitor_key = item.get("visitor_id") or item.get("BadgeId")
+                        iterable.append((visitor_key, item))
+                else:
+                    iterable = []
+
+                for visitor_key, item in iterable:
+                    normalized_key = self._normalize_identity_value(visitor_key)
+                    if normalized_key:
+                        tokens["badge_ids"].add(normalized_key)
+
+                    if not isinstance(item, dict):
+                        continue
+
+                    visitor_payload = item.get("visitor") if isinstance(item.get("visitor"), dict) else item
+                    badge_id = self._normalize_identity_value(
+                        visitor_payload.get("BadgeId") or visitor_payload.get("badgeID") or visitor_payload.get("badgeId")
+                    )
+                    if badge_id:
+                        tokens["badge_ids"].add(badge_id)
+
+                    email = self._normalize_identity_value(visitor_payload.get("Email") or visitor_payload.get("email"))
+                    if email:
+                        tokens["emails"].add(email)
+
+                    identity = self._build_identity_from_values(
+                        visitor_payload.get("Forename") or visitor_payload.get("forename"),
+                        visitor_payload.get("Surname") or visitor_payload.get("surname"),
+                        visitor_payload.get("Email") or visitor_payload.get("email"),
+                    )
+                    if identity:
+                        tokens["identities"].add(identity)
+        except Exception as exc:
+            self.logger.warning("Failed to parse mailing suppression file %s: %s", file_path, exc)
+
+        return tokens
+
+    def _collect_mailing_suppression_tokens(self) -> Dict[str, Set[str]]:
+        """Collect suppression tokens from configured file paths/globs."""
+        collected = {
+            "badge_ids": set(),
+            "emails": set(),
+            "identities": set(),
+        }
+
+        matched_files: List[str] = []
+        for entry in self._engagement_mailing_suppression_files:
+            if not entry:
+                continue
+            expanded = glob.glob(entry)
+            if expanded:
+                matched_files.extend(sorted(expanded))
+            elif os.path.exists(entry):
+                matched_files.append(entry)
+
+        if not matched_files:
+            self.logger.warning(
+                "Engagement mailing suppression enabled but no files matched: %s",
+                self._engagement_mailing_suppression_files,
+            )
+            return collected
+
+        for file_path in matched_files:
+            tokens = self._extract_suppression_tokens_from_file(file_path)
+            for key in collected:
+                collected[key].update({v for v in tokens[key] if v})
+
+        self.logger.info(
+            "Loaded mailing suppression tokens from %d files: badge_ids=%d emails=%d identities=%d",
+            len(matched_files),
+            len(collected["badge_ids"]),
+            len(collected["emails"]),
+            len(collected["identities"]),
+        )
+
+        return collected
+
+    def _build_identity_mappings_from_registration(self) -> Dict[str, Dict[str, Set[str]]]:
+        """Build identity maps from loaded registration inputs for suppression resolution."""
+        mappings = {
+            "badge_to_identity": {},
+            "email_to_identities": {},
+            "identity_to_showrefs": {},
+        }
+
+        def _ingest(df: pd.DataFrame) -> None:
+            if df is None or df.empty:
+                return
+            for _, row in df.iterrows():
+                identity = self._build_identity_from_values(
+                    row.get("Forename"), row.get("Surname"), row.get("Email")
+                )
+                if not identity:
+                    continue
+
+                badge_id = self._normalize_identity_value(row.get("BadgeId"))
+                if badge_id:
+                    mappings["badge_to_identity"][badge_id] = identity
+
+                email = self._normalize_identity_value(row.get("Email"))
+                if email:
+                    mappings["email_to_identities"].setdefault(email, set()).add(identity)
+
+                show_ref = self._normalize_identity_value(row.get("ShowRef"))
+                if show_ref:
+                    mappings["identity_to_showrefs"].setdefault(identity, set()).add(show_ref.upper())
+
+        _ingest(self.df_bva)
+        _ingest(self.df_lvs)
+        return mappings
+
+    def _build_personal_agendas_returning_identities(self) -> Set[str]:
+        """Rebuild personal-agendas returning identities from baseline show mapping."""
+        if self.df_bva is None or self.df_bva.empty:
+            return set()
+
+        bva = self.df_bva.copy()
+        bva["_show"] = bva["ShowRef"].astype(str).str.strip().str.upper()
+        bva["_identity"] = (
+            bva["Forename"].astype(str).str.lower().str.strip()
+            + "_"
+            + bva["Surname"].astype(str).str.lower().str.strip()
+            + "_"
+            + bva["Email"].astype(str).str.lower().str.strip()
+        )
+
+        this_year_identities = set(
+            bva.loc[bva["_show"].isin(self._base_shows_this_year), "_identity"].dropna().tolist()
+        )
+
+        last_year_identities_main = set(
+            bva.loc[bva["_show"].isin(self._base_shows_last_year_main), "_identity"].dropna().tolist()
+        )
+
+        last_year_identities_secondary: Set[str] = set()
+        if self.df_lvs is not None and not self.df_lvs.empty:
+            lvs = self.df_lvs.copy()
+            lvs["_show"] = lvs["ShowRef"].astype(str).str.strip().str.upper()
+            lvs["_identity"] = (
+                lvs["Forename"].astype(str).str.lower().str.strip()
+                + "_"
+                + lvs["Surname"].astype(str).str.lower().str.strip()
+                + "_"
+                + lvs["Email"].astype(str).str.lower().str.strip()
+            )
+            last_year_identities_secondary = set(
+                lvs.loc[lvs["_show"].isin(self._base_shows_last_year_secondary), "_identity"].dropna().tolist()
+            )
+
+        return this_year_identities.intersection(
+            last_year_identities_main.union(last_year_identities_secondary)
+        )
+
+    def _apply_engagement_mailing_suppression(self) -> None:
+        """Exclude previously mailed personal-agendas visitors from engagement cohort."""
+        if not self._engagement_mailing_suppression_enabled:
+            return
+
+        if self.df_bva_this_year is None or self.df_bva_this_year.empty:
+            self.logger.info("Engagement mailing suppression skipped: no this-year cohort available")
+            return
+
+        suppression_tokens = self._collect_mailing_suppression_tokens()
+        if not any(suppression_tokens.values()):
+            self.logger.info("Engagement mailing suppression found no visitor tokens to exclude")
+            return
+
+        mappings = self._build_identity_mappings_from_registration()
+
+        candidate_identities: Set[str] = set(suppression_tokens["identities"])
+        for badge_id in suppression_tokens["badge_ids"]:
+            mapped_identity = mappings["badge_to_identity"].get(badge_id)
+            if mapped_identity:
+                candidate_identities.add(mapped_identity)
+        for email in suppression_tokens["emails"]:
+            candidate_identities.update(mappings["email_to_identities"].get(email, set()))
+
+        if self._engagement_mailing_suppression_require_assisted:
+            returning_identities = self._build_personal_agendas_returning_identities()
+            candidate_identities = candidate_identities.intersection(returning_identities)
+
+        if not candidate_identities:
+            self.logger.info(
+                "Engagement mailing suppression computed zero identities after assisted filter=%s",
+                self._engagement_mailing_suppression_require_assisted,
+            )
+            return
+
+        before_count = len(self.df_bva_this_year)
+        excluded_mask = self.df_bva_this_year["id_both_years"].isin(candidate_identities)
+        excluded_df = self.df_bva_this_year[excluded_mask].copy()
+        self.df_bva_this_year = self.df_bva_this_year[~excluded_mask].copy()
+        after_count = len(self.df_bva_this_year)
+
+        excluded_count = before_count - after_count
+        self.logger.info(
+            "Engagement mailing suppression excluded %d visitors (before=%d, after=%d)",
+            excluded_count,
+            before_count,
+            after_count,
+        )
+
+        if excluded_count > 0:
+            report_name = self._engagement_mailing_suppression_report_file
+            report_path = os.path.join(self.output_dir, "output", report_name)
+            report_cols = [
+                c for c in ["BadgeId", "Email", "Forename", "Surname", "ShowRef", "id_both_years"]
+                if c in excluded_df.columns
+            ]
+            if report_cols:
+                excluded_df[report_cols].drop_duplicates().to_csv(report_path, index=False)
+                self.logger.info("Engagement suppression report saved to %s", report_path)
 
     @staticmethod
     def extract_email_domain(email: str) -> str:
@@ -1809,6 +2104,8 @@ class RegistrationProcessor:
 
         # Create dataframes with valid columns for registration data
         valid_columns = [
+            "Forename",
+            "Surname",
             "Email",
             "Email_domain",
             "Company",
@@ -1817,6 +2114,7 @@ class RegistrationProcessor:
             "BadgeType",
             "ShowRef",
             "BadgeId",
+            "id_both_years",
             "Source",
             "Days_since_registration",
             "assist_year_before",
@@ -2040,6 +2338,7 @@ class RegistrationProcessor:
         self.save_initial_data()
         self.preprocess_data()
         self.split_and_process_bva_data()
+        self._apply_engagement_mailing_suppression()
         self.identify_returning_visitors()
         self.add_badge_history()
         self.calculate_event_dates()

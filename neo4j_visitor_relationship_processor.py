@@ -74,7 +74,11 @@ class Neo4jVisitorRelationshipProcessor:
             self.statistics["relationships_failed"][f"attended_session_{relationship_type}"] = 0
 
         # Post-analysis relationship tracking
-        for relationship_key in ["assisted_session_this_year", "registered_to_show"]:
+        for relationship_key in [
+            "assisted_session_this_year",
+            "assisted_session_this_year_run",
+            "registered_to_show",
+        ]:
             self.statistics["relationships_created"][relationship_key] = 0
             self.statistics["relationships_skipped"][relationship_key] = 0
             self.statistics["relationships_failed"][relationship_key] = 0
@@ -169,6 +173,16 @@ class Neo4jVisitorRelationshipProcessor:
                 )
 
             self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Projecting run-scoped assisted_session relationships (post-analysis mode)"
+            )
+            try:
+                self._create_assisted_session_this_year_run_relationships()
+            except Exception as e:
+                self.logger.error(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating assisted_session_this_year_run relationships: {str(e)}"
+                )
+
+            self.logger.info(
                 f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing entry scan show registrations (post-analysis mode)"
             )
             try:
@@ -222,6 +236,57 @@ class Neo4jVisitorRelationshipProcessor:
 
         return value_str
 
+    @staticmethod
+    def _normalize_identity_value(value: Any) -> str:
+        if pd.isna(value):
+            return ""
+        text = str(value).strip().lower()
+        if text in {"", "nan", "none", "null", "na"}:
+            return ""
+        return text
+
+    @staticmethod
+    def _resolve_identity_columns(df: pd.DataFrame) -> tuple:
+        forename_col = None
+        surname_col = None
+        email_col = None
+
+        for candidate in ["Forename", "First Name", "FirstName", "forename", "first_name"]:
+            if candidate in df.columns:
+                forename_col = candidate
+                break
+
+        for candidate in ["Surname", "Last Name", "LastName", "surname", "last_name"]:
+            if candidate in df.columns:
+                surname_col = candidate
+                break
+
+        for candidate in ["Email", "Email Address", "email", "email_address", "Registrant Email"]:
+            if candidate in df.columns:
+                email_col = candidate
+                break
+
+        return forename_col, surname_col, email_col
+
+    def _build_identity_key_from_row(
+        self,
+        row: pd.Series,
+        forename_col: str,
+        surname_col: str,
+        email_col: str,
+    ) -> str:
+        if not (forename_col and surname_col and email_col):
+            return ""
+
+        f = self._normalize_identity_value(row.get(forename_col))
+        s = self._normalize_identity_value(row.get(surname_col))
+        e = self._normalize_identity_value(row.get(email_col))
+
+        if not (f and s and e):
+            return ""
+
+        return f"{f}_{s}_{e}"
+
     def _infer_show_from_filename(self, filename: str, normalized_show_map: dict) -> str:
         basename = os.path.basename(filename).lower()
         for needle, mapped_show in normalized_show_map.items():
@@ -268,9 +333,11 @@ class Neo4jVisitorRelationshipProcessor:
                 badge_column = candidate
                 break
 
-        if not badge_column:
+        forename_col, surname_col, email_col = self._resolve_identity_columns(sessions_df)
+
+        if not badge_column and not (forename_col and surname_col and email_col):
             self.logger.error(
-                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No badge column found in {sessions_path}"
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No badge column or identity columns found in {sessions_path}"
             )
             return
 
@@ -296,6 +363,9 @@ class Neo4jVisitorRelationshipProcessor:
         created = 0
         skipped = 0
         failed = 0
+        matched_by_badge = 0
+        matched_by_identity = 0
+        unresolved = 0
 
         driver = None
         try:
@@ -303,13 +373,20 @@ class Neo4jVisitorRelationshipProcessor:
 
             with driver.session() as session:
                 for _, row in sessions_df.iterrows():
-                    badge_id = str(row.get(badge_column, "")).strip()
-                    if not badge_id:
-                        skipped += 1
-                        continue
+                    badge_id = str(row.get(badge_column, "")).strip() if badge_column else ""
+                    identity_key = self._build_identity_key_from_row(
+                        row,
+                        forename_col,
+                        surname_col,
+                        email_col,
+                    )
 
                     session_key_lower = str(row.get("key_text_lower", "")).strip()
                     if not session_key_lower:
+                        skipped += 1
+                        continue
+
+                    if not badge_id and not identity_key:
                         skipped += 1
                         continue
 
@@ -317,32 +394,77 @@ class Neo4jVisitorRelationshipProcessor:
                     file_name = row.get("File", "")
                     seminar_name = row.get("Seminar Name", row.get("Seminar", ""))
 
-                    query = (
+                    badge_query = (
                         f"MATCH (v:{visitor_label} {{{visitor_id_field}: $badge_id}}) "
                         f"MATCH (s:{session_label}) "
                         "WHERE toLower(s.key_text) = $session_key_lower AND v.show = $show_name AND s.show = $show_name "
+                        f"OPTIONAL MATCH (v)-[existing:{relationship_name}]->(s) "
+                        "WITH v, s, existing IS NULL AS is_new "
                         f"MERGE (v)-[r:{relationship_name}]->(s) "
                         "SET r.scan_date = coalesce($scan_date, r.scan_date), "
                         "    r.file = coalesce($file_name, r.file), "
-                        "    r.seminar_name = coalesce($seminar_name, r.seminar_name) "
-                        "RETURN r"
+                        "    r.seminar_name = coalesce($seminar_name, r.seminar_name), "
+                        "    r.identity_match_mode = coalesce(r.identity_match_mode, 'badge') "
+                        "RETURN sum(CASE WHEN is_new THEN 1 ELSE 0 END) AS created_count, count(r) AS touched_count"
+                    )
+
+                    identity_query = (
+                        f"MATCH (v:{visitor_label} {{id_both_years: $identity_key}}) "
+                        f"MATCH (s:{session_label}) "
+                        "WHERE toLower(s.key_text) = $session_key_lower AND v.show = $show_name AND s.show = $show_name "
+                        f"OPTIONAL MATCH (v)-[existing:{relationship_name}]->(s) "
+                        "WITH v, s, existing IS NULL AS is_new "
+                        f"MERGE (v)-[r:{relationship_name}]->(s) "
+                        "SET r.scan_date = coalesce($scan_date, r.scan_date), "
+                        "    r.file = coalesce($file_name, r.file), "
+                        "    r.seminar_name = coalesce($seminar_name, r.seminar_name), "
+                        "    r.identity_match_mode = 'identity_fallback' "
+                        "RETURN sum(CASE WHEN is_new THEN 1 ELSE 0 END) AS created_count, count(r) AS touched_count"
                     )
 
                     try:
-                        result = session.run(
-                            query,
-                            badge_id=badge_id,
-                            session_key_lower=session_key_lower,
-                            show_name=self.show_name,
-                            scan_date=str(scan_date) if pd.notna(scan_date) else None,
-                            file_name=str(file_name) if pd.notna(file_name) else None,
-                            seminar_name=str(seminar_name) if pd.notna(seminar_name) else None,
-                        )
-                        summary = result.consume()
-                        if summary.counters.relationships_created > 0:
-                            created += 1
-                        else:
+                        matched = False
+                        common_params = {
+                            "session_key_lower": session_key_lower,
+                            "show_name": self.show_name,
+                            "scan_date": str(scan_date) if pd.notna(scan_date) else None,
+                            "file_name": str(file_name) if pd.notna(file_name) else None,
+                            "seminar_name": str(seminar_name) if pd.notna(seminar_name) else None,
+                        }
+
+                        if identity_key:
+                            record = session.run(
+                                identity_query,
+                                identity_key=identity_key,
+                                **common_params,
+                            ).single()
+                            created_count = int((record or {}).get("created_count", 0) or 0)
+                            touched_count = int((record or {}).get("touched_count", 0) or 0)
+                            if touched_count > 0:
+                                created += created_count
+                                matched_by_identity += touched_count
+                                if created_count == 0:
+                                    skipped += 1
+                                matched = True
+
+                        if not matched and badge_id:
+                            record = session.run(
+                                badge_query,
+                                badge_id=badge_id,
+                                **common_params,
+                            ).single()
+                            created_count = int((record or {}).get("created_count", 0) or 0)
+                            touched_count = int((record or {}).get("touched_count", 0) or 0)
+                            if touched_count > 0:
+                                created += created_count
+                                matched_by_badge += touched_count
+                                if created_count == 0:
+                                    skipped += 1
+                                matched = True
+
+                        if not matched:
                             skipped += 1
+                            unresolved += 1
                     except Exception as rel_error:
                         failed += 1
                         self.logger.error(
@@ -364,6 +486,77 @@ class Neo4jVisitorRelationshipProcessor:
 
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - assisted_session_this_year Relationship Summary: created={created}, skipped={skipped}, failed={failed}"
+        )
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - assisted_session_this_year matching mode summary: badge={matched_by_badge}, identity_fallback={matched_by_identity}, unresolved={unresolved}"
+        )
+
+    def _create_assisted_session_this_year_run_relationships(self) -> None:
+        """Project run-scoped attendance relationships from assisted sessions + CampaignDelivery."""
+
+        visitor_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
+        session_label = self.node_labels.get("session_this_year", "Sessions_this_year")
+        assisted_relationship = self.relationships.get(
+            "assisted_session_this_year", "assisted_session_this_year"
+        )
+        run_assisted_relationship = self.relationships.get(
+            "assisted_session_this_year_run", "assisted_session_this_year_run"
+        )
+
+        created = 0
+        skipped = 0
+        failed = 0
+
+        driver = None
+        try:
+            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+            with driver.session() as session:
+                query = textwrap.dedent(
+                    f"""
+                    MATCH (v:{visitor_label})-[a:{assisted_relationship}]->(s:{session_label})
+                    WHERE toLower(coalesce(v.show, '')) = toLower($show_name)
+                      AND toLower(coalesce(s.show, '')) = toLower($show_name)
+                    MATCH (d:CampaignDelivery)-[:FOR_VISITOR]->(v)
+                    MATCH (d)-[:FOR_RUN]->(rr:RecommendationRun)
+                    WHERE toLower(coalesce(rr.show, '')) = toLower($show_name)
+                    OPTIONAL MATCH (v)-[existing:{run_assisted_relationship} {{run_id: rr.run_id}}]->(s)
+                    WITH v, s, a, d, rr, existing IS NULL AS is_new
+                    MERGE (v)-[r:{run_assisted_relationship} {{run_id: rr.run_id}}]->(s)
+                    SET r.run_mode = coalesce(rr.run_mode, r.run_mode),
+                        r.campaign_id = coalesce(rr.campaign_id, r.campaign_id),
+                        r.show = coalesce(rr.show, r.show),
+                        r.delivery_status = coalesce(d.status, r.delivery_status),
+                        r.identity_match_mode = coalesce(a.identity_match_mode, r.identity_match_mode),
+                        r.scan_date = coalesce(a.scan_date, r.scan_date),
+                        r.file = coalesce(a.file, r.file),
+                        r.seminar_name = coalesce(a.seminar_name, r.seminar_name),
+                        r.updated_at = datetime()
+                    ON CREATE SET r.created_at = datetime()
+                    RETURN sum(CASE WHEN is_new THEN 1 ELSE 0 END) AS created_count,
+                           count(r) AS touched_count
+                    """
+                )
+
+                record = session.run(query, show_name=self.show_name).single()
+                created = int((record or {}).get("created_count", 0) or 0)
+                touched = int((record or {}).get("touched_count", 0) or 0)
+                skipped = max(0, touched - created)
+
+        except Exception as projection_error:
+            failed += 1
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error projecting assisted_session_this_year_run relationships: {projection_error}"
+            )
+        finally:
+            if driver:
+                driver.close()
+
+        self.statistics["relationships_created"]["assisted_session_this_year_run"] = created
+        self.statistics["relationships_skipped"]["assisted_session_this_year_run"] = skipped
+        self.statistics["relationships_failed"]["assisted_session_this_year_run"] = failed
+
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - assisted_session_this_year_run projection summary: created={created}, skipped={skipped}, failed={failed}"
         )
 
     def _create_entry_scan_show_relationships(self, create_only_new: bool):
@@ -455,9 +648,11 @@ class Neo4jVisitorRelationshipProcessor:
                             badge_column = candidate
                             break
 
-                    if not badge_column:
+                    forename_col, surname_col, email_col = self._resolve_identity_columns(scans_df)
+
+                    if not badge_column and not (forename_col and surname_col and email_col):
                         self.logger.error(
-                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No badge column found in entry scan file: {resolved_path}"
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No badge column or identity columns found in entry scan file: {resolved_path}"
                         )
                         continue
 
@@ -508,8 +703,14 @@ class Neo4jVisitorRelationshipProcessor:
                     ]
 
                     for _, row in scans_df.iterrows():
-                        badge_raw = row.get(badge_column, "")
+                        badge_raw = row.get(badge_column, "") if badge_column else ""
                         badge_id = self._normalize_badge_id(badge_raw)
+                        identity_key = self._build_identity_key_from_row(
+                            row,
+                            forename_col,
+                            surname_col,
+                            email_col,
+                        )
 
                         show_raw = row.get(show_column, "")
                         if pd.isna(show_raw):
@@ -519,7 +720,7 @@ class Neo4jVisitorRelationshipProcessor:
                             if show_ref.endswith(".0") and show_ref[:-2].replace("-", "").isdigit():
                                 show_ref = show_ref[:-2]
 
-                        if not badge_id or badge_id.lower() == "nan":
+                        if (not badge_id or badge_id.lower() == "nan") and not identity_key:
                             relationships_skipped += 1
                             continue
 
@@ -574,21 +775,40 @@ class Neo4jVisitorRelationshipProcessor:
                             show_nodes_skipped += 1
 
                         # Confirm visitor exists for this show
-                        visitor_exists_query = (
-                            f"MATCH (v:{visitor_label} {{{visitor_id_field}: $badge_id}}) "
-                            "WHERE toLower(v.show) IN $visitor_shows "
-                            "RETURN count(v) > 0 AS exists"
-                        )
+                        match_mode = ""
+                        if identity_key:
+                            identity_exists_query = (
+                                f"MATCH (v:{visitor_label} {{id_both_years: $identity_key}}) "
+                                "WHERE toLower(v.show) IN $visitor_shows "
+                                "RETURN count(v) > 0 AS exists"
+                            )
+                            visitor_exists_identity = session.run(
+                                identity_exists_query,
+                                identity_key=identity_key,
+                                visitor_shows=visitor_show_candidates,
+                            ).single()["exists"]
+                            if visitor_exists_identity:
+                                match_mode = "identity_fallback"
 
-                        visitor_exists = session.run(
-                            visitor_exists_query,
-                            badge_id=badge_id,
-                            visitor_shows=visitor_show_candidates,
-                        ).single()["exists"]
+                        if not match_mode and badge_id:
+                            visitor_exists_query = (
+                                f"MATCH (v:{visitor_label} {{{visitor_id_field}: $badge_id}}) "
+                                "WHERE toLower(v.show) IN $visitor_shows "
+                                "RETURN count(v) > 0 AS exists"
+                            )
 
-                        if not visitor_exists:
+                            visitor_exists = session.run(
+                                visitor_exists_query,
+                                badge_id=badge_id,
+                                visitor_shows=visitor_show_candidates,
+                            ).single()["exists"]
+
+                            if visitor_exists:
+                                match_mode = "badge"
+
+                        if not match_mode:
                             missing_visitors += 1
-                            if len(missing_badge_samples) < 20:
+                            if badge_id and len(missing_badge_samples) < 20:
                                 missing_badge_samples.add(badge_id)
                             relationships_skipped += 1
                             continue
@@ -596,6 +816,7 @@ class Neo4jVisitorRelationshipProcessor:
                         relationship_properties = {
                             "source_file": os.path.basename(resolved_path),
                             "show_file_code": target_show_code or "",
+                            "identity_match_mode": match_mode,
                         }
 
                         for column in relationship_columns:
@@ -635,22 +856,41 @@ class Neo4jVisitorRelationshipProcessor:
                                     break
 
                         try:
-                            merge_query = (
-                                f"MATCH (v:{visitor_label} {{{visitor_id_field}: $badge_id}}) "
-                                f"MATCH (s:{show_label} {{{show_unique_field}: $show_value}}) "
-                                "WHERE toLower(v.show) IN $visitor_shows "
-                                f"MERGE (v)-[r:{relationship_name}]->(s) "
-                                "SET r += $relationship_properties "
-                                "RETURN r"
-                            )
+                            if match_mode == "badge":
+                                merge_query = (
+                                    f"MATCH (v:{visitor_label} {{{visitor_id_field}: $badge_id}}) "
+                                    f"MATCH (s:{show_label} {{{show_unique_field}: $show_value}}) "
+                                    "WHERE toLower(v.show) IN $visitor_shows "
+                                    f"MERGE (v)-[r:{relationship_name}]->(s) "
+                                    "SET r += $relationship_properties "
+                                    "RETURN r"
+                                )
 
-                            result = session.run(
-                                merge_query,
-                                badge_id=badge_id,
-                                show_value=show_identifier,
-                                visitor_shows=visitor_show_candidates,
-                                relationship_properties=relationship_properties,
-                            )
+                                result = session.run(
+                                    merge_query,
+                                    badge_id=badge_id,
+                                    show_value=show_identifier,
+                                    visitor_shows=visitor_show_candidates,
+                                    relationship_properties=relationship_properties,
+                                )
+                            else:
+                                merge_query = (
+                                    f"MATCH (v:{visitor_label} {{id_both_years: $identity_key}}) "
+                                    f"MATCH (s:{show_label} {{{show_unique_field}: $show_value}}) "
+                                    "WHERE toLower(v.show) IN $visitor_shows "
+                                    f"MERGE (v)-[r:{relationship_name}]->(s) "
+                                    "SET r += $relationship_properties "
+                                    "RETURN r"
+                                )
+
+                                result = session.run(
+                                    merge_query,
+                                    identity_key=identity_key,
+                                    show_value=show_identifier,
+                                    visitor_shows=visitor_show_candidates,
+                                    relationship_properties=relationship_properties,
+                                )
+
                             summary = result.consume()
 
                             if summary.counters.relationships_created > 0:
@@ -698,8 +938,15 @@ class Neo4jVisitorRelationshipProcessor:
         )
 
         visitor_this_year_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
+        default_last_year_label = (
+            "Visitor_last_year_main"
+            if relationship_type == "bva"
+            else "Visitor_last_year_secondary"
+            if relationship_type == "lva"
+            else f"Visitor_last_year_{relationship_type}"
+        )
         visitor_last_year_label = self.node_labels.get(
-            f"visitor_last_year_{relationship_type}", f"Visitor_last_year_{relationship_type}"
+            f"visitor_last_year_{relationship_type}", default_last_year_label
         )
         same_visitor_relationship = self.relationships.get("same_visitor", "Same_Visitor")
         properties = properties or {}
@@ -851,7 +1098,16 @@ class Neo4jVisitorRelationshipProcessor:
         )
 
         # Get node labels
-        visitor_last_year_label = self.node_labels.get(f"visitor_last_year_{relationship_type}", f"Visitor_last_year_{relationship_type}")
+        default_last_year_label = (
+            "Visitor_last_year_main"
+            if relationship_type == "bva"
+            else "Visitor_last_year_secondary"
+            if relationship_type == "lva"
+            else f"Visitor_last_year_{relationship_type}"
+        )
+        visitor_last_year_label = self.node_labels.get(
+            f"visitor_last_year_{relationship_type}", default_last_year_label
+        )
         session_past_year_label = self.node_labels.get("session_past_year", "Sessions_past_year")
         
         # Get relationship name

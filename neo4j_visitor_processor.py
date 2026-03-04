@@ -285,7 +285,7 @@ class Neo4jVisitorProcessor:
             
             data = pd.read_csv(csv_file_path)
             properties_map = {col: col for col in data.columns}
-            node_label = node_labels.get("visitor_last_year_bva", "Visitor_last_year_bva")
+            node_label = node_labels.get("visitor_last_year_bva", "Visitor_last_year_main")
 
             nodes_created, nodes_skipped, nodes_updated = self.load_csv_to_neo4j(
                 csv_file_path, node_label, properties_map, create_only_new
@@ -316,7 +316,7 @@ class Neo4jVisitorProcessor:
             
             data = pd.read_csv(csv_file_path)
             properties_map = {col: col for col in data.columns}
-            node_label = node_labels.get("visitor_last_year_lva", "Visitor_last_year_lva")
+            node_label = node_labels.get("visitor_last_year_lva", "Visitor_last_year_secondary")
 
             nodes_created, nodes_skipped, nodes_updated = self.load_csv_to_neo4j(
                 csv_file_path, node_label, properties_map, create_only_new

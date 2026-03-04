@@ -16,6 +16,26 @@ event:
   shows_last_year_secondary:
     - ['DCWL24', 'CCSEL24', 'BDAWL24', 'CEEL24', 'DL24']
 
+# Engagement-specific overrides applied when mode: "engagement"
+engagement_mode:
+  registration_shows:
+    this_year_main:
+      - ['CCSEL25', 'DCWL25', 'BDAWL25', 'DL25', 'CEEL25']
+    this_year_secondary:
+      - ['DCWL24', 'CCSEL24', 'BDAWL24', 'CEEL24', 'DL24']
+    last_year_main: []  # No deeper historical data currently available
+    last_year_secondary: []
+    drop_last_year_when_missing: true
+  reset_returning_flags: true
+  mailing_suppression:
+    enabled: false
+    # File paths or glob patterns from personal_agendas outputs (main export only, not *_control).
+    files:
+      - "data/tsl/recommendations/visitor_recommendations_tsl_*.csv"
+    # If true, only suppress visitors who were mailed in personal_agendas AND attended prior year.
+    require_assisted_last_year: true
+    report_file: "engagement_previously_mailed_exclusions.csv"
+
 # Documentation assets surfaced by the application
 documentation:
   generic_pipeline_map: "docs/generic_pipeline_map.svg"
@@ -26,10 +46,10 @@ post_analysis_mode:
     this_year_main:
       - ['DCWL26','DAILS26', 'CAIL26', 'CCSEL26', 'DOLL26']
   scan_files:
-    seminars_scan_reference_this: "data/tsl/post/lvs25 seminar scans reference.csv"
-    seminars_scans_this: "data/tsl/post/lvs25 seminar scans.csv"
+    seminars_scan_reference_this: "data/tsl/tech london 2025 seminars reference.csv"
+    seminars_scans_this: "data/tsl/tech london 2025 seminars.csv"
   entry_scan_files:
-    entry_scans_this: ["data/tsl/post/lvs25_unfiltered_entry_scans.csv"]  
+    entry_scans_this: []  # set file path(s) when this-year entry scan exports are available
 
 # Badge history column names
 badge_history_columns:
@@ -99,7 +119,7 @@ output_files:
 
 
 # Pipeline control settings
-create_only_new: false
+create_only_new: true
   # If true, only process new visitors without recommendations
 
 # Pipeline step activation settings
@@ -121,10 +141,10 @@ pipeline_steps:
 # Input file paths
 old_format: true
 input_files:
-  main_event_registration: "data/tsl/20260213_tsl25_26_registration_legacy.json"
-  secondary_event_registration: "data/tsl/20260120_tsl24_registration_legacy.json"
-  main_event_demographic: "data/tsl/20260213_tsl25_26_demographics_legacy.json"
-  secondary_event_demographic: "data/tsl/20260120_tsl24_demographics_legacy.json"
+  main_event_registration: "data/tsl/20260227_tsl25_26_registration_legacy.json"
+  secondary_event_registration: "data/tsl/20260226_tsl24_registration_legacy.json"
+  main_event_demographic: "data/tsl/20260227_tsl25_26_demographics_legacy.json"
+  secondary_event_demographic: "data/tsl/20260226_tsl24_demographics_legacy.json"
   practices: "data/tsl/practices_missing.csv"
 
 
@@ -239,6 +259,10 @@ embeddings:
 recommendation:
   min_similarity_score: 0.3       # Minimum similarity score (0.0-1.0) for recommendations
   max_recommendations: 10         # Maximum number of recommendations per visitor
+  traceability:
+    campaign_id:
+      personal_agendas: "tsl_conversion"
+      engagement: "tsl_engagement"
   balance_recommendations_across_days:
     enabled: false                # If true, split max_recommendations across day1/day2
     strict: false                 # If true, do not backfill from other days when one day has shortage
@@ -253,17 +277,30 @@ recommendation:
     file: "data/tsl/v2e_recommendations_2.json"
   control_group:                  # Control-group defaults (only active in personal_agendas mode)
     enabled: true
-    percentage: 5                 # Expressed as percent (5 => 5%)
+    enabled_modes: ["personal_agendas", "engagement"]  # M4: allow engagement campaign control-group execution
+    percentage: 15                 # Expressed as percent (5 => 5%)
+    global_target_enabled: true    # Keep control group at configured percentage of total eligible visitors
     random_seed: 42
     file_suffix: "_control"
     output_directory: "recommendations/control"
     neo4j_property: "control_group"
+    legacy_seed_run_id: "legacy_pre_traceability"  # Seed conversion global control continuity from legacy run history
+    legacy_node_flag_sync: false   # Keep false for full run-scoped control (set true only for backward compatibility)
     
   returning_without_history:
     enabled: true                  # Adjust similarity scores for returning visitors with no past attendance
     similarity_exponent: 1.5       # Exponent applied to similarity values when triggered
   use_langchain: false            # Whether to use LangChain for filtering (requires LangChain)
   enable_filtering: false          # Enable/disable filtering rules (true for vet shows)
+  engagement_show_theatre_filter:
+    enabled: true
+    apply_modes: ["engagement"]
+    mapping_file: "data/tsl/theatre_name_x_show_ref_mapping_tsl26.csv"
+    session_theatre_field: "theatre__name"
+    visitor_show_last_field: "ShowRef"
+    include_show_last_values: ["ALL"]
+    exclude_unknown_theatre: false
+    strict_when_no_mapping: false
   # ENHANCED: Theatre capacity limits configuration 
   theatre_capacity_limits:
     enabled: false
@@ -335,8 +372,8 @@ neo4j:
   show_name: "tsl"  
   node_labels:
     visitor_this_year: "Visitor_this_year"
-    visitor_last_year_bva: "Visitor_last_year_bva"
-    visitor_last_year_lva: "Visitor_last_year_lva"
+    visitor_last_year_bva: "Visitor_last_year_main"
+    visitor_last_year_lva: "Visitor_last_year_secondary"
     session_this_year: "Sessions_this_year"
     session_past_year: "Sessions_past_year"
     stream: "Stream"
@@ -353,6 +390,7 @@ neo4j:
     same_visitor: "Same_Visitor"  # Relationship between visitors this year and last year
     attended_session: "attended_session"  # Relationship between visitors and sessions they attended
     assisted_session_this_year: "assisted_session_this_year"
+    assisted_session_this_year_run: "assisted_session_this_year_run"  # Post-analysis run-scoped attendance projection via CampaignDelivery/RecommendationRun
     registered_to_show: "registered_to_show"
   
   # ENHANCED: Job stream mapping configuration with enable support

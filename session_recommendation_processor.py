@@ -23,6 +23,7 @@ import re
 import logging
 import math
 import random
+import uuid
 from collections import defaultdict
 import pandas as pd
 import numpy as np
@@ -98,6 +99,27 @@ class SessionRecommendationProcessor:
         self.control_group_file_suffix = str(control_cfg.get("file_suffix", "_control"))
         self.control_group_output_directory = control_cfg.get("output_directory")
         self.control_group_property_name = str(control_cfg.get("neo4j_property", "control_group"))
+        configured_control_modes = control_cfg.get("enabled_modes", ["personal_agendas"])
+        if isinstance(configured_control_modes, str):
+            configured_control_modes = [configured_control_modes]
+        if not isinstance(configured_control_modes, list):
+            configured_control_modes = ["personal_agendas"]
+        self.control_group_enabled_modes = {
+            str(mode).strip().lower()
+            for mode in configured_control_modes
+            if str(mode).strip()
+        } or {"personal_agendas"}
+        self.control_group_global_target_enabled = bool(
+            control_cfg.get("global_target_enabled", True)
+        )
+        self.control_group_legacy_seed_run_id = str(
+            control_cfg.get("legacy_seed_run_id", "legacy_pre_traceability")
+        )
+        self.global_control_target_ids: Set[str] = set()
+
+        traceability_context = self._resolve_traceability_context(create_only_new=False)
+        self.current_campaign_id = str(traceability_context.get("campaign_id", "")).strip()
+        self.current_run_mode = str(traceability_context.get("run_mode", self.mode)).strip() or self.mode
 
         # Cache for Neo4j schema discovery
         self._available_labels: Optional[Set[str]] = None
@@ -195,10 +217,10 @@ class SessionRecommendationProcessor:
             "visitor_this_year", "Visitor_this_year"
         )
         self.visitor_last_year_bva_label = self.neo4j_config.get("node_labels", {}).get(
-            "visitor_last_year_bva", "Visitor_last_year_bva"
+            "visitor_last_year_bva", "Visitor_last_year_main"
         )
         self.visitor_last_year_lva_label = self.neo4j_config.get("node_labels", {}).get(
-            "visitor_last_year_lva", "Visitor_last_year_lva"
+            "visitor_last_year_lva", "Visitor_last_year_secondary"
         )
         self.session_this_year_label = self.neo4j_config.get("node_labels", {}).get(
             "session_this_year", "Sessions_this_year"
@@ -227,6 +249,14 @@ class SessionRecommendationProcessor:
             "errors": 0,
             "error_details": [],
             "processing_time": 0,
+            "engagement_show_theatre_filter": {
+                "visitors_evaluated": 0,
+                "visitors_without_show_ref": 0,
+                "visitors_without_mapping": 0,
+                "sessions_removed": 0,
+                "sessions_kept": 0,
+                "sessions_unknown_theatre": 0,
+            },
         }
         
         # Output directory
@@ -265,6 +295,18 @@ class SessionRecommendationProcessor:
         self._theatre_capacity_stats: Dict[str, Any] = {}
         self._initialize_theatre_capacity_limits()
 
+        # Engagement-specific show->theatre recommendation guardrail
+        self.engagement_show_theatre_filter_enabled = False
+        self.engagement_show_theatre_apply_modes: Set[str] = {"engagement"}
+        self.engagement_show_theatre_session_field = "theatre__name"
+        self.engagement_show_theatre_visitor_show_field = "ShowRef"
+        self.engagement_show_theatre_include_show_last_values: Set[str] = {"ALL"}
+        self.engagement_show_theatre_exclude_unknown_theatre = False
+        self.engagement_show_theatre_strict_when_no_mapping = False
+        self.engagement_show_theatre_allowed_by_show_last: Dict[str, Set[str]] = {}
+        self.engagement_show_theatre_global_allowed: Set[str] = set()
+        self._initialize_engagement_show_theatre_filter()
+
         # Initialize output processor
         self.output_processor = OutputProcessor(config, self.logger)
 
@@ -285,6 +327,44 @@ class SessionRecommendationProcessor:
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)
         return logger
+
+    def _resolve_traceability_context(self, create_only_new: bool) -> Dict[str, Any]:
+        """Resolve run-scoped traceability metadata for control-group continuity."""
+        trace_cfg = self.recommendation_config.get("traceability", {}) or {}
+        run_mode = self.mode
+        show = self.show_name
+
+        configured_run_id = str(trace_cfg.get("run_id", "")).strip()
+        run_id = configured_run_id or (
+            f"{show}_{run_mode}_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
+        )
+
+        campaign_id_cfg = trace_cfg.get("campaign_id", "")
+        if isinstance(campaign_id_cfg, dict):
+            configured_campaign_id = str(campaign_id_cfg.get(run_mode, "")).strip()
+        else:
+            configured_campaign_id = str(campaign_id_cfg).strip()
+        if configured_campaign_id:
+            campaign_id = configured_campaign_id
+        elif run_mode == "engagement":
+            campaign_id = f"{show}_engagement"
+        else:
+            campaign_id = f"{show}_conversion"
+
+        allocation_version = str(
+            trace_cfg.get("allocation_version", "incremental")
+            if create_only_new
+            else trace_cfg.get("allocation_version", "full")
+        )
+
+        return {
+            "run_id": run_id,
+            "campaign_id": campaign_id,
+            "run_mode": run_mode,
+            "show": show,
+            "pipeline_version": str(trace_cfg.get("pipeline_version", "pa_pipeline")),
+            "allocation_version": allocation_version,
+        }
 
     def _load_external_recommendations(self) -> None:
         """Load optional external recommendations keyed by BadgeId."""
@@ -462,6 +542,13 @@ class SessionRecommendationProcessor:
             return None
         normalized = re.sub(r"\s+", " ", name).strip()
         return normalized.lower() if normalized else None
+
+    @staticmethod
+    def _normalize_show_ref(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = str(value).strip().upper()
+        return normalized if normalized else None
 
     @staticmethod
     def _parse_capacity_value(value: Any) -> Optional[int]:
@@ -727,6 +814,207 @@ class SessionRecommendationProcessor:
             len(self.theatre_capacity_map),
             self.theatre_capacity_multiplier,
         )
+
+    def _initialize_engagement_show_theatre_filter(self) -> None:
+        """Initialize engagement-only show-to-theatre filtering from mapping CSV."""
+        cfg = self.recommendation_config.get("engagement_show_theatre_filter", {}) or {}
+        self.engagement_show_theatre_filter_enabled = bool(cfg.get("enabled", False))
+        if not self.engagement_show_theatre_filter_enabled:
+            return
+
+        apply_modes = cfg.get("apply_modes", ["engagement"])
+        if isinstance(apply_modes, str):
+            apply_modes = [apply_modes]
+        if not isinstance(apply_modes, list):
+            apply_modes = ["engagement"]
+        self.engagement_show_theatre_apply_modes = {
+            str(mode).strip().lower() for mode in apply_modes if str(mode).strip()
+        } or {"engagement"}
+
+        self.engagement_show_theatre_session_field = str(
+            cfg.get("session_theatre_field", "theatre__name")
+        )
+        self.engagement_show_theatre_visitor_show_field = str(
+            cfg.get("visitor_show_last_field", "ShowRef")
+        )
+        include_values = cfg.get("include_show_last_values", ["ALL"])
+        if isinstance(include_values, str):
+            include_values = [include_values]
+        self.engagement_show_theatre_include_show_last_values = {
+            str(v).strip().upper() for v in include_values if str(v).strip()
+        } or {"ALL"}
+        self.engagement_show_theatre_exclude_unknown_theatre = bool(
+            cfg.get("exclude_unknown_theatre", False)
+        )
+        self.engagement_show_theatre_strict_when_no_mapping = bool(
+            cfg.get("strict_when_no_mapping", False)
+        )
+
+        mapping_file = cfg.get("mapping_file")
+        if not mapping_file:
+            self.logger.warning(
+                "engagement_show_theatre_filter is enabled but mapping_file is not configured; disabling filter"
+            )
+            self.engagement_show_theatre_filter_enabled = False
+            return
+
+        mapping_path = Path(mapping_file)
+        if not mapping_path.is_absolute():
+            mapping_path = self.project_root.joinpath(mapping_file)
+        if not mapping_path.exists():
+            self.logger.warning(
+                "engagement_show_theatre_filter mapping file not found: %s; disabling filter",
+                mapping_path,
+            )
+            self.engagement_show_theatre_filter_enabled = False
+            return
+
+        try:
+            mapping_df = pd.read_csv(mapping_path)
+        except Exception as exc:
+            self.logger.error(
+                "Failed to read engagement_show_theatre_filter mapping file %s: %s",
+                mapping_path,
+                exc,
+                exc_info=True,
+            )
+            self.engagement_show_theatre_filter_enabled = False
+            return
+
+        show_last_column = None
+        for candidate in ("show_last", "showlast", "show_last_year"):
+            if candidate in mapping_df.columns:
+                show_last_column = candidate
+                break
+
+        theatre_column = None
+        for candidate in ("theatre_name", "theatre__name", "theatre"):
+            if candidate in mapping_df.columns:
+                theatre_column = candidate
+                break
+
+        if not show_last_column or not theatre_column:
+            self.logger.warning(
+                "engagement_show_theatre_filter mapping requires show_last and theatre_name columns; disabling filter"
+            )
+            self.engagement_show_theatre_filter_enabled = False
+            return
+
+        allowed_by_show_last: Dict[str, Set[str]] = defaultdict(set)
+        global_allowed: Set[str] = set()
+
+        for _, row in mapping_df.iterrows():
+            show_last = self._normalize_show_ref(row.get(show_last_column))
+            theatre = self._normalize_theatre_name(row.get(theatre_column))
+            if not show_last or not theatre:
+                continue
+
+            if show_last in self.engagement_show_theatre_include_show_last_values:
+                global_allowed.add(theatre)
+            else:
+                allowed_by_show_last[show_last].add(theatre)
+
+        if not allowed_by_show_last and not global_allowed:
+            self.logger.warning(
+                "engagement_show_theatre_filter loaded zero valid mappings from %s; disabling filter",
+                mapping_path,
+            )
+            self.engagement_show_theatre_filter_enabled = False
+            return
+
+        self.engagement_show_theatre_allowed_by_show_last = dict(allowed_by_show_last)
+        self.engagement_show_theatre_global_allowed = global_allowed
+
+        self.logger.info(
+            "engagement_show_theatre_filter enabled for modes=%s with %d show_last groups and %d global theatres",
+            sorted(self.engagement_show_theatre_apply_modes),
+            len(self.engagement_show_theatre_allowed_by_show_last),
+            len(self.engagement_show_theatre_global_allowed),
+        )
+
+    def _should_apply_engagement_show_theatre_filter(self) -> bool:
+        if not self.engagement_show_theatre_filter_enabled:
+            return False
+        return self.mode in self.engagement_show_theatre_apply_modes
+
+    def _extract_visitor_show_last(self, visitor: Dict[str, Any]) -> Optional[str]:
+        preferred = self.engagement_show_theatre_visitor_show_field
+        candidates = [preferred, "ShowRef", "show_ref", "show"]
+        for field in candidates:
+            value = visitor.get(field)
+            normalized = self._normalize_show_ref(value)
+            if normalized:
+                return normalized
+        return None
+
+    def _apply_engagement_show_theatre_filter(
+        self, visitor: Dict[str, Any], sessions: List[Dict[str, Any]]
+    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """Restrict engagement recommendations to theatres mapped from visitor's last-year show."""
+        if not sessions:
+            return sessions, []
+
+        stats = self.statistics.get("engagement_show_theatre_filter", {})
+        stats["visitors_evaluated"] = int(stats.get("visitors_evaluated", 0)) + 1
+
+        visitor_show_last = self._extract_visitor_show_last(visitor)
+        if not visitor_show_last:
+            stats["visitors_without_show_ref"] = int(stats.get("visitors_without_show_ref", 0)) + 1
+            note = "engagement_show_theatre_filter: skipped (visitor ShowRef missing)"
+            if self.engagement_show_theatre_strict_when_no_mapping:
+                return [], [note]
+            return sessions, [note]
+
+        allowed_theatres = set(self.engagement_show_theatre_global_allowed)
+        allowed_theatres.update(
+            self.engagement_show_theatre_allowed_by_show_last.get(visitor_show_last, set())
+        )
+
+        if not allowed_theatres:
+            stats["visitors_without_mapping"] = int(stats.get("visitors_without_mapping", 0)) + 1
+            note = (
+                f"engagement_show_theatre_filter: no mapping for visitor ShowRef={visitor_show_last}"
+            )
+            if self.engagement_show_theatre_strict_when_no_mapping:
+                return [], [note]
+            return sessions, [note]
+
+        filtered_sessions: List[Dict[str, Any]] = []
+        removed_count = 0
+        unknown_theatre_count = 0
+
+        for session in sessions:
+            theatre_raw = (
+                session.get(self.engagement_show_theatre_session_field)
+                or session.get("theatre__name")
+                or session.get("theatre_name")
+                or session.get("session_theatre_name")
+            )
+            theatre_normalized = self._normalize_theatre_name(theatre_raw)
+
+            if not theatre_normalized:
+                unknown_theatre_count += 1
+                if self.engagement_show_theatre_exclude_unknown_theatre:
+                    removed_count += 1
+                    continue
+                filtered_sessions.append(session)
+                continue
+
+            if theatre_normalized in allowed_theatres:
+                filtered_sessions.append(session)
+            else:
+                removed_count += 1
+
+        stats["sessions_removed"] = int(stats.get("sessions_removed", 0)) + removed_count
+        stats["sessions_kept"] = int(stats.get("sessions_kept", 0)) + len(filtered_sessions)
+        stats["sessions_unknown_theatre"] = int(stats.get("sessions_unknown_theatre", 0)) + unknown_theatre_count
+
+        note = (
+            "engagement_show_theatre_filter: "
+            f"ShowRef={visitor_show_last}, allowed_theatres={len(allowed_theatres)}, "
+            f"removed={removed_count}, kept={len(filtered_sessions)}"
+        )
+        return filtered_sessions, [note]
 
     def _enforce_theatre_capacity_limits(self, recommendations: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, int]]:
         """Trim recommendations so per-theatre slots respect configured capacity limits."""
@@ -1765,6 +2053,7 @@ class SessionRecommendationProcessor:
             filtered_recommendations = raw_recommendations
             removed_overlap_sessions: List[Dict] = []
             rules_applied: List[str] = []
+            engagement_show_theatre_notes: List[str] = []
             filtering_message = "Filtering disabled"
             filtering_strategy = "disabled"
 
@@ -1782,6 +2071,25 @@ class SessionRecommendationProcessor:
                 self.logger.info(
                     f"Filtered {len(raw_recommendations)} to {len(filtered_recommendations)} recommendations"
                 )
+
+            if filtered_recommendations and self._should_apply_engagement_show_theatre_filter():
+                before_engagement_filter = len(filtered_recommendations)
+                (
+                    filtered_recommendations,
+                    engagement_show_theatre_notes,
+                ) = self._apply_engagement_show_theatre_filter(
+                    visitor, filtered_recommendations
+                )
+                if engagement_show_theatre_notes:
+                    rules_applied.extend(engagement_show_theatre_notes)
+                self.logger.info(
+                    "Engagement show-theatre filter reduced recommendations from %d to %d",
+                    before_engagement_filter,
+                    len(filtered_recommendations),
+                )
+                if filtering_strategy == "disabled":
+                    filtering_strategy = "engagement_show_theatre"
+                    filtering_message = "Using engagement show-theatre filtering"
 
             custom_rules_metadata = {
                 "enabled": self.custom_rules_enabled,
@@ -2309,7 +2617,7 @@ class SessionRecommendationProcessor:
         if self.control_group_percentage <= 0:
             return False
 
-        return self.mode == "personal_agendas"
+        return self.mode in self.control_group_enabled_modes
 
     def _build_control_assignment_map(self, visitor_ids: List[str]) -> Dict[str, int]:
         """Build a deterministic visitor->control flag map for the current run."""
@@ -2317,17 +2625,128 @@ class SessionRecommendationProcessor:
         if not visitor_ids or not self._should_apply_control_group():
             return {}
 
-        unique_ids = sorted({str(visitor_id) for visitor_id in visitor_ids if visitor_id})
-        if not unique_ids:
+        run_ids = sorted({str(visitor_id) for visitor_id in visitor_ids if visitor_id})
+        if not run_ids:
             return {}
 
-        target_count = int(len(unique_ids) * self.control_group_percentage)
-        if target_count <= 0:
+        if not self.control_group_global_target_enabled:
+            target_count = int(len(run_ids) * self.control_group_percentage)
+            if target_count <= 0:
+                return {}
+
+            rng = random.Random(self.control_group_random_seed)
+            selected_ids = set(rng.sample(run_ids, min(target_count, len(run_ids))))
+            self.global_control_target_ids = selected_ids
+            return {visitor_id: 1 for visitor_id in selected_ids}
+
+        eligible_ids = self._get_all_eligible_visitor_ids()
+        if not eligible_ids:
             return {}
+
+        target_count = int(len(eligible_ids) * self.control_group_percentage)
+        if target_count <= 0:
+            self.global_control_target_ids = set()
+            return {}
+
+        existing_control_ids = self._get_existing_control_group_ids(eligible_ids)
+        selected_ids = set(existing_control_ids)
 
         rng = random.Random(self.control_group_random_seed)
-        selected_ids = set(rng.sample(unique_ids, min(target_count, len(unique_ids))))
-        return {visitor_id: 1 for visitor_id in selected_ids}
+
+        if len(selected_ids) < target_count:
+            remaining = sorted(set(eligible_ids) - selected_ids)
+            needed = min(target_count - len(selected_ids), len(remaining))
+            if needed > 0:
+                selected_ids.update(rng.sample(remaining, needed))
+        elif len(selected_ids) > target_count:
+            to_trim = len(selected_ids) - target_count
+            trim_candidates = sorted(selected_ids)
+            trimmed = set(rng.sample(trim_candidates, to_trim)) if to_trim > 0 else set()
+            selected_ids -= trimmed
+
+        self.global_control_target_ids = selected_ids
+        self.logger.info(
+            "Control group global target enabled: eligible=%d, target=%d, existing=%d, selected=%d",
+            len(eligible_ids),
+            target_count,
+            len(existing_control_ids),
+            len(selected_ids),
+        )
+
+        # Return map only for this run's visitors (splitting/output still run-scoped)
+        return {visitor_id: 1 for visitor_id in run_ids if visitor_id in selected_ids}
+
+    def _get_all_eligible_visitor_ids(self) -> List[str]:
+        """Get all eligible visitor IDs for global control-group targeting."""
+        try:
+            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
+                with driver.session() as session:
+                    query = f"""
+                    MATCH (v:{self.visitor_this_year_label})
+                    WHERE v.show = $show_name OR v.show IS NULL
+                    RETURN v.BadgeId as badge_id
+                    """
+                    result = session.run(query, show_name=self.show_name)
+                    ids = sorted({str(record["badge_id"]) for record in result if record.get("badge_id")})
+                    return ids
+        except Exception as exc:
+            self.logger.error("Error loading eligible visitor IDs for control targeting: %s", exc, exc_info=True)
+            return []
+
+    def _get_existing_control_group_ids(self, eligible_ids: List[str]) -> Set[str]:
+        """Get existing control-group visitors using run-scoped campaign history."""
+        if not eligible_ids:
+            return set()
+
+        existing: Set[str] = set()
+        batch_size = 2000
+        include_legacy_seed = self.mode == "personal_agendas"
+
+        try:
+            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
+                with driver.session() as session:
+                    query = """
+                    UNWIND $badge_ids AS badge_id
+                    OPTIONAL MATCH (d:CampaignDelivery)
+                    WHERE d.visitor_id = badge_id
+                      AND d.status = 'withheld_control'
+                      AND d.show = $show_name
+                      AND (
+                        d.campaign_id = $campaign_id
+                        OR ($include_legacy_seed AND d.run_id = $legacy_run_id)
+                      )
+                    WITH badge_id, count(d) AS delivery_hits
+                    OPTIONAL MATCH (:Visitor_this_year {BadgeId: badge_id})-[r:IS_RECOMMENDED]->(:Sessions_this_year)
+                    WHERE coalesce(r.control_group, 0) = 1
+                      AND r.show = $show_name
+                      AND (
+                        r.campaign_id = $campaign_id
+                        OR ($include_legacy_seed AND r.run_id = $legacy_run_id)
+                      )
+                    WITH badge_id, delivery_hits, count(r) AS rec_hits
+                    WHERE delivery_hits > 0 OR rec_hits > 0
+                    RETURN badge_id
+                    """
+
+                    for i in range(0, len(eligible_ids), batch_size):
+                        batch = eligible_ids[i : i + batch_size]
+                        result = session.run(
+                            query,
+                            badge_ids=batch,
+                            show_name=self.show_name,
+                            campaign_id=self.current_campaign_id,
+                            include_legacy_seed=include_legacy_seed,
+                            legacy_run_id=self.control_group_legacy_seed_run_id,
+                        )
+                        for record in result:
+                            badge_id = record.get("badge_id")
+                            if badge_id:
+                                existing.add(str(badge_id))
+        except Exception as exc:
+            self.logger.error("Error loading existing control-group IDs: %s", exc, exc_info=True)
+            return set()
+
+        return existing
 
 
 
@@ -2498,7 +2917,8 @@ class SessionRecommendationProcessor:
                     theatre_stats,
                     create_only_new,
                     control_assignment_map,
-                    self._external_recommendations_attached
+                    self._external_recommendations_attached,
+                    self.global_control_target_ids,
                 )
                 self.logger.info("Output processing completed")
             else:

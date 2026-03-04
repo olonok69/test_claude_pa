@@ -16,8 +16,9 @@ for easier testing and maintenance of output logic.
 import json
 import time
 import logging
+import uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Tuple, Set
 import pandas as pd
 from neo4j import GraphDatabase
@@ -39,6 +40,7 @@ class OutputProcessor:
         """
         self.config = config
         self.logger = logger or logging.getLogger(__name__)
+        self.mode = str(config.get("mode", "personal_agendas")).strip().lower()
 
         # Extract configuration
         self.show_name = config.get("neo4j", {}).get("show_name", "bva")
@@ -66,6 +68,23 @@ class OutputProcessor:
         # Control group settings
         control_cfg = self.recommendation_config.get("control_group", {})
         self.control_group_property_name = control_cfg.get("neo4j_property", "control_group")
+        self.control_group_enabled = bool(control_cfg.get("enabled", False))
+        configured_control_modes = control_cfg.get("enabled_modes", ["personal_agendas"])
+        if isinstance(configured_control_modes, str):
+            configured_control_modes = [configured_control_modes]
+        if not isinstance(configured_control_modes, list):
+            configured_control_modes = ["personal_agendas"]
+        self.control_group_enabled_modes = {
+            str(mode).strip().lower()
+            for mode in configured_control_modes
+            if str(mode).strip()
+        } or {"personal_agendas"}
+        self.control_group_global_target_enabled = bool(
+            control_cfg.get("global_target_enabled", True)
+        )
+        self.control_group_legacy_node_flag_sync = bool(
+            control_cfg.get("legacy_node_flag_sync", False)
+        )
 
         # Similarity attributes for DataFrame generation
         self.similarity_attributes = self.recommendation_config.get("similarity_attributes", {})
@@ -76,6 +95,61 @@ class OutputProcessor:
             "JobTitle", "Email_domain", "Country", "Source"
         ]
 
+    def _control_group_active_for_mode(self) -> bool:
+        """Return True when control logic is enabled for the current mode."""
+        return self.control_group_enabled and self.mode in self.control_group_enabled_modes
+
+    def _resolve_traceability_context(self, create_only_new: bool) -> Dict[str, Any]:
+        """Resolve run-scoped traceability metadata for current output execution."""
+        trace_cfg = self.recommendation_config.get("traceability", {}) or {}
+
+        run_mode = self.mode
+        show = self.show_name
+
+        configured_run_id = str(trace_cfg.get("run_id", "")).strip()
+        run_id = configured_run_id or (
+            f"{show}_{run_mode}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
+        )
+
+        campaign_id_cfg = trace_cfg.get("campaign_id", "")
+        if isinstance(campaign_id_cfg, dict):
+            configured_campaign_id = str(campaign_id_cfg.get(run_mode, "")).strip()
+        else:
+            configured_campaign_id = str(campaign_id_cfg).strip()
+        if configured_campaign_id:
+            campaign_id = configured_campaign_id
+        elif run_mode == "engagement":
+            campaign_id = f"{show}_engagement"
+        else:
+            campaign_id = f"{show}_conversion"
+
+        return {
+            "run_id": run_id,
+            "campaign_id": campaign_id,
+            "run_mode": run_mode,
+            "show": show,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "pipeline_version": str(trace_cfg.get("pipeline_version", "pa_pipeline")),
+            "allocation_version": str(
+                trace_cfg.get("allocation_version", "incremental") if create_only_new else trace_cfg.get("allocation_version", "full")
+            ),
+            "write_delivery_events": bool(trace_cfg.get("write_delivery_events", True)),
+        }
+
+    def _upsert_recommendation_run(self, session, traceability_context: Dict[str, Any]) -> None:
+        """Upsert the RecommendationRun node for the active run."""
+        query = """
+        MERGE (rr:RecommendationRun {run_id: $run_id})
+        ON CREATE SET rr.created_at = $created_at
+        SET rr.run_mode = $run_mode,
+            rr.campaign_id = $campaign_id,
+            rr.show = $show,
+            rr.pipeline_version = $pipeline_version,
+            rr.allocation_version = $allocation_version,
+            rr.updated_at = $created_at
+        """
+        session.run(query, traceability_context)
+
     def process_outputs(
         self,
         recommendations_dict: Dict[str, Any],
@@ -84,7 +158,8 @@ class OutputProcessor:
         theatre_stats: Optional[Dict] = None,
         create_only_new: bool = False,
         control_assignment_map: Optional[Dict[str, int]] = None,
-        external_recommendations_attached: int = 0
+        external_recommendations_attached: int = 0,
+        global_control_target_ids: Optional[Set[str]] = None,
     ) -> Dict[str, Any]:
         """
         Main method to process and save all recommendation outputs.
@@ -104,6 +179,8 @@ class OutputProcessor:
         start_time = time.time()
 
         try:
+            traceability_context = self._resolve_traceability_context(create_only_new)
+
             # Generate timestamp and output paths
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_file = self.output_dir / f"recommendations/visitor_recommendations_{self.show_name}_{timestamp}.json"
@@ -135,14 +212,32 @@ class OutputProcessor:
                 theatre_stats,
                 create_only_new,
                 external_recommendations_attached,
-                control_summary
+                control_summary,
+                traceability_context,
             )
 
             # Update Neo4j with recommendations
             if all_recommendations:
                 self.logger.info("Updating Neo4j with recommendation data")
-                self._update_visitor_recommendations(all_recommendations, control_assignment_map)
+                self._update_visitor_recommendations(
+                    all_recommendations,
+                    control_assignment_map,
+                    traceability_context,
+                )
                 self.logger.info("Completed Neo4j updates")
+
+            # Enforce global control-group percentage target across full eligible population.
+            if (
+                self._control_group_active_for_mode()
+                and self.control_group_global_target_enabled
+                and self.control_group_legacy_node_flag_sync
+            ):
+                if global_control_target_ids is None:
+                    self.logger.warning(
+                        "Global control-group sync skipped: no target IDs were provided to output processing"
+                    )
+                else:
+                    self._sync_global_control_group_assignments(global_control_target_ids)
 
             # Save main recommendations JSON if configured
             if self.recommendation_config.get("save_json", True):
@@ -305,7 +400,7 @@ class OutputProcessor:
         control_summary = {"enabled": False}
 
         control_cfg = self.recommendation_config.get("control_group", {})
-        if not control_cfg.get("enabled", False):
+        if not self._control_group_active_for_mode():
             return main_recommendations, control_recommendations, control_summary, control_assignment_map
 
         # Split based on control assignment map
@@ -374,7 +469,8 @@ class OutputProcessor:
         theatre_stats: Optional[Dict],
         create_only_new: bool,
         external_recommendations_attached: int,
-        control_summary: Dict[str, Any]
+        control_summary: Dict[str, Any],
+        traceability_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Generate metadata for output files."""
         main_successful = sum(1 for payload in main_recommendations.values()
@@ -407,6 +503,14 @@ class OutputProcessor:
             "create_only_new": create_only_new,
             "external_recommendations_attached": external_recommendations_attached,
             "control_group": control_summary,
+            "traceability": {
+                "run_id": traceability_context.get("run_id"),
+                "campaign_id": traceability_context.get("campaign_id"),
+                "run_mode": traceability_context.get("run_mode"),
+                "show": traceability_context.get("show"),
+                "pipeline_version": traceability_context.get("pipeline_version"),
+                "allocation_version": traceability_context.get("allocation_version"),
+            },
             "configuration": {
                 "min_similarity_score": self.recommendation_config.get("min_similarity_score", 0.3),
                 "max_recommendations": self.recommendation_config.get("max_recommendations", 10),
@@ -695,11 +799,22 @@ class OutputProcessor:
         self,
         recommendations_data: List[Dict],
         control_group_map: Optional[Dict[str, int]] = None,
+        traceability_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Update visitors with recommendation metadata and control group assignment."""
         try:
             with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
                 with driver.session() as session:
+                    traceability_context = traceability_context or {}
+                    run_id = str(traceability_context.get("run_id", "")).strip()
+                    campaign_id = str(traceability_context.get("campaign_id", "")).strip()
+                    run_mode = str(traceability_context.get("run_mode", self.mode)).strip() or self.mode
+                    show = str(traceability_context.get("show", self.show_name)).strip() or self.show_name
+                    run_timestamp = str(traceability_context.get("created_at", datetime.now(timezone.utc).isoformat())).strip()
+
+                    if run_id:
+                        self._upsert_recommendation_run(session, traceability_context)
+
                     updated_with_recs = 0
                     updated_without_recs = 0
                     control_group_map = control_group_map or {}
@@ -711,34 +826,47 @@ class OutputProcessor:
                         timestamp = datetime.now().isoformat()
 
                         # Replace recommendation set for this visitor/show to avoid stale
-                        # recommendations accumulating across reruns.
+                        # recommendations accumulating across reruns of the SAME run_id.
                         clear_query = f"""
                         MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
                         WHERE v.show = $show_name OR v.show IS NULL
                         OPTIONAL MATCH (v)-[r:IS_RECOMMENDED]->(s:{self.session_this_year_label})
-                        WHERE r.show = $show_name OR r.show IS NULL OR s.show = $show_name OR s.show IS NULL
+                        WHERE r.run_id = $run_id
                         DELETE r
                         """
                         session.run(
                             clear_query,
                             visitor_id=visitor_id,
                             show_name=self.show_name,
+                            run_id=run_id,
                         )
 
                         if recommended_sessions:
                             # Update visitor with has_recommendation flag
+                            control_update_clause = (
+                                f",\n                                v.{self.control_group_property_name} = $control_group"
+                                if self.control_group_legacy_node_flag_sync
+                                else ""
+                            )
+
                             update_query = f"""
                             MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
                             WHERE v.show = $show_name OR v.show IS NULL
                             SET v.has_recommendation = "1",
                                 v.show = $show_name,
                                 v.recommendations_generated_at = $timestamp,
-                                v.{self.control_group_property_name} = $control_group
+                                v.last_recommendation_run_id = $run_id,
+                                v.last_recommendation_campaign_id = $campaign_id,
+                                v.last_recommendation_mode = $run_mode
+                                {control_update_clause}
                             """
                             session.run(update_query,
                                        visitor_id=visitor_id,
                                        show_name=self.show_name,
                                        timestamp=timestamp,
+                                       run_id=run_id,
+                                       campaign_id=campaign_id,
+                                       run_mode=run_mode,
                                        control_group=control_value)
                             updated_with_recs += 1
 
@@ -751,10 +879,14 @@ class OutputProcessor:
                                     WHERE v.show = $show_name
                                     MATCH (s:{self.session_this_year_label} {{session_id: $session_id}})
                                     WHERE s.title IS NOT NULL AND trim(s.title) <> ''
-                                    MERGE (v)-[r:IS_RECOMMENDED]->(s)
+                                    MERGE (v)-[r:IS_RECOMMENDED {{run_id: $run_id}}]->(s)
                                     SET r.similarity_score = $score,
                                         r.generated_at = $timestamp,
-                                        r.show = $show_name
+                                        r.show = $show_name,
+                                        r.run_mode = $run_mode,
+                                        r.campaign_id = $campaign_id,
+                                        r.control_group = $control_group,
+                                        r.control_group_type = CASE WHEN $control_group = 1 THEN $run_mode ELSE r.control_group_type END
                                     """
                                     session.run(
                                         rel_query,
@@ -762,24 +894,71 @@ class OutputProcessor:
                                         show_name=self.show_name,
                                         session_id=session_id,
                                         score=rec_session.get("similarity", 0),
-                                        timestamp=timestamp
+                                        timestamp=timestamp,
+                                        run_id=run_id,
+                                        run_mode=run_mode,
+                                        campaign_id=campaign_id,
+                                        control_group=control_value,
                                     )
                         else:
                             # Mark visitor as processed but without recommendations
+                            control_update_clause = (
+                                f",\n                                v.{self.control_group_property_name} = $control_group"
+                                if self.control_group_legacy_node_flag_sync
+                                else ""
+                            )
+
                             update_query = f"""
                             MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
                             WHERE v.show = $show_name OR v.show IS NULL
                             SET v.has_recommendation = "0",
                                 v.show = $show_name,
                                 v.recommendations_generated_at = $timestamp,
-                                v.{self.control_group_property_name} = $control_group
+                                v.last_recommendation_run_id = $run_id,
+                                v.last_recommendation_campaign_id = $campaign_id,
+                                v.last_recommendation_mode = $run_mode
+                                {control_update_clause}
                             """
                             session.run(update_query,
                                        visitor_id=visitor_id,
                                        show_name=self.show_name,
                                        timestamp=timestamp,
+                                       run_id=run_id,
+                                       campaign_id=campaign_id,
+                                       run_mode=run_mode,
                                        control_group=control_value)
                             updated_without_recs += 1
+
+                        if traceability_context.get("write_delivery_events", True) and run_id:
+                            delivery_id = f"{run_id}::{visitor_id}"
+                            delivery_status = "withheld_control" if control_value == 1 else "sent"
+                            delivery_query = f"""
+                            MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
+                            MERGE (rr:RecommendationRun {{run_id: $run_id}})
+                            MERGE (d:CampaignDelivery {{delivery_id: $delivery_id}})
+                            ON CREATE SET d.created_at = $timestamp
+                            SET d.run_id = $run_id,
+                                d.campaign_id = $campaign_id,
+                                d.run_mode = $run_mode,
+                                d.visitor_id = $visitor_id,
+                                d.status = $status,
+                                d.timestamp = $timestamp,
+                                d.show = $show_name,
+                                d.updated_at = $timestamp
+                            MERGE (d)-[:FOR_VISITOR]->(v)
+                            MERGE (d)-[:FOR_RUN]->(rr)
+                            """
+                            session.run(
+                                delivery_query,
+                                visitor_id=visitor_id,
+                                run_id=run_id,
+                                campaign_id=campaign_id,
+                                run_mode=run_mode,
+                                delivery_id=delivery_id,
+                                status=delivery_status,
+                                timestamp=run_timestamp,
+                                show_name=show,
+                            )
 
                     self.logger.info(
                         f"Updated {updated_with_recs} visitors with recommendations, "
@@ -788,6 +967,58 @@ class OutputProcessor:
 
         except Exception as e:
             self.logger.error(f"Error updating visitor recommendations: {str(e)}", exc_info=True)
+
+    def _sync_global_control_group_assignments(self, selected_control_ids: Set[str]) -> None:
+        """Sync control-group flag for all show visitors to a global target set."""
+        try:
+            selected_control_ids = {str(v) for v in (selected_control_ids or set()) if str(v)}
+            with GraphDatabase.driver(self.uri, auth=(self.username, self.password)) as driver:
+                with driver.session() as session:
+                    reset_query = f"""
+                    MATCH (v:{self.visitor_this_year_label})
+                    WHERE v.show = $show_name OR v.show IS NULL
+                      AND NOT v.BadgeId IN $selected_ids
+                    SET v.{self.control_group_property_name} = 0
+                    RETURN count(v) as reset_count
+                    """
+                    reset_count = session.run(
+                        reset_query,
+                        show_name=self.show_name,
+                        selected_ids=sorted(selected_control_ids),
+                    ).single()["reset_count"]
+
+                    set_count_total = 0
+                    if selected_control_ids:
+                        set_query = f"""
+                        UNWIND $badge_ids AS badge_id
+                        MATCH (v:{self.visitor_this_year_label} {{BadgeId: badge_id}})
+                        WHERE v.show = $show_name OR v.show IS NULL
+                        SET v.{self.control_group_property_name} = 1
+                        RETURN count(v) as set_count
+                        """
+                        selected_list = sorted(selected_control_ids)
+                        batch_size = 2000
+                        for i in range(0, len(selected_list), batch_size):
+                            batch = selected_list[i : i + batch_size]
+                            set_count = session.run(
+                                set_query,
+                                badge_ids=batch,
+                                show_name=self.show_name,
+                            ).single()["set_count"]
+                            set_count_total += int(set_count)
+
+                    self.logger.info(
+                        "Global control-group sync applied: selected=%d, set=%d, reset=%d",
+                        len(selected_control_ids),
+                        set_count_total,
+                        int(reset_count),
+                    )
+        except Exception as exc:
+            self.logger.error(
+                "Error syncing global control-group assignments: %s",
+                str(exc),
+                exc_info=True,
+            )
 
     def json_to_dataframe(self, json_file: str) -> pd.DataFrame:
         """Convert recommendations JSON to DataFrame for analysis."""

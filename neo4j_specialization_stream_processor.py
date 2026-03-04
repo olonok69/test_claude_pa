@@ -69,10 +69,10 @@ class Neo4jSpecializationStreamProcessor:
             "specialization_field_lva", "what_areas_do_you_specialise_in"
         )
         
-        # Get node labels with fallback to original hardcoded values
+        # Get node labels with fallback values aligned to main/secondary naming
         self.visitor_this_year_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
-        self.visitor_last_year_bva_label = self.node_labels.get("visitor_last_year_bva", "Visitor_last_year_bva")
-        self.visitor_last_year_lva_label = self.node_labels.get("visitor_last_year_lva", "Visitor_last_year_lva")
+        self.visitor_last_year_bva_label = self.node_labels.get("visitor_last_year_bva", "Visitor_last_year_main")
+        self.visitor_last_year_lva_label = self.node_labels.get("visitor_last_year_lva", "Visitor_last_year_secondary")
         self.stream_label = self.node_labels.get("stream", "Stream")
         self.relationship_name = self.relationships.get("specialization_stream", "specialization_to_stream")
 

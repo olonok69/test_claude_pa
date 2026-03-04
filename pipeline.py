@@ -294,6 +294,7 @@ def run_output_processing(config, create_only_new=True, recommendation_processor
     theatre_stats = getattr(session_recommendation_processor, 'theatre_stats', None)
     control_assignment_map = getattr(session_recommendation_processor, 'control_assignment_map', None)
     external_recommendations_attached = getattr(session_recommendation_processor, '_external_recommendations_attached', 0)
+    global_control_target_ids = getattr(session_recommendation_processor, 'global_control_target_ids', None)
 
     # Process outputs
     session_recommendation_processor.statistics = session_recommendation_processor.output_processor.process_outputs(
@@ -303,7 +304,8 @@ def run_output_processing(config, create_only_new=True, recommendation_processor
         theatre_stats,
         create_only_new,
         control_assignment_map,
-        external_recommendations_attached
+        external_recommendations_attached,
+        global_control_target_ids,
     )
 
     logger.info("Completed output processing")

@@ -449,9 +449,25 @@ class Neo4jSessionProcessor:
                 badge_column = candidate
                 break
 
-        if not badge_column:
+        forename_col = None
+        surname_col = None
+        email_col = None
+        for candidate in ["Forename", "First Name", "FirstName", "forename", "first_name"]:
+            if candidate in sessions_df.columns:
+                forename_col = candidate
+                break
+        for candidate in ["Surname", "Last Name", "LastName", "surname", "last_name"]:
+            if candidate in sessions_df.columns:
+                surname_col = candidate
+                break
+        for candidate in ["Email", "Email Address", "email", "email_address", "Registrant Email"]:
+            if candidate in sessions_df.columns:
+                email_col = candidate
+                break
+
+        if not badge_column and not (forename_col and surname_col and email_col):
             self.logger.error(
-                "[post_analysis mode] No badge column found in %s while wiring new sessions",
+                "[post_analysis mode] No badge column or identity columns found in %s while wiring new sessions",
                 sessions_path,
             )
             return
@@ -514,8 +530,20 @@ class Neo4jSessionProcessor:
                         continue
 
                     for row in matching_rows:
-                        badge_value = str(row.get(badge_column, "")).strip()
-                        if not badge_value:
+                        badge_value = str(row.get(badge_column, "")).strip() if badge_column else ""
+
+                        f = str(row.get(forename_col, "")).strip().lower() if forename_col else ""
+                        s = str(row.get(surname_col, "")).strip().lower() if surname_col else ""
+                        e = str(row.get(email_col, "")).strip().lower() if email_col else ""
+                        if f in {"", "nan", "none", "na"}:
+                            f = ""
+                        if s in {"", "nan", "none", "na"}:
+                            s = ""
+                        if e in {"", "nan", "none", "na"}:
+                            e = ""
+                        identity_key = f"{f}_{s}_{e}" if (f and s and e) else ""
+
+                        if not badge_value and not identity_key:
                             skipped += 1
                             continue
 
@@ -523,31 +551,63 @@ class Neo4jSessionProcessor:
                         file_name = row.get("File")
                         seminar_name = row.get("Seminar Name", row.get("Seminar"))
 
-                        query = (
+                        query_badge = (
                             f"MATCH (v:{visitor_label} {{{visitor_id_field}: $badge_id}}) "
                             f"MATCH (s:{session_label} {{session_id: $session_id}}) "
                             "WHERE v.show = $show_name AND s.show = $show_name "
                             f"MERGE (v)-[r:{relationship_name}]->(s) "
                             "SET r.scan_date = coalesce($scan_date, r.scan_date), "
                             "    r.file = coalesce($file_name, r.file), "
-                            "    r.seminar_name = coalesce($seminar_name, r.seminar_name) "
+                            "    r.seminar_name = coalesce($seminar_name, r.seminar_name), "
+                            "    r.identity_match_mode = coalesce(r.identity_match_mode, 'badge') "
+                            "RETURN r"
+                        )
+
+                        query_identity = (
+                            f"MATCH (v:{visitor_label} {{id_both_years: $identity_key}}) "
+                            f"MATCH (s:{session_label} {{session_id: $session_id}}) "
+                            "WHERE v.show = $show_name AND s.show = $show_name "
+                            f"MERGE (v)-[r:{relationship_name}]->(s) "
+                            "SET r.scan_date = coalesce($scan_date, r.scan_date), "
+                            "    r.file = coalesce($file_name, r.file), "
+                            "    r.seminar_name = coalesce($seminar_name, r.seminar_name), "
+                            "    r.identity_match_mode = 'identity_fallback' "
                             "RETURN r"
                         )
 
                         try:
-                            result = session.run(
-                                query,
-                                badge_id=badge_value,
-                                session_id=session_id,
-                                show_name=self.show_name,
-                                scan_date=str(scan_date) if pd.notna(scan_date) else None,
-                                file_name=str(file_name) if pd.notna(file_name) else None,
-                                seminar_name=str(seminar_name) if pd.notna(seminar_name) else None,
-                            )
-                            summary = result.consume()
-                            if summary.counters.relationships_created > 0:
-                                created += 1
-                            else:
+                            common_params = {
+                                "session_id": session_id,
+                                "show_name": self.show_name,
+                                "scan_date": str(scan_date) if pd.notna(scan_date) else None,
+                                "file_name": str(file_name) if pd.notna(file_name) else None,
+                                "seminar_name": str(seminar_name) if pd.notna(seminar_name) else None,
+                            }
+
+                            matched = False
+                            if identity_key:
+                                result = session.run(
+                                    query_identity,
+                                    identity_key=identity_key,
+                                    **common_params,
+                                )
+                                summary = result.consume()
+                                if summary.counters.relationships_created > 0:
+                                    created += int(summary.counters.relationships_created)
+                                    matched = True
+
+                            if not matched and badge_value:
+                                result = session.run(
+                                    query_badge,
+                                    badge_id=badge_value,
+                                    **common_params,
+                                )
+                                summary = result.consume()
+                                if summary.counters.relationships_created > 0:
+                                    created += int(summary.counters.relationships_created)
+                                    matched = True
+
+                            if not matched:
                                 skipped += 1
                         except Exception as rel_error:
                             failed += 1
