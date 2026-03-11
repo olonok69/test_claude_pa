@@ -47,6 +47,12 @@ class OutputProcessor:
         self.recommendation_config = config.get("recommendation", {})
         self.output_dir = Path(config.get("output_dir", "data/output"))
         self.project_root = Path(config.get("project_root", ".")).resolve()
+        self.write_is_recommended_relationships = bool(
+            self.recommendation_config.get(
+                "write_is_recommended_relationships",
+                self.mode != "post_analysis",
+            )
+        )
 
         # Neo4j connection for updates
         env_file = config.get("env_file", "keys/.env")
@@ -827,19 +833,21 @@ class OutputProcessor:
 
                         # Replace recommendation set for this visitor/show to avoid stale
                         # recommendations accumulating across reruns of the SAME run_id.
-                        clear_query = f"""
-                        MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
-                        WHERE v.show = $show_name OR v.show IS NULL
-                        OPTIONAL MATCH (v)-[r:IS_RECOMMENDED]->(s:{self.session_this_year_label})
-                        WHERE r.run_id = $run_id
-                        DELETE r
-                        """
-                        session.run(
-                            clear_query,
-                            visitor_id=visitor_id,
-                            show_name=self.show_name,
-                            run_id=run_id,
-                        )
+                        # In post_analysis mode, do not mutate IS_RECOMMENDED relationships.
+                        if self.write_is_recommended_relationships:
+                            clear_query = f"""
+                            MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
+                            WHERE v.show = $show_name OR v.show IS NULL
+                            OPTIONAL MATCH (v)-[r:IS_RECOMMENDED]->(s:{self.session_this_year_label})
+                            WHERE r.run_id = $run_id
+                            DELETE r
+                            """
+                            session.run(
+                                clear_query,
+                                visitor_id=visitor_id,
+                                show_name=self.show_name,
+                                run_id=run_id,
+                            )
 
                         if recommended_sessions:
                             # Update visitor with has_recommendation flag
@@ -870,36 +878,37 @@ class OutputProcessor:
                                        control_group=control_value)
                             updated_with_recs += 1
 
-                            # Create IS_RECOMMENDED relationships
-                            for rec_session in recommended_sessions:
-                                session_id = rec_session.get("session_id")
-                                if session_id:
-                                    rel_query = f"""
-                                    MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
-                                    WHERE v.show = $show_name
-                                    MATCH (s:{self.session_this_year_label} {{session_id: $session_id}})
-                                    WHERE s.title IS NOT NULL AND trim(s.title) <> ''
-                                    MERGE (v)-[r:IS_RECOMMENDED {{run_id: $run_id}}]->(s)
-                                    SET r.similarity_score = $score,
-                                        r.generated_at = $timestamp,
-                                        r.show = $show_name,
-                                        r.run_mode = $run_mode,
-                                        r.campaign_id = $campaign_id,
-                                        r.control_group = $control_group,
-                                        r.control_group_type = CASE WHEN $control_group = 1 THEN $run_mode ELSE r.control_group_type END
-                                    """
-                                    session.run(
-                                        rel_query,
-                                        visitor_id=visitor_id,
-                                        show_name=self.show_name,
-                                        session_id=session_id,
-                                        score=rec_session.get("similarity", 0),
-                                        timestamp=timestamp,
-                                        run_id=run_id,
-                                        run_mode=run_mode,
-                                        campaign_id=campaign_id,
-                                        control_group=control_value,
-                                    )
+                            # Create IS_RECOMMENDED relationships (disabled by default in post_analysis mode)
+                            if self.write_is_recommended_relationships:
+                                for rec_session in recommended_sessions:
+                                    session_id = rec_session.get("session_id")
+                                    if session_id:
+                                        rel_query = f"""
+                                        MATCH (v:{self.visitor_this_year_label} {{BadgeId: $visitor_id}})
+                                        WHERE v.show = $show_name
+                                        MATCH (s:{self.session_this_year_label} {{session_id: $session_id}})
+                                        WHERE s.title IS NOT NULL AND trim(s.title) <> ''
+                                        MERGE (v)-[r:IS_RECOMMENDED {{run_id: $run_id}}]->(s)
+                                        SET r.similarity_score = $score,
+                                            r.generated_at = $timestamp,
+                                            r.show = $show_name,
+                                            r.run_mode = $run_mode,
+                                            r.campaign_id = $campaign_id,
+                                            r.control_group = $control_group,
+                                            r.control_group_type = CASE WHEN $control_group = 1 THEN $run_mode ELSE r.control_group_type END
+                                        """
+                                        session.run(
+                                            rel_query,
+                                            visitor_id=visitor_id,
+                                            show_name=self.show_name,
+                                            session_id=session_id,
+                                            score=rec_session.get("similarity", 0),
+                                            timestamp=timestamp,
+                                            run_id=run_id,
+                                            run_mode=run_mode,
+                                            campaign_id=campaign_id,
+                                            control_group=control_value,
+                                        )
                         else:
                             # Mark visitor as processed but without recommendations
                             control_update_clause = (

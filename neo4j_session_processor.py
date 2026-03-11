@@ -752,43 +752,42 @@ class Neo4jSessionProcessor:
                             else:
                                 nodes_updated += 1
 
-                            if not post_analysis_mode:
-                                # Stream handling (add/update relationships, create stream nodes if missing)
-                                stream_field = row.get("stream", "")
-                                # Normalize and split; allow multiple separated by ';'
-                                raw_tokens = [t.strip() for t in str(stream_field).split(";") if t and str(t).strip()]
-                                # Case-insensitive unique set while preserving first occurrence case
-                                seen_lower = set()
-                                tokens = []
-                                for t in raw_tokens:
-                                    tl = t.lower()
-                                    if tl not in seen_lower:
-                                        seen_lower.add(tl)
-                                        tokens.append(t)
+                            # Stream handling (add/update relationships, create stream nodes if missing)
+                            stream_field = row.get("stream", "")
+                            # Normalize and split; allow multiple separated by ';'
+                            raw_tokens = [t.strip() for t in str(stream_field).split(";") if t and str(t).strip()]
+                            # Case-insensitive unique set while preserving first occurrence case
+                            seen_lower = set()
+                            tokens = []
+                            for t in raw_tokens:
+                                tl = t.lower()
+                                if tl not in seen_lower:
+                                    seen_lower.add(tl)
+                                    tokens.append(t)
 
-                                # Create missing Stream nodes & relationships
-                                for token in tokens:
-                                    stream_merge_query = """
-                                        MERGE (st:Stream {stream:$stream_case, show:$show})
-                                        ON CREATE SET st.description = coalesce(st.description, $default_desc)
-                                        WITH st
-                                        MATCH (s:Sessions_this_year {session_id:$session_id})
-                                        SET s.show = coalesce(s.show, $show)
-                                        MERGE (s)-[:HAS_STREAM]->(st)
-                                        """
-                                    session.run(stream_merge_query, stream_case=token, show=self.show_name, session_id=session_id, default_desc=f"Stream for {token}")
-                                has_stream_added += len(tokens)
+                            # Create missing Stream nodes & relationships
+                            for token in tokens:
+                                stream_merge_query = """
+                                    MERGE (st:Stream {stream:$stream_case, show:$show})
+                                    ON CREATE SET st.description = coalesce(st.description, $default_desc)
+                                    WITH st
+                                    MATCH (s:Sessions_this_year {session_id:$session_id})
+                                    SET s.show = coalesce(s.show, $show)
+                                    MERGE (s)-[:HAS_STREAM]->(st)
+                                    """
+                                session.run(stream_merge_query, stream_case=token, show=self.show_name, session_id=session_id, default_desc=f"Stream for {token}")
+                            has_stream_added += len(tokens)
 
-                                # Remove obsolete HAS_STREAM relationships (only those whose stream no longer listed)
-                                if tokens:
-                                    remove_query = """
-                                        MATCH (s:Sessions_this_year {session_id:$session_id})-[r:HAS_STREAM]->(st:Stream {show:$show})
-                                        WHERE NOT toLower(st.stream) IN $current_streams_lower
-                                        DELETE r
-                                        RETURN count(r) AS removed
-                                        """
-                                    removed = session.run(remove_query, session_id=session_id, show=self.show_name, current_streams_lower=[t.lower() for t in tokens]).single()["removed"]
-                                    has_stream_removed += removed
+                            # Remove obsolete HAS_STREAM relationships (only those whose stream no longer listed)
+                            if tokens:
+                                remove_query = """
+                                    MATCH (s:Sessions_this_year {session_id:$session_id})-[r:HAS_STREAM]->(st:Stream {show:$show})
+                                    WHERE NOT toLower(st.stream) IN $current_streams_lower
+                                    DELETE r
+                                    RETURN count(r) AS removed
+                                    """
+                                removed = session.run(remove_query, session_id=session_id, show=self.show_name, current_streams_lower=[t.lower() for t in tokens]).single()["removed"]
+                                has_stream_removed += removed
                     except Exception as e:
                         self.logger.error(f"Incremental update failed for session_id={row.get('session_id')}: {e}")
                         continue
@@ -800,10 +799,9 @@ class Neo4jSessionProcessor:
                 self.statistics["nodes_skipped"]["sessions_this_year"] = nodes_updated
                 # Store additional incremental metrics
                 self.statistics.setdefault("incremental_metrics", {})["sessions_this_year_updated"] = nodes_updated
-                if not post_analysis_mode:
-                    self.statistics["relationships_created"]["sessions_this_year_has_stream"] = has_stream_added
-                    self.statistics["relationships_skipped"].setdefault("sessions_this_year_has_stream", 0)
-                    self.statistics.setdefault("relationships_removed", {})["sessions_this_year_has_stream"] = has_stream_removed
+                self.statistics["relationships_created"]["sessions_this_year_has_stream"] = has_stream_added
+                self.statistics["relationships_skipped"].setdefault("sessions_this_year_has_stream", 0)
+                self.statistics.setdefault("relationships_removed", {})["sessions_this_year_has_stream"] = has_stream_removed
 
                 if post_analysis_mode and new_sessions:
                     self.logger.info(
@@ -816,7 +814,7 @@ class Neo4jSessionProcessor:
                     "Incremental session processing complete: %s created, %s updated%s",
                     nodes_created,
                     nodes_updated,
-                    "; stream relationships untouched" if post_analysis_mode else f"; HAS_STREAM added tokens total={has_stream_added}, removed relationships={has_stream_removed}"
+                    f"; HAS_STREAM added tokens total={has_stream_added}, removed relationships={has_stream_removed}"
                 )
             else:
                 # FULL REBUILD MODE (create_only_new=False) retains original delete + recreate semantics

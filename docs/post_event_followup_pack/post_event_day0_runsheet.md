@@ -90,6 +90,22 @@ Pass criteria:
 
 Store these two artifacts in the closure evidence package.
 
+## Step 7 — HubSpot suppression verify gate (if suppression import was executed)
+Use this gate after any suppression import/update to confirm run-scoped integrity.
+
+Run:
+- `python scripts/verify_hubspot_suppression_in_neo4j.py --config config/config_tsl.yaml --neo4j-retry-attempts 8 --neo4j-retry-backoff-seconds 2`
+
+Pass criteria:
+- Command exits successfully (including transient retry recovery if needed).
+- For each mapped run, `run_scoped_suppressed` equals `expected_matches_from_csv`.
+- Global consistency check holds:
+	- `suppressed_visitors = sum(run_scoped_suppressed across mapped runs)`
+
+Optional logging:
+- Re-run with shell capture for audit evidence:
+	- `python scripts/verify_hubspot_suppression_in_neo4j.py --config config/config_tsl.yaml --neo4j-retry-attempts 8 --neo4j-retry-backoff-seconds 2 | tee logs/hubspot_suppression_verify_$(date +%Y%m%d_%H%M%S).log`
+
 ## Fast triage mapping
 - `entry_scans_this` empty/missing -> fix config/file staging, rerun strict gate.
 - `assisted_session_this_year` zero -> verify seminar scans loaded and post-analysis steps executed.

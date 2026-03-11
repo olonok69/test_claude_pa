@@ -119,6 +119,68 @@ class Neo4jVisitorProcessor:
             )
             return False
 
+    @staticmethod
+    def _normalize_identity_value(value):
+        if value is None:
+            return ""
+        text = str(value).strip().lower()
+        return "" if text in {"", "nan", "none", "null", "na"} else text
+
+    def _build_identity_key_from_properties(self, properties):
+        forename = self._normalize_identity_value(
+            properties.get("Forename")
+            or properties.get("First Name")
+            or properties.get("FirstName")
+            or properties.get("forename")
+            or properties.get("first_name")
+        )
+        surname = self._normalize_identity_value(
+            properties.get("Surname")
+            or properties.get("Last Name")
+            or properties.get("LastName")
+            or properties.get("surname")
+            or properties.get("last_name")
+        )
+        email = self._normalize_identity_value(
+            properties.get("Email")
+            or properties.get("Email Address")
+            or properties.get("email")
+            or properties.get("email_address")
+        )
+        if not (forename and surname and email):
+            return ""
+        return f"{forename}_{surname}_{email}"
+
+    def _backfill_identity_key_for_visitors(self, node_label="Visitor_this_year"):
+        driver = None
+        try:
+            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+            with driver.session() as session:
+                query = f"""
+                MATCH (v:{node_label})
+                WHERE toLower(coalesce(v.show, '')) = toLower($show_name)
+                WITH v,
+                     toLower(trim(coalesce(v.Forename, v.`First Name`, v.FirstName, v.forename, v.first_name, ''))) AS f,
+                     toLower(trim(coalesce(v.Surname, v.`Last Name`, v.LastName, v.surname, v.last_name, ''))) AS s,
+                     toLower(trim(coalesce(v.Email, v.`Email Address`, v.email, v.email_address, ''))) AS e
+                WHERE f <> '' AND s <> '' AND e <> ''
+                SET v.identity_key = f + '_' + s + '_' + e,
+                    v.id_both_years = coalesce(v.id_both_years, f + '_' + s + '_' + e),
+                    v.updated_at = timestamp()
+                RETURN count(v) AS touched
+                """
+                touched = int(session.run(query, show_name=self.show_name).single()["touched"])
+                self.logger.info(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Backfilled identity_key/id_both_years for {touched} {node_label} nodes"
+                )
+        except Exception as e:
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Failed to backfill identity_key: {e}"
+            )
+        finally:
+            if driver:
+                driver.close()
+
     def load_csv_to_neo4j(
         self,
         csv_file_path,
@@ -164,6 +226,10 @@ class Neo4jVisitorProcessor:
                                 properties[neo4j_prop] = row[csv_col]
 
                         properties["show"] = self.show_name
+                        identity_key = self._build_identity_key_from_properties(properties)
+                        if identity_key:
+                            properties["identity_key"] = identity_key
+                            properties["id_both_years"] = properties.get("id_both_years") or identity_key
 
                         if unique_id_field not in properties or not properties[unique_id_field]:
                             self.logger.warning(
@@ -362,3 +428,6 @@ class Neo4jVisitorProcessor:
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j visitor data processing completed"
         )
+
+        if self.mode == "post_analysis":
+            self._backfill_identity_key_for_visitors("Visitor_this_year")

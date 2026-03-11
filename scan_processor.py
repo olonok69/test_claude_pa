@@ -264,6 +264,31 @@ class ScanProcessor:
             return ""
         return "".join(char for char in text if char.isalnum()).lower()
 
+    @staticmethod
+    def _normalize_badge_value(value):
+        if pd.isna(value):
+            return ""
+        text = str(value).strip()
+        if not text or text.lower() in {"nan", "none", "null"}:
+            return ""
+        if text.endswith(".0") and text[:-2].replace("-", "").isdigit():
+            text = text[:-2]
+        return text
+
+    @staticmethod
+    def _build_identity_key_series(df: pd.DataFrame, forename_col: str, surname_col: str, email_col: str) -> pd.Series:
+        if not forename_col or not surname_col or not email_col:
+            return pd.Series([""] * len(df), index=df.index)
+
+        forename = df[forename_col].fillna("").astype(str).str.strip().str.lower()
+        surname = df[surname_col].fillna("").astype(str).str.strip().str.lower()
+        email = df[email_col].fillna("").astype(str).str.strip().str.lower()
+
+        valid = (forename != "") & (surname != "") & (email != "")
+        identity_key = pd.Series([""] * len(df), index=df.index)
+        identity_key.loc[valid] = forename.loc[valid] + "_" + surname.loc[valid] + "_" + email.loc[valid]
+        return identity_key
+
     def enhance_seminar_data(self) -> None:
         """Enhance seminar data with seminar names and create keys for matching."""
         try:
@@ -324,7 +349,9 @@ class ScanProcessor:
                 else:
                     self.seminars_scans_this_year_enhanced = self.seminars_scans_this_year.copy()
                     if "Seminar Name" not in self.seminars_scans_this_year_enhanced.columns:
-                        if "Seminar" in self.seminars_scans_this_year_enhanced.columns:
+                        if "Seminar Title" in self.seminars_scans_this_year_enhanced.columns:
+                            self.seminars_scans_this_year_enhanced["Seminar Name"] = self.seminars_scans_this_year_enhanced["Seminar Title"]
+                        elif "Seminar" in self.seminars_scans_this_year_enhanced.columns:
                             self.seminars_scans_this_year_enhanced["Seminar Name"] = self.seminars_scans_this_year_enhanced["Seminar"]
                         elif "Short Name" in self.seminars_scans_this_year_enhanced.columns:
                             self.seminars_scans_this_year_enhanced["Seminar Name"] = self.seminars_scans_this_year_enhanced["Short Name"]
@@ -407,7 +434,22 @@ class ScanProcessor:
 
                 if not self.reg_data_this_year.empty:
                     this_reg_badges = set(self.reg_data_this_year["BadgeId"].unique())
-                    this_seminar_badges = set(self.seminars_scans_this_year_enhanced["Badge Id"].unique())
+                    seminar_badge_col = None
+                    for candidate in ["Badge Id", "BadgeId", "badge_id", "Barcode"]:
+                        if candidate in self.seminars_scans_this_year_enhanced.columns:
+                            seminar_badge_col = candidate
+                            break
+
+                    if seminar_badge_col:
+                        this_seminar_badges = set(
+                            self.seminars_scans_this_year_enhanced[seminar_badge_col]
+                            .apply(self._normalize_badge_value)
+                            .replace("", pd.NA)
+                            .dropna()
+                            .unique()
+                        )
+                    else:
+                        this_seminar_badges = set()
                     this_badges_intersection = this_reg_badges.intersection(this_seminar_badges)
                     self.logger.info(
                         f"This-year registration-seminar badge intersection: {len(this_badges_intersection)} out of {len(this_reg_badges)} registration badges and {len(this_seminar_badges)} seminar badges"
@@ -438,6 +480,18 @@ class ScanProcessor:
             # Rename 'BadgeId' column in registration dataframe to match 'Badge Id' in seminars dataframe
             registration_df = registration_df.rename(columns={"BadgeId": "Badge Id"})
 
+            # Normalize seminar badge source for new post-show files (Barcode -> Badge Id)
+            if "Badge Id" not in seminars_df.columns:
+                for candidate in ["BadgeId", "badge_id", "Barcode"]:
+                    if candidate in seminars_df.columns:
+                        seminars_df["Badge Id"] = seminars_df[candidate]
+                        break
+
+            if "Badge Id" in registration_df.columns:
+                registration_df["Badge Id"] = registration_df["Badge Id"].apply(self._normalize_badge_value)
+            if "Badge Id" in seminars_df.columns:
+                seminars_df["Badge Id"] = seminars_df["Badge Id"].apply(self._normalize_badge_value)
+
             # Select demographic columns to include
             demographic_columns = [
                 "Badge Id",
@@ -458,10 +512,68 @@ class ScanProcessor:
             ]
             reg_slim = registration_df[available_cols]
 
-            # Merge the seminars dataframe with the registration dataframe
-            enhanced_seminars = pd.merge(
-                seminars_df, reg_slim, on="Badge Id", how="left"
-            )
+            # Merge by badge ID first when available
+            if "Badge Id" in seminars_df.columns and "Badge Id" in reg_slim.columns:
+                enhanced_seminars = pd.merge(seminars_df, reg_slim, on="Badge Id", how="left")
+            else:
+                enhanced_seminars = seminars_df.copy()
+
+            # Identity fallback for datasets without reliable badge IDs (name + surname + email)
+            reg_forename_col = "Forename" if "Forename" in registration_df.columns else None
+            reg_surname_col = "Surname" if "Surname" in registration_df.columns else None
+            reg_email_col = "Email" if "Email" in registration_df.columns else None
+
+            sem_forename_col = None
+            sem_surname_col = None
+            for candidate in ["Forename", "First Name", "first_name"]:
+                if candidate in seminars_df.columns:
+                    sem_forename_col = candidate
+                    break
+            for candidate in ["Surname", "Last Name", "last_name"]:
+                if candidate in seminars_df.columns:
+                    sem_surname_col = candidate
+                    break
+            sem_email_col = "Email" if "Email" in seminars_df.columns else None
+
+            if reg_forename_col and reg_surname_col and reg_email_col and sem_forename_col and sem_surname_col and sem_email_col:
+                reg_identity = registration_df.copy()
+                reg_identity["identity_key"] = self._build_identity_key_series(
+                    reg_identity,
+                    reg_forename_col,
+                    reg_surname_col,
+                    reg_email_col,
+                )
+                reg_identity = reg_identity[reg_identity["identity_key"] != ""]
+                reg_identity = reg_identity.drop_duplicates(subset=["identity_key"])
+
+                reg_identity_slim_cols = [col for col in demographic_columns if col in reg_identity.columns and col != "Badge Id"]
+                reg_identity_slim = reg_identity[["identity_key"] + reg_identity_slim_cols]
+
+                enhanced_seminars["identity_key"] = self._build_identity_key_series(
+                    seminars_df,
+                    sem_forename_col,
+                    sem_surname_col,
+                    sem_email_col,
+                )
+
+                enhanced_seminars = pd.merge(
+                    enhanced_seminars,
+                    reg_identity_slim,
+                    on="identity_key",
+                    how="left",
+                    suffixes=("", "_idfallback"),
+                )
+
+                for col in reg_identity_slim_cols:
+                    fallback_col = f"{col}_idfallback"
+                    if fallback_col in enhanced_seminars.columns:
+                        if col in enhanced_seminars.columns:
+                            enhanced_seminars[col] = enhanced_seminars[col].combine_first(enhanced_seminars[fallback_col])
+                        else:
+                            enhanced_seminars[col] = enhanced_seminars[fallback_col]
+                        enhanced_seminars.drop(columns=[fallback_col], inplace=True)
+
+                enhanced_seminars.drop(columns=["identity_key"], inplace=True, errors="ignore")
 
             # Log statistics
             total_seminars = len(seminars_df)

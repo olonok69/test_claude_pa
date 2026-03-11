@@ -238,7 +238,181 @@ Purpose: track changes made after conversation closure so restart context stays 
     - `CampaignDelivery: missing=0, duplicates=0, metadata_mismatch=0`
 - Follow-up actions:
   - Keep current retry flags for future heavy reconciliation runs.
+
+## 2026-03-06 (HubSpot suppression import + verification completed)
+- Summary:
+  - Implemented one-time HubSpot suppression ingestion for two run-scoped CSV sources and completed validation.
+  - Added dry-run mode, progress/batch logging, optional log file output, and Neo4j transient retry/backoff handling.
+  - Verification recovered from transient connection reset and completed with consistent pass results.
+- Changed files:
+  - `PA/scripts/import_hubspot_suppression_to_neo4j.py`
+  - `PA/scripts/verify_hubspot_suppression_in_neo4j.py`
+  - `docs/post_event_followup_pack/README.md`
+  - `docs/post_event_followup_pack/FOLLOWUP_CHANGELOG.md`
+- Why changed:
+  - Need a deterministic, auditable one-time suppression import flow constrained by `RecommendationRun` scope, with resilient runtime behavior on long Aura queries.
+- Validation/evidence:
+  - Dry-run import command:
+    - `python scripts/import_hubspot_suppression_to_neo4j.py --config config/config_tsl.yaml --dry-run --batch-size 250 --neo4j-retry-attempts 8 --neo4j-retry-backoff-seconds 2 --log-file logs/hubspot_suppression_dryrun_20260306.log`
+  - Dry-run results:
+    - engagement list rows=`36488`, matched=`20221`
+    - personal agendas list rows=`948`, matched=`948`
+  - Verify command:
+    - `python scripts/verify_hubspot_suppression_in_neo4j.py --config config/config_tsl.yaml --neo4j-retry-attempts 8 --neo4j-retry-backoff-seconds 2`
+  - Verify results:
+    - `Global: total_visitors=55457 suppressed_visitors=21169`
+    - `run_id=tsl_engagement_20260219T205354Z_c3f8fb55: run_scoped_suppressed=20221 expected_matches_from_csv=20221`
+    - `run_id=tsl_personal_agendas_20260227T224725Z_37b21c42: run_scoped_suppressed=948 expected_matches_from_csv=948`
+    - one transient Neo4j routing reset observed; automatic retry succeeded and verification completed.
+- Follow-up actions:
+  - Keep suppression scripts as reusable operational utilities for future one-time scoped updates.
+  - Use verify command as mandatory post-import gate for any future suppression refresh.
   - Use run-scoped verifier output as the go/no-go source for final pre-show and post-show handoff decisions.
+
+## 2026-03-11 (post-analysis visitor backfill + run linkage closure)
+- Summary:
+  - Completed one-time post-analysis-only visitor backfill for remaining valid-badge coverage gap.
+  - Inserted missing `Visitor_this_year` nodes from 20260308 legacy registration source using configured valid badge policy.
+  - Linked newly inserted visitors to post-analysis run lineage (`CampaignDelivery` + `FOR_VISITOR` + `FOR_RUN`) without touching personal_agendas/engagement runs.
+- Changed files:
+  - `docs/post_event_followup_pack/FOLLOWUP_CHANGELOG.md`
+  - `PA/scripts/rebuild_post_analysis_scope_from_step1.py`
+  - `PA/scripts/rebuild_registered_to_show_from_entry_scans.py`
+  - `docs/post_event_followup_pack/post_analysis_full_implementation_plan_2026-03-10.md`
+- Why changed:
+  - Close the residual `Visitor_this_year` coverage gap after step-4-only refresh behavior (`0 created / 32160 skipped`) by performing a strictly scoped remediation for valid identities missing from Neo4j.
+- Validation/evidence:
+  - Apply report:
+    - `PA/large_tool_results/tsl_post_analysis_backfill_apply_20260311_084340.json`
+  - Idempotency re-run report:
+    - `PA/large_tool_results/tsl_post_analysis_backfill_apply_20260311_084416.json`
+  - Key metrics (apply run):
+    - `candidate_identities=31807`
+    - `missing_before_apply=122`
+    - `insert_touched=122`
+    - `linked_deliveries=122`
+    - `missing_after_apply=0`
+  - Manual console execution with full logging (strict post-analysis rebuild):
+    - `cd /mnt/wolverine/home/samtukra/juan/repos/PA/PA`
+    - `source /mnt/wolverine/home/samtukra/juan/repos/PA/.venv/bin/activate`
+    - `export PYTHONUNBUFFERED=1`
+    - `PYTHONPATH=/mnt/wolverine/home/samtukra/juan/repos/PA/PA python scripts/rebuild_post_analysis_scope_from_step1.py --config config/config_tsl.yaml --step1-csv data/tsl/output/df_reg_demo_this.csv --post-run-id tsl_post_analysis_20260310_151951Z_ccfa80c9 --exclude-run-id tsl_personal_agendas_20260219T124351 --exclude-run-id tsl_personal_agendas_20260227T224725Z_37b21c42 2>&1 | tee /mnt/wolverine/home/samtukra/juan/repos/PA/logs/rebuild_post_scope_$(date -u +%Y%m%dT%H%M%SZ).log`
+  - Optional Neo4j precheck command (resolved URI + ping):
+    - `python - <<'PY'\nfrom neo4j import GraphDatabase\nfrom dotenv import load_dotenv\nimport yaml\nfrom utils.neo4j_utils import resolve_neo4j_credentials\n\nload_dotenv('/mnt/wolverine/home/samtukra/juan/repos/PA/keys/.env', override=False)\ncfg = yaml.safe_load(open('/mnt/wolverine/home/samtukra/juan/repos/PA/PA/config/config_tsl.yaml'))\ncreds = resolve_neo4j_credentials(cfg)\n\nprint('URI:', creds['uri'])\nd = GraphDatabase.driver(creds['uri'], auth=(creds['username'], creds['password']))\nwith d.session() as s:\n    print('ping:', s.run('RETURN 1 AS ok').single()['ok'])\nd.close()\nPY`
+  - Final successful apply evidence (Step1 dataframe source):
+    - Log: `PA/logs/rebuild_post_scope_20260311T103837Z.log`
+    - Report: `PA/large_tool_results/post_analysis_scope_rebuild_step1_20260311_104632.json`
+  - Final apply metrics:
+    - `target_badges_excluding_runs=6188`
+    - `post_delivery_deleted=6411`
+    - `post_delivery_created_touched=6188`
+    - `verify.post_total=6188`
+    - `verify.overlap_count=0`
+    - `verify.post_only_count=6188`
+    - `IS_RECOMMENDED (post run)=0`
+  - Visitor_this_year breakdown per RecommendationRun (distinct visitors via CampaignDelivery->FOR_VISITOR):
+    - Definition: counts represent `count(DISTINCT v:Visitor_this_year)` matched from `(d:CampaignDelivery {run_id})-[:FOR_VISITOR]->(v)`.
+    - `tsl_engagement_20260219T205354Z_c3f8fb55` (`engagement`): `46555`
+    - `tsl_personal_agendas_20260219T124351` (`personal_agendas`): `16656`
+    - `tsl_personal_agendas_20260227T224725Z_37b21c42` (`personal_agendas`): `8902`
+    - `tsl_post_analysis_20260310_151951Z_ccfa80c9` (`post_analysis`): `6188`
+    - Source artifact: `PA/large_tool_results/tsl_visitor_breakdown_per_run_20260311_104838.json`
+  - registered_to_show rebuild (entry scans, TSL26):
+    - Script: `PA/scripts/rebuild_registered_to_show_from_entry_scans.py`
+    - Matching policy:
+      - identity key: `forename_surname_email` from node side and `First Name_Last Name_Email` from CSV side (lowercase + underscore pattern)
+      - barcode fallback allowed only for visitors observed in `CampaignDelivery.run_mode IN ['personal_agendas','post_analysis']`
+      - target write scope: `registered_to_show {run_id='tsl_post_analysis_20260310_151951Z_ccfa80c9'}` to `Show_this_year {show_ref='TSL26'}`
+    - Apply evidence:
+      - `PA/large_tool_results/registered_to_show_rebuild_apply_latest.json`
+    - Apply + verification outcome:
+      - `registered_to_show_for_run_and_show=18261`
+      - match modes in DB: `badge=18102`, `identity=159`
+    - Campaign/run membership of this `18261` population (overlapping by visitor):
+      - `tsl_engagement_20260219T205354Z_c3f8fb55`: `8344`
+      - `tsl_personal_agendas_20260219T124351`: `8344`
+      - `tsl_personal_agendas_20260227T224725Z_37b21c42`: `5284`
+      - `tsl_post_analysis_20260310_151951Z_ccfa80c9`: `4564`
+    - Personal agendas overlap check (global delivery populations):
+      - `pa_20260219=16656`, `pa_20260227=8902`, `intersection=0`
+  - assisted_session_this_year rebuild (seminar scans, TSL26):
+    - Script: `PA/scripts/rebuild_assisted_sessions_from_seminar_scans.py`
+    - Matching policy:
+      - visitor matching by identity key only: node `forename_surname_email` to file `First Name_Last Name_Email`
+      - seminar title reconciliation for `session_like` titles uses exact -> normalized/unicode-repaired -> similarity fallback
+      - create `Sessions_this_year` only when still unresolved after reconciliation
+      - relationship write scope: `assisted_session_this_year {run_id='tsl_post_analysis_20260310_151951Z_ccfa80c9'}`
+    - Evidence artifacts:
+      - `PA/large_tool_results/assisted_session_rebuild_20260311_142751.json` (dry-run)
+      - `PA/large_tool_results/assisted_session_rebuild_apply_latest.json` (apply)
+      - `PA/logs/rebuild_assisted_session_20260311_apply.log` (apply execution log)
+    - Dry-run outcome:
+      - `scan_rows_total=30618`
+      - `skipped_non_session_like=4496`
+      - `matched_visitor_rows=23477`
+      - `unmatched_visitor_rows=2645`
+      - `unique_session_like_titles=273`
+      - `title_status_counts={exact:243, normalized:30}`
+      - `unresolved_titles=0`
+    - Apply + verification outcome:
+      - `deleted_existing_run_relationships=15000`
+      - `recreated_assisted_relationships_touched=22868`
+      - `assisted_session_this_year_for_run=22868`
+      - `identity_match_mode=identity` for all run-scoped rebuilt relationships
+  - assisted_exhibitor_this_year rebuild (exhibitor scans, TSL26):
+    - Script: `PA/scripts/rebuild_assisted_exhibitors_from_exhibitor_scans.py`
+    - Matching policy:
+      - visitor matching by identity key only: node `forename_surname_email` to file `First Name_Last Name_Email`
+      - exhibitor reconciliation uses exact(case-insensitive) -> normalized/unicode-repaired -> strict similarity fallback
+      - strict similarity accepts only practically-same names; otherwise treated as `missing_in_neo4j` and created as file-exact `Exhibitor Name`
+      - relationship write scope: `assisted_exhibitor_this_year {run_id='tsl_post_analysis_20260310_151951Z_ccfa80c9'}`
+    - Evidence artifacts:
+      - `PA/large_tool_results/assisted_exhibitor_rebuild_20260311_160545.json` (dry-run)
+      - `PA/large_tool_results/assisted_exhibitor_rebuild_apply_latest.json` (apply)
+      - `PA/logs/rebuild_assisted_exhibitor_dry_run_20260311T160538Z.log` (dry-run)
+      - `PA/logs/rebuild_assisted_exhibitor_apply_20260311T160631Z.log` (apply)
+    - Dry-run outcome:
+      - `scan_rows_total=60929`
+      - `matched_visitor_rows=51718`
+      - `unmatched_visitor_rows=9211`
+      - `unique_file_exhibitor_names=450`
+      - `name_status_counts={exact_case_insensitive:450}`
+      - `relationship_rows_candidate=48702`
+    - Apply + verification outcome:
+      - `renamed_existing_exhibitors=0`
+      - `created_missing_exhibitors=0`
+      - `recreated_assisted_exhibitor_relationships_touched=50451`
+      - `assisted_exhibitor_this_year_for_run=50448`
+      - `identity_match_mode=identity` for all run-scoped rebuilt relationships
+      - metadata integrity: `non_identity_for_run=0`, `non_post_mode_for_run=0`
+- Follow-up actions:
+  - Keep this remediation as one-time closure for post-analysis 20260308 scope.
+  - Continue using run-scoped audits when validating post-analysis lineage counters.
+
+## 2026-03-11 (Visitor_this_year run breakdown tracking + suppression-filter variant)
+- Summary:
+  - Captured a point-in-time `Visitor_this_year` breakdown per `RecommendationRun`.
+  - Added a comparable variant where only engagement run `tsl_engagement_20260219T205354Z_c3f8fb55` is filtered with `suppressed_hubspot='0'`.
+- Changed files:
+  - `docs/post_event_followup_pack/visitor_this_year_run_breakdown_2026-03-11.md`
+  - `docs/post_event_followup_pack/FOLLOWUP_CHANGELOG.md`
+- Why changed:
+  - Need a lightweight, durable tracking artifact for per-run population monitoring and suppression impact analysis.
+- Validation/evidence:
+  - Baseline per-run counts (distinct visitors from `CampaignDelivery -> FOR_VISITOR`):
+    - `tsl_engagement_20260219T205354Z_c3f8fb55` (`engagement`): `46555`
+    - `tsl_personal_agendas_20260219T124351` (`personal_agendas`): `16656`
+    - `tsl_personal_agendas_20260227T224725Z_37b21c42` (`personal_agendas`): `8902`
+    - `tsl_post_analysis_20260310_151951Z_ccfa80c9` (`post_analysis`): `6188`
+    - baseline total across runs (non-deduped): `78301`
+  - Engagement filtered variant (`suppressed_hubspot='0'`, only for run `tsl_engagement_20260219T205354Z_c3f8fb55`):
+    - filtered engagement visitors: `26334`
+    - baseline engagement visitors: `46555`
+    - delta: `-20221` (`-43.44%`)
+    - variant total across runs (non-deduped): `58080`
+- Follow-up actions:
+  - Recompute this tracker after any new campaign delivery refresh or suppression-source update.
+  - Keep the same counting definition (`count(DISTINCT v)` per run) to preserve time-series comparability.
 
 ---
 

@@ -167,7 +167,7 @@ If any check fails, re-run the relevant processor step with the same config.
 | --- | --- | --- |
 | `sessions_visited_this_year.csv` missing | Post-analysis scan files not provided or paths incorrect | Verify `post_analysis_mode.scan_files.*` paths and rerun step 2 |
 | `assisted_session_this_year` relationships not created | Sessions file lacked `key_text`/Seminar mapping or visitors missing | Ensure session export contains session titles; confirm `sessions_visited_this_year.csv` has `key_text` populated |
-| `registered_to_show` relationships missing | Entry scan CSV missing badge IDs or show references | Verify `post_analysis_mode.entry_scan_files` paths and column headers (`Badge Id`, `Show Ref`) |
+| `registered_to_show` relationships missing | Entry scan CSV lacks stable identity/show data | Verify `post_analysis_mode.entry_scan_files` paths and ensure at least one identity path is present (`Barcode`/`Badge Id` OR `First Name`+`Last Name`+`Email`). If no explicit show column exists, confirm filename-based/default show fallback is acceptable for your event. |
 | Visitor nodes not updating | Config still using `create_only_new=False` or missing registration data | Run post-analysis with default `create_only_new=True`; validate `df_reg_demo_this.csv` exists |
 | Session merge falls back to processed CSV | `scan_files.session_this` path missing | Provide the raw export or update the path; rerun step 5 |
 | Schema mismatch warning | Additional columns in this-year scans | Review warning details; update analytics scripts to accept new fields if needed |

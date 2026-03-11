@@ -794,6 +794,21 @@ class SessionProcessor:
             candidate_streams, stream_catalog, title, synopsis
         )
 
+        def _fallback() -> List[str]:
+            fallback_streams = self._heuristic_stream_classification(
+                title=title,
+                synopsis=synopsis,
+                stream_catalog=stream_catalog,
+                candidate_streams=candidate_streams,
+            )
+            if fallback_streams:
+                self.logger.info(
+                    "Used heuristic stream fallback for session '%s': %s",
+                    title,
+                    "; ".join(fallback_streams),
+                )
+            return fallback_streams
+
         try:
             response = self.llm.invoke(messages)
             raw_output: Optional[str] = None
@@ -808,16 +823,61 @@ class SessionProcessor:
                 self.logger.warning(
                     f"Empty response received when classifying session '{title}'"
                 )
-                return []
+                return _fallback()
 
             return self._parse_stream_response(raw_output.strip(), candidate_streams)
 
         except Exception as e:
+            error_text = str(e)
+            if "content_filter" in error_text or "ResponsibleAIPolicyViolation" in error_text:
+                self.logger.warning(
+                    "Language model classification filtered by provider policy for session '%s'; using heuristic fallback",
+                    title,
+                )
+                return _fallback()
+
             self.logger.error(
                 f"Language model classification failed for session '{title}': {e}",
                 exc_info=True,
             )
+            return _fallback()
+
+    def _heuristic_stream_classification(
+        self,
+        title: str,
+        synopsis: str,
+        stream_catalog: Dict[str, str],
+        candidate_streams: List[str],
+    ) -> List[str]:
+        """Fallback stream classification using token overlap scoring."""
+        text = f"{title} {synopsis}".lower()
+        tokens = set(re.findall(r"[a-z0-9][a-z0-9+&/-]{2,}", text))
+        if not tokens:
             return []
+
+        stop_words = {
+            "the", "and", "for", "with", "from", "that", "this", "your",
+            "into", "are", "how", "why", "what", "when", "where", "about",
+            "can", "will", "you", "our", "their", "they", "them", "its",
+        }
+        tokens = {tok for tok in tokens if tok not in stop_words}
+        if not tokens:
+            return []
+
+        scored: List[tuple[int, str]] = []
+        for stream_name in candidate_streams:
+            stream_desc = str(stream_catalog.get(stream_name, "") or "")
+            stream_text = f"{stream_name} {stream_desc}".lower()
+            stream_tokens = set(re.findall(r"[a-z0-9][a-z0-9+&/-]{2,}", stream_text))
+            if not stream_tokens:
+                continue
+
+            overlap = len(tokens & stream_tokens)
+            if overlap > 0:
+                scored.append((overlap, stream_name))
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [name for _, name in scored[:3]]
 
     def _backup_file(self, file_path: str) -> Optional[str]:
         """Create a timestamped backup of the supplied file."""
@@ -993,7 +1053,11 @@ class SessionProcessor:
 
             # Check for any missing abbreviations in our mapping
             map_keys = set(list(self.map_vets.keys()))
-            missing_abbrevs = list_abbreviations.difference(map_keys)
+            missing_abbrevs = {
+                abbr
+                for abbr in list_abbreviations.difference(map_keys)
+                if isinstance(abbr, str) and abbr.strip()
+            }
 
             if missing_abbrevs:
                 self.logger.warning(f"Found unmapped abbreviations: {missing_abbrevs}")

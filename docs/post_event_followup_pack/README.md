@@ -11,6 +11,7 @@ This folder centralizes the restart materials for reopening this topic later.
 - `FOLLOWUP_CHANGELOG.md` (ongoing updates after closure)
 - `AZUREML_PIPELINE_REFACTOR_PLAN.md` (mode-aligned Azure ML modernization plan)
 - `DEEP_AGENTS_REPORTS_REFACTOR_PLAN.md` (post-show reporting alignment plan)
+- `post_analysis_lineage_plan_2026-03-09.md` (post-show identity/run-lineage implementation plan for 20260308 reg/demo + 20260306 scans)
 
 ## Start here
 1. `post_event_handoff_2026-02-21.md`
@@ -23,6 +24,7 @@ This folder centralizes the restart materials for reopening this topic later.
 7. `POST_MERGE_SANITY_CHECKLIST.md`
 8. `pre_show_incremental_runbook_2026-02-26.md`
 9. `pre_show_incremental_execution_handoff_2026-02-26.md`
+10. `post_analysis_lineage_plan_2026-03-09.md`
 
 ## Baseline recovery default path
 - For “restore to baseline campaign state” (initial conversion + engagement only, excluding incremental simulation), use the manual restore track in `POST_MERGE_SANITY_CHECKLIST.md` section `7) New topic: recover baseline campaign state (manual restore)`.
@@ -79,6 +81,41 @@ This folder centralizes the restart materials for reopening this topic later.
 - Runtime hardening now active in reconciler:
 	- transient Neo4j retry/backoff support (`--neo4j-retry-attempts`, `--neo4j-retry-backoff-seconds`)
 	- run-scoped `IS_RECOMMENDED` verifier semantics to avoid cross-run mismatch noise.
+
+## Latest status (2026-03-06)
+- One-time HubSpot suppression import + verification flow is complete and validated for TSL.
+- Import/verify tooling added under `PA/scripts/`:
+	- `import_hubspot_suppression_to_neo4j.py` (supports `--dry-run`, progress logs, `--log-file`, Neo4j retry/backoff flags)
+	- `verify_hubspot_suppression_in_neo4j.py` (run-scoped verification + expected-match checks, Neo4j retry/backoff flags)
+- Verified outcomes:
+	- Global: `total_visitors=55457`, `suppressed_visitors=21169`
+	- Engagement run `tsl_engagement_20260219T205354Z_c3f8fb55`: `run_scoped_suppressed=20221`, `expected_matches_from_csv=20221`
+	- Personal agendas run `tsl_personal_agendas_20260227T224725Z_37b21c42`: `run_scoped_suppressed=948`, `expected_matches_from_csv=948`
+	- Consistency check: `21169 = 20221 + 948` (pass)
+- Operational note:
+	- verifier experienced transient Neo4j connection reset and auto-recovered via retry/backoff; final verification completed successfully.
+
+## Latest status (2026-03-11)
+- Added run-level `Visitor_this_year` tracking snapshot:
+	- `visitor_this_year_run_breakdown_2026-03-11.md`
+- Captured baseline per-run counts and engagement filtered variant (`suppressed_hubspot='0'` only on `tsl_engagement_20260219T205354Z_c3f8fb55`).
+- Key filtered engagement result:
+	- `visitors_this_year=26334` vs baseline `46555` (delta `-20221`, `-43.44%`).
+- Full operational narrative and evidence pointers are logged in:
+	- `FOLLOWUP_CHANGELOG.md` under `2026-03-11 (Visitor_this_year run breakdown tracking + suppression-filter variant)`
+- Added post-analysis exhibitor attendance rebuild + verification snapshot:
+	- script: `PA/scripts/rebuild_assisted_exhibitors_from_exhibitor_scans.py`
+	- evidence: `large_tool_results/assisted_exhibitor_rebuild_apply_latest.json`
+	- log: `logs/rebuild_assisted_exhibitor_apply_20260311T160631Z.log`
+- Key assisted_exhibitor counts (same as apply report):
+	- `scan_rows_total=60929`
+	- `matched_visitor_rows=51718`
+	- `unmatched_visitor_rows=9211`
+	- `unique_file_exhibitor_names=450`
+	- `name_status_counts={exact_case_insensitive:450}`
+	- `recreated_assisted_exhibitor_relationships_touched=50451`
+	- `assisted_exhibitor_this_year_for_run=50448`
+	- `match_mode_breakdown=[identity:50448]`
 
 ## Next execution step (updated 2026-03-03)
 - Archive engagement reconciliation evidence bundle and keep reconciler defaults for future long runs.

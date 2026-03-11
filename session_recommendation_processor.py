@@ -168,6 +168,9 @@ class SessionRecommendationProcessor:
         self.resolve_overlaps_by_similarity = self.recommendation_config.get(
             "resolve_overlapping_sessions_by_similarity", False
         )
+        self.allow_legacy_null_show_sessions = bool(
+            self.recommendation_config.get("allow_legacy_null_show_sessions", False)
+        )
         returning_without_history_cfg = self.recommendation_config.get(
             "returning_without_history", {}
         )
@@ -1258,11 +1261,26 @@ class SessionRecommendationProcessor:
                 with driver.session() as session:
                     query = f"""
                     MATCH (s:{self.session_this_year_label})
-                    WHERE s.show = $show_name OR s.show IS NULL
+                    WHERE toLower(coalesce(s.show, '')) = toLower($show_name)
                     RETURN s
                     """
                     result = session.run(query, show_name=self.show_name)
                     sessions = [dict(record["s"]) for record in result]
+
+                    if not sessions and self.allow_legacy_null_show_sessions:
+                        legacy_query = f"""
+                        MATCH (s:{self.session_this_year_label})
+                        WHERE s.show IS NULL
+                        RETURN s
+                        """
+                        legacy_result = session.run(legacy_query)
+                        sessions = [dict(record["s"]) for record in legacy_result]
+                        if sessions:
+                            self.logger.warning(
+                                "No show-scoped sessions found for '%s'; using %d legacy sessions with null show",
+                                self.show_name,
+                                len(sessions),
+                            )
                     
                     self._this_year_sessions_cache = sessions
                     self.logger.info(f"Loaded {len(sessions)} sessions for this year (show: {self.show_name})")

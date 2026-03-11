@@ -351,15 +351,9 @@ def print_summary_statistics(summary, skip_neo4j, reg_processor=None):
     """
     logger = logging.getLogger(__name__)
 
-    # Get event configuration for printing
-    main_event_name = "BVA"
-    secondary_event_name = "LVA"
-    
-    # Try to get event names from registration processor
-    if reg_processor and hasattr(reg_processor, 'config'):
-        event_config = reg_processor.config.get('event', {})
-        main_event_name = event_config.get('main_event_name', 'BVA').upper()
-        secondary_event_name = event_config.get('secondary_event_name', 'LVA').upper()
+    # Use generic display labels in summary output
+    main_event_name = "main"
+    secondary_event_name = "secondary"
 
     # Print header
     print("\n" + "=" * 60)

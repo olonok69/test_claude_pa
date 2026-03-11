@@ -77,6 +77,8 @@ class Neo4jVisitorRelationshipProcessor:
         for relationship_key in [
             "assisted_session_this_year",
             "assisted_session_this_year_run",
+            "assisted_exhibitor_this_year",
+            "assisted_exhibitor_this_year_run",
             "registered_to_show",
         ]:
             self.statistics["relationships_created"][relationship_key] = 0
@@ -180,6 +182,26 @@ class Neo4jVisitorRelationshipProcessor:
             except Exception as e:
                 self.logger.error(
                     f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating assisted_session_this_year_run relationships: {str(e)}"
+                )
+
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Processing assisted_exhibitor_this_year relationships (post-analysis mode)"
+            )
+            try:
+                self._create_assisted_exhibitor_this_year_relationships(create_only_new)
+            except Exception as e:
+                self.logger.error(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating assisted_exhibitor_this_year relationships: {str(e)}"
+                )
+
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Projecting run-scoped assisted_exhibitor relationships (post-analysis mode)"
+            )
+            try:
+                self._create_assisted_exhibitor_this_year_run_relationships()
+            except Exception as e:
+                self.logger.error(
+                    f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error creating assisted_exhibitor_this_year_run relationships: {str(e)}"
                 )
 
             self.logger.info(
@@ -328,7 +350,7 @@ class Neo4jVisitorRelationshipProcessor:
             return
 
         badge_column = None
-        for candidate in ["Badge Id", "BadgeId", "badge_id"]:
+        for candidate in ["Badge Id", "BadgeId", "badge_id", "Barcode"]:
             if candidate in sessions_df.columns:
                 badge_column = candidate
                 break
@@ -519,9 +541,27 @@ class Neo4jVisitorRelationshipProcessor:
                     MATCH (d:CampaignDelivery)-[:FOR_VISITOR]->(v)
                     MATCH (d)-[:FOR_RUN]->(rr:RecommendationRun)
                     WHERE toLower(coalesce(rr.show, '')) = toLower($show_name)
-                    OPTIONAL MATCH (v)-[existing:{run_assisted_relationship} {{run_id: rr.run_id}}]->(s)
-                    WITH v, s, a, d, rr, existing IS NULL AS is_new
-                    MERGE (v)-[r:{run_assisted_relationship} {{run_id: rr.run_id}}]->(s)
+                                            AND toLower(coalesce(rr.run_mode, '')) = 'post_analysis'
+                    OPTIONAL MATCH (v)-[existing:{run_assisted_relationship}]->(s)
+                    WHERE existing.run_id = rr.run_id
+                    WITH v, s, a, d, rr, existing
+                    FOREACH (_ IN CASE WHEN existing IS NULL THEN [1] ELSE [] END |
+                        CREATE (v)-[new_rel:{run_assisted_relationship}]->(s)
+                        SET new_rel.run_id = rr.run_id,
+                            new_rel.created_at = datetime(),
+                            new_rel.run_mode = rr.run_mode,
+                            new_rel.campaign_id = rr.campaign_id,
+                            new_rel.show = rr.show,
+                            new_rel.delivery_status = d.status,
+                            new_rel.identity_match_mode = a.identity_match_mode,
+                            new_rel.scan_date = a.scan_date,
+                            new_rel.file = a.file,
+                            new_rel.seminar_name = a.seminar_name,
+                            new_rel.updated_at = datetime()
+                    )
+                    WITH v, s, a, d, rr, existing
+                    MATCH (v)-[r:{run_assisted_relationship}]->(s)
+                    WHERE r.run_id = rr.run_id
                     SET r.run_mode = coalesce(rr.run_mode, r.run_mode),
                         r.campaign_id = coalesce(rr.campaign_id, r.campaign_id),
                         r.show = coalesce(rr.show, r.show),
@@ -531,8 +571,7 @@ class Neo4jVisitorRelationshipProcessor:
                         r.file = coalesce(a.file, r.file),
                         r.seminar_name = coalesce(a.seminar_name, r.seminar_name),
                         r.updated_at = datetime()
-                    ON CREATE SET r.created_at = datetime()
-                    RETURN sum(CASE WHEN is_new THEN 1 ELSE 0 END) AS created_count,
+                    RETURN sum(CASE WHEN existing IS NULL THEN 1 ELSE 0 END) AS created_count,
                            count(r) AS touched_count
                     """
                 )
@@ -557,6 +596,221 @@ class Neo4jVisitorRelationshipProcessor:
 
         self.logger.info(
             f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - assisted_session_this_year_run projection summary: created={created}, skipped={skipped}, failed={failed}"
+        )
+
+    def _create_assisted_exhibitor_this_year_relationships(self, create_only_new: bool):
+        """Create assisted_exhibitor_this_year relationships between visitors and exhibitors from post-analysis scans."""
+
+        post_analysis_config = self.config.get("post_analysis_mode", {})
+        exhibitor_scan_cfg = post_analysis_config.get("exhibitor_scan_files", {})
+        exhibitor_scan_path = exhibitor_scan_cfg.get("exhibitor_scans_this", "data/tsl/post/20260306_tsl26_exhibitor_scans.csv")
+
+        if not os.path.exists(exhibitor_scan_path):
+            candidate = os.path.join(self.config.get("output_dir", ""), exhibitor_scan_path)
+            exhibitor_scan_path = candidate if os.path.exists(candidate) else exhibitor_scan_path
+
+        if not os.path.exists(exhibitor_scan_path):
+            self.logger.warning(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Post-analysis exhibitor scan file not found: {exhibitor_scan_path}"
+            )
+            return
+
+        try:
+            scans_df = pd.read_csv(exhibitor_scan_path)
+        except Exception as read_error:
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Unable to read exhibitor scan file: {read_error}"
+            )
+            return
+
+        if scans_df.empty:
+            self.logger.info(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Exhibitor scan file is empty; no relationships to create"
+            )
+            return
+
+        exhibitor_col = None
+        for candidate in ["Exhibitor Name", "Exhibitor", "ExhibitorName", "Company", "Company Name"]:
+            if candidate in scans_df.columns:
+                exhibitor_col = candidate
+                break
+
+        forename_col, surname_col, email_col = self._resolve_identity_columns(scans_df)
+
+        if not exhibitor_col or not (forename_col and surname_col and email_col):
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Missing exhibitor or identity columns in {exhibitor_scan_path}"
+            )
+            return
+
+        visitor_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
+        exhibitor_label = self.node_labels.get("exhibitor", "Exhibitor")
+        relationship_name = self.relationships.get(
+            "assisted_exhibitor_this_year", "assisted_exhibitor_this_year"
+        )
+
+        created = 0
+        skipped = 0
+        failed = 0
+        unresolved = 0
+
+        driver = None
+        try:
+            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+            with driver.session() as session:
+                for _, row in scans_df.iterrows():
+                    identity_key = self._build_identity_key_from_row(
+                        row,
+                        forename_col,
+                        surname_col,
+                        email_col,
+                    )
+                    exhibitor_name = str(row.get(exhibitor_col, "")).strip()
+                    if not identity_key or not exhibitor_name:
+                        skipped += 1
+                        continue
+
+                    scan_date = row.get("Scan Date", "")
+                    file_name = row.get("File", "")
+
+                    query = (
+                        f"MATCH (v:{visitor_label} {{id_both_years: $identity_key}}) "
+                        f"MATCH (e:{exhibitor_label}) "
+                        "WHERE toLower(coalesce(v.show,'')) = toLower($show_name) "
+                        "  AND toLower(coalesce(e.name,'')) = toLower($exhibitor_name) "
+                        f"OPTIONAL MATCH (v)-[existing:{relationship_name}]->(e) "
+                        "WITH v, e, existing IS NULL AS is_new "
+                        f"MERGE (v)-[r:{relationship_name}]->(e) "
+                        "SET r.scan_date = coalesce($scan_date, r.scan_date), "
+                        "    r.file = coalesce($file_name, r.file), "
+                        "    r.exhibitor_name = coalesce($exhibitor_name, r.exhibitor_name), "
+                        "    r.identity_match_mode = 'identity_fallback', "
+                        "    r.updated_at = datetime() "
+                        "RETURN sum(CASE WHEN is_new THEN 1 ELSE 0 END) AS created_count, count(r) AS touched_count"
+                    )
+
+                    try:
+                        record = session.run(
+                            query,
+                            identity_key=identity_key,
+                            exhibitor_name=exhibitor_name,
+                            show_name=self.show_name,
+                            scan_date=str(scan_date) if pd.notna(scan_date) else None,
+                            file_name=str(file_name) if pd.notna(file_name) else None,
+                        ).single()
+
+                        created_count = int((record or {}).get("created_count", 0) or 0)
+                        touched_count = int((record or {}).get("touched_count", 0) or 0)
+                        if touched_count > 0:
+                            created += created_count
+                            if created_count == 0:
+                                skipped += 1
+                        else:
+                            unresolved += 1
+                            skipped += 1
+                    except Exception as rel_error:
+                        failed += 1
+                        self.logger.error(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Failed to merge assisted exhibitor relationship for identity {identity_key}: {rel_error}"
+                        )
+        except Exception as driver_error:
+            failed += 1
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Neo4j driver error during assisted exhibitor relationship creation: {driver_error}"
+            )
+        finally:
+            if driver:
+                driver.close()
+
+        self.statistics["relationships_created"]["assisted_exhibitor_this_year"] = created
+        self.statistics["relationships_skipped"]["assisted_exhibitor_this_year"] = skipped
+        self.statistics["relationships_failed"]["assisted_exhibitor_this_year"] = failed
+
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - assisted_exhibitor_this_year Relationship Summary: created={created}, skipped={skipped}, failed={failed}, unresolved={unresolved}"
+        )
+
+    def _create_assisted_exhibitor_this_year_run_relationships(self) -> None:
+        """Project run-scoped exhibitor attendance from assisted_exhibitor_this_year + CampaignDelivery."""
+
+        visitor_label = self.node_labels.get("visitor_this_year", "Visitor_this_year")
+        exhibitor_label = self.node_labels.get("exhibitor", "Exhibitor")
+        base_relationship = self.relationships.get(
+            "assisted_exhibitor_this_year", "assisted_exhibitor_this_year"
+        )
+        run_relationship = self.relationships.get(
+            "assisted_exhibitor_this_year_run", "assisted_exhibitor_this_year_run"
+        )
+
+        created = 0
+        skipped = 0
+        failed = 0
+
+        driver = None
+        try:
+            driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+            with driver.session() as session:
+                query = textwrap.dedent(
+                    f"""
+                    MATCH (v:{visitor_label})-[a:{base_relationship}]->(e:{exhibitor_label})
+                    WHERE toLower(coalesce(v.show, '')) = toLower($show_name)
+                    MATCH (d:CampaignDelivery)-[:FOR_VISITOR]->(v)
+                    MATCH (d)-[:FOR_RUN]->(rr:RecommendationRun)
+                    WHERE toLower(coalesce(rr.show, '')) = toLower($show_name)
+                      AND toLower(coalesce(rr.run_mode, '')) = 'post_analysis'
+                    OPTIONAL MATCH (v)-[existing:{run_relationship}]->(e)
+                    WHERE existing.run_id = rr.run_id
+                    WITH v, e, a, d, rr, existing
+                    FOREACH (_ IN CASE WHEN existing IS NULL THEN [1] ELSE [] END |
+                        CREATE (v)-[new_rel:{run_relationship}]->(e)
+                        SET new_rel.run_id = rr.run_id,
+                            new_rel.created_at = datetime(),
+                            new_rel.run_mode = rr.run_mode,
+                            new_rel.campaign_id = rr.campaign_id,
+                            new_rel.show = rr.show,
+                            new_rel.delivery_status = d.status,
+                            new_rel.identity_match_mode = a.identity_match_mode,
+                            new_rel.scan_date = a.scan_date,
+                            new_rel.file = a.file,
+                            new_rel.exhibitor_name = a.exhibitor_name,
+                            new_rel.updated_at = datetime()
+                    )
+                    WITH v, e, a, d, rr, existing
+                    MATCH (v)-[r:{run_relationship}]->(e)
+                    WHERE r.run_id = rr.run_id
+                    SET r.run_mode = coalesce(rr.run_mode, r.run_mode),
+                        r.campaign_id = coalesce(rr.campaign_id, r.campaign_id),
+                        r.show = coalesce(rr.show, r.show),
+                        r.delivery_status = coalesce(d.status, r.delivery_status),
+                        r.identity_match_mode = coalesce(a.identity_match_mode, r.identity_match_mode),
+                        r.scan_date = coalesce(a.scan_date, r.scan_date),
+                        r.file = coalesce(a.file, r.file),
+                        r.exhibitor_name = coalesce(a.exhibitor_name, r.exhibitor_name),
+                        r.updated_at = datetime()
+                    RETURN sum(CASE WHEN existing IS NULL THEN 1 ELSE 0 END) AS created_count,
+                           count(r) AS touched_count
+                    """
+                )
+
+                record = session.run(query, show_name=self.show_name).single()
+                created = int((record or {}).get("created_count", 0) or 0)
+                touched = int((record or {}).get("touched_count", 0) or 0)
+                skipped = max(0, touched - created)
+        except Exception as projection_error:
+            failed += 1
+            self.logger.error(
+                f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - Error projecting assisted_exhibitor_this_year_run relationships: {projection_error}"
+            )
+        finally:
+            if driver:
+                driver.close()
+
+        self.statistics["relationships_created"]["assisted_exhibitor_this_year_run"] = created
+        self.statistics["relationships_skipped"]["assisted_exhibitor_this_year_run"] = skipped
+        self.statistics["relationships_failed"]["assisted_exhibitor_this_year_run"] = failed
+
+        self.logger.info(
+            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - assisted_exhibitor_this_year_run projection summary: created={created}, skipped={skipped}, failed={failed}"
         )
 
     def _create_entry_scan_show_relationships(self, create_only_new: bool):
@@ -643,7 +897,7 @@ class Neo4jVisitorRelationshipProcessor:
                         continue
 
                     badge_column = None
-                    for candidate in ["Badge Id", "BadgeId", "badge_id"]:
+                    for candidate in ["Badge Id", "BadgeId", "badge_id", "Barcode"]:
                         if candidate in scans_df.columns:
                             badge_column = candidate
                             break
@@ -657,7 +911,16 @@ class Neo4jVisitorRelationshipProcessor:
                         continue
 
                     show_column = None
-                    for candidate in ["Show Ref", "ShowRef", "Show", "Show Code", "EventCode", "Event Code"]:
+                    for candidate in [
+                        "Show Ref",
+                        "ShowRef",
+                        "Show",
+                        "Show Code",
+                        "EventCode",
+                        "Event Code",
+                        "Entrance Identifier",
+                        "Entrance Name",
+                    ]:
                         if candidate in scans_df.columns:
                             show_column = candidate
                             break
@@ -670,10 +933,9 @@ class Neo4jVisitorRelationshipProcessor:
                                 break
 
                     if not show_column:
-                        self.logger.error(
-                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No show reference column found in entry scan file: {resolved_path}"
+                        self.logger.warning(
+                            f"{inspect.currentframe().f_code.co_name}:{inspect.currentframe().f_lineno} - No explicit show column found in entry scan file: {resolved_path}; using file-inferred/default show fallback"
                         )
-                        continue
 
                     show_name_column = None
                     for candidate in ["Show Name", "Show_Title", "ShowTitle", "EventName", "Event Name"]:
@@ -712,13 +974,16 @@ class Neo4jVisitorRelationshipProcessor:
                             email_col,
                         )
 
-                        show_raw = row.get(show_column, "")
-                        if pd.isna(show_raw):
-                            show_ref = ""
+                        if show_column:
+                            show_raw = row.get(show_column, "")
+                            if pd.isna(show_raw):
+                                show_ref = ""
+                            else:
+                                show_ref = str(show_raw).strip()
+                                if show_ref.endswith(".0") and show_ref[:-2].replace("-", "").isdigit():
+                                    show_ref = show_ref[:-2]
                         else:
-                            show_ref = str(show_raw).strip()
-                            if show_ref.endswith(".0") and show_ref[:-2].replace("-", "").isdigit():
-                                show_ref = show_ref[:-2]
+                            show_ref = target_show_code or self.show_name
 
                         if (not badge_id or badge_id.lower() == "nan") and not identity_key:
                             relationships_skipped += 1
